@@ -269,12 +269,19 @@ Single mobile-friendly action that coordinates:
 - State: `@tanstack/react-query` + `Zustand`
 - Terminal: `@xterm/xterm` + addons
 - Styling: Tailwind CSS
-- UI Components: Headless UI + custom
+- UI Components: shadcn/ui (Radix UI primitives + Tailwind)
 
 **Bundle Strategy:**
 - Code-split by route
 - Lazy-load terminal (~800KB)
 - Progressive loading
+- shadcn components (~50-60KB total)
+
+**Mobile Optimizations:**
+- Touch targets increased to 44×44px minimum
+- Bottom sheets for mobile navigation
+- Floating action buttons for primary actions
+- Responsive layouts with mobile-first approach
 
 ### Database
 
@@ -292,6 +299,25 @@ Single mobile-friendly action that coordinates:
 **Format:** Single binary (~100MB)
 
 **Platforms:** Linux x64, macOS (Intel + ARM), Windows
+
+### Documentation & Website
+
+**Framework:** Astro 4.x
+
+**Features:**
+- Static site generation for performance
+- Shared Tailwind config with main app
+- React component islands for interactive demos
+- Content collections for markdown docs
+- Mobile-responsive design
+- Dark mode support
+
+**Deployment:**
+- **Cloudflare Pages** at `https://agemon.dev`
+- Automatic HTTPS with custom domain
+- Global CDN for optimal performance
+- Target: <1s load time on mobile 4G
+- Lighthouse score >95
 
 ---
 

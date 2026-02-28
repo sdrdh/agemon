@@ -19,6 +19,7 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 | Backend | Fastify 4.x | REST + WebSocket via `@fastify/websocket` |
 | Database | SQLite | `better-sqlite3`, synchronous ops |
 | Frontend | React 18 + Vite 5 | Code-split by route |
+| UI Components | shadcn/ui | Radix UI + Tailwind, copy-paste components |
 | Router | TanStack Router | |
 | State | TanStack Query + Zustand | Server state + client state |
 | Terminal | xterm.js | Lazy-loaded, ~800KB |
@@ -26,6 +27,7 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 | Git | simple-git | Worktree management |
 | Agent protocol | ACP SDK | `@agentclientprotocol/sdk` |
 | GitHub API | Octokit | PR creation |
+| Website/Docs | Astro 4.x | Static site for product page + docs |
 
 ---
 
@@ -46,11 +48,21 @@ agemon/
 │   │   ├── main.tsx
 │   │   ├── App.tsx
 │   │   ├── routes/      # TanStack Router routes
-│   │   ├── components/  # shared UI components
+│   │   ├── components/
+│   │   │   ├── ui/      # shadcn/ui components (auto-generated)
+│   │   │   └── custom/  # custom app components
 │   │   └── lib/         # api client, websocket, utils
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── tsconfig.json
+├── website/
+│   ├── src/
+│   │   ├── pages/       # Astro routes (landing + docs)
+│   │   ├── content/     # Markdown docs
+│   │   ├── components/  # Astro + React components
+│   │   └── layouts/     # Page layouts
+│   ├── package.json
+│   └── astro.config.mjs
 ├── shared/
 │   └── types/           # shared TS types (events, tasks, diffs)
 ├── CLAUDE.md
@@ -74,6 +86,8 @@ agemon/
 **Task status is system-controlled** — only the agent/system moves tasks between statuses. Users never drag tasks. The only user write action is creating a task or responding to blockers.
 
 **Mobile-first** — every UI component must work on a phone first. Touch targets minimum 44×44px. Test on real device before marking UI tasks done.
+
+**shadcn/ui customization** — default shadcn components have 40px touch targets. Increase to 44px minimum by editing button sizes in `frontend/src/components/ui/button.tsx` after generation.
 
 **Lazy-load the terminal** — xterm.js is heavy. Import it only when the user actually opens a terminal view.
 
