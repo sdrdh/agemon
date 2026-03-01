@@ -7,12 +7,19 @@ export type AgentType = typeof AGENT_TYPES[number];
 
 export type AgentSessionState = 'starting' | 'running' | 'stopped' | 'crashed' | 'interrupted';
 
+export interface Repo {
+  id: number;
+  url: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Task {
   id: string;
   title: string;
   description: string | null;
   status: TaskStatus;
-  repos: string[]; // JSON array of repo URLs/paths
+  repos: Repo[];
   agent: AgentType;
   created_at: string; // ISO 8601
 }
@@ -75,14 +82,20 @@ export type ClientEvent =
 export interface CreateTaskBody {
   title: string;
   description?: string;
-  repos: string[];
-  agent: AgentType;
+  repos?: string[];  // SSH URLs; optional, default []
+  agent?: AgentType; // default claude-code
 }
 
 export interface UpdateTaskBody {
   title?: string;
   description?: string;
+  repos?: string[];  // SSH URLs; replaces full set
   agent?: AgentType;
+}
+
+export interface TasksByProject {
+  projects: Record<string, Task[]>;  // keyed by repo name (e.g. "acme/web")
+  ungrouped: Task[];
 }
 
 export interface ApiError {
