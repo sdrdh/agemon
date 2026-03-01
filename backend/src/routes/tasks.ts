@@ -11,15 +11,17 @@ const VALID_AGENTS: AgentType[] = ['claude-code', 'aider', 'gemini'];
 const isValidRepoUrl = (r: string) =>
   r.startsWith('https://') || r.startsWith('http://') || r.startsWith('git@') || r.startsWith('/');
 
-const HTTP_STATUS: Record<number, string> = {
-  400: 'Bad Request',
-  404: 'Not Found',
-  422: 'Unprocessable Entity',
-  500: 'Internal Server Error',
-};
-
 function sendError(statusCode: number, message: string): never {
   throw new HTTPException(statusCode as StatusCode, { message });
+}
+
+function validateTaskFields(fields: { title?: string; description?: string | null; agent?: AgentType }): void {
+  if (fields.agent !== undefined && !VALID_AGENTS.includes(fields.agent))
+    sendError(400, 'agent must be one of: claude-code, aider, gemini');
+  if (fields.title !== undefined && fields.title.length > 500)
+    sendError(400, 'title must be 500 characters or fewer');
+  if (fields.description !== undefined && fields.description !== null && fields.description.length > 10000)
+    sendError(400, 'description must be 10000 characters or fewer');
 }
 
 function requireTask(id: string): Task {
@@ -41,12 +43,6 @@ tasksRoutes.post('/tasks', async (c) => {
   if (!title || typeof title !== 'string') {
     sendError(400, 'title is required');
   }
-  if (title.length > 500) {
-    sendError(400, 'title must be 500 characters or fewer');
-  }
-  if (description !== undefined && description !== null && description.length > 10000) {
-    sendError(400, 'description must be 10000 characters or fewer');
-  }
   if (!Array.isArray(repos) || repos.length === 0) {
     sendError(400, 'repos must be a non-empty array');
   }
@@ -56,9 +52,7 @@ tasksRoutes.post('/tasks', async (c) => {
   if (!agent) {
     sendError(400, 'agent is required');
   }
-  if (!VALID_AGENTS.includes(agent)) {
-    sendError(400, 'agent must be one of: claude-code, aider, gemini');
-  }
+  validateTaskFields({ title, description, agent });
 
   const task = db.createTask({
     id: randomUUID(),
@@ -84,15 +78,7 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
   const body = await c.req.json<UpdateTaskBody>();
   // Status is system-controlled — strip it from user PATCH requests
   const { title, description, agent } = body;
-  if (agent !== undefined && !VALID_AGENTS.includes(agent)) {
-    sendError(400, 'agent must be one of: claude-code, aider, gemini');
-  }
-  if (title !== undefined && title.length > 500) {
-    sendError(400, 'title must be 500 characters or fewer');
-  }
-  if (description !== undefined && description !== null && description.length > 10000) {
-    sendError(400, 'description must be 10000 characters or fewer');
-  }
+  validateTaskFields({ title, description, agent });
   const updated = db.updateTask(task.id, { title, description, agent });
   if (updated) broadcast({ type: 'task_updated', task: updated });
   return c.json(updated);

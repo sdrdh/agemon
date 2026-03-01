@@ -50,8 +50,8 @@ bun run src/db/seed.ts
 | Layer | Choice |
 |-------|--------|
 | Runtime | Bun 1.1+ |
-| Backend | Fastify 4.x |
-| Database | SQLite (better-sqlite3) |
+| Backend | Hono 4.x |
+| Database | SQLite (bun:sqlite) |
 | Frontend | React 18 + Vite 5 |
 | UI Components | shadcn/ui + Tailwind CSS |
 | Router | TanStack Router |
@@ -66,7 +66,7 @@ bun run src/db/seed.ts
 
 ```
 agemon/
-├── backend/          # Fastify server + DB + agent management
+├── backend/          # Hono server + DB + agent management
 ├── frontend/         # React + Vite mobile-first UI
 ├── shared/types/     # Shared TypeScript types
 ├── website/          # Astro landing page + docs

@@ -28,7 +28,6 @@ Check if the server is running.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
   "timestamp": "2026-02-28T10:00:00.000Z"
 }
 ```

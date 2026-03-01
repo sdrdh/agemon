@@ -32,11 +32,7 @@ ip route get 1 | awk '{print $NF; exit}'  # Linux
 
 Open `http://<your-ip>:5173` on your phone.
 
-Set the frontend env to use your IP:
-```bash
-# frontend/.env.local
-VITE_AGEMON_KEY=your-secret-key
-```
+Set your API key by opening `http://<your-ip>:5173` in the browser and entering your `AGEMON_KEY` on the login screen. It is stored in localStorage.
 
 ## Seed sample data
 

@@ -91,7 +91,8 @@ export const db = {
       'INSERT INTO tasks (id, title, description, status, repos, agent) VALUES (?, ?, ?, ?, ?, ?)',
       [task.id, task.title, task.description ?? null, task.status, JSON.stringify(task.repos), task.agent]
     );
-    const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(task.id)!;
+    const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(task.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted task with id ${task.id}`);
     return parseTask(row);
   },
 
@@ -139,7 +140,9 @@ export const db = {
       'INSERT INTO acp_events (id, task_id, type, content) VALUES (?, ?, ?, ?)',
       [event.id, event.task_id, event.type, event.content]
     );
-    return db.query<ACPEvent, [string]>('SELECT * FROM acp_events WHERE id = ?').get(event.id)!;
+    const row = db.query<ACPEvent, [string]>('SELECT * FROM acp_events WHERE id = ?').get(event.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted event with id ${event.id}`);
+    return row;
   },
 
   // ── Awaiting Input ──
@@ -157,7 +160,9 @@ export const db = {
       'INSERT INTO awaiting_input (id, task_id, question) VALUES (?, ?, ?)',
       [input.id, input.task_id, input.question]
     );
-    return db.query<AwaitingInput, [string]>('SELECT * FROM awaiting_input WHERE id = ?').get(input.id)!;
+    const row = db.query<AwaitingInput, [string]>('SELECT * FROM awaiting_input WHERE id = ?').get(input.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted awaiting_input with id ${input.id}`);
+    return row;
   },
 
   answerInput(id: string, response: string): AwaitingInput | null {
@@ -183,7 +188,9 @@ export const db = {
   insertDiff(diff: Omit<Diff, 'created_at' | 'status'>): Diff {
     const db = getDb();
     db.run('INSERT INTO diffs (id, task_id, content) VALUES (?, ?, ?)', [diff.id, diff.task_id, diff.content]);
-    return db.query<Diff, [string]>('SELECT * FROM diffs WHERE id = ?').get(diff.id)!;
+    const row = db.query<Diff, [string]>('SELECT * FROM diffs WHERE id = ?').get(diff.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted diff with id ${diff.id}`);
+    return row;
   },
 
   updateDiffStatus(id: string, status: 'approved' | 'rejected'): Diff | null {
@@ -212,6 +219,8 @@ export const db = {
       'INSERT INTO terminal_sessions (id, task_id, shell, pid) VALUES (?, ?, ?, ?)',
       [session.id, session.task_id, session.shell, session.pid ?? null]
     );
-    return db.query<TerminalSession, [string]>('SELECT * FROM terminal_sessions WHERE id = ?').get(session.id)!;
+    const row = db.query<TerminalSession, [string]>('SELECT * FROM terminal_sessions WHERE id = ?').get(session.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted terminal_session with id ${session.id}`);
+    return row;
   },
 };
