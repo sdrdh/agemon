@@ -144,3 +144,20 @@ app.route('/api', tasksRoutes);
 // ─── Start ────────────────────────────────────────────────────────────────────
 Bun.serve({ fetch: app.fetch, websocket, port: PORT, hostname: HOST });
 console.log(`[agemon] backend listening on http://${HOST}:${PORT}`);
+
+// ─── Crash Recovery + Graceful Shutdown ──────────────────────────────────────
+// Dynamic import avoids circular dependency: acp.ts imports broadcast from server.ts
+const { recoverInterruptedSessions, shutdownAllSessions } = await import('./lib/acp.ts');
+recoverInterruptedSessions();
+
+process.on('SIGINT', async () => {
+  console.info('[agemon] shutting down...');
+  await shutdownAllSessions();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.info('[agemon] shutting down...');
+  await shutdownAllSessions();
+  process.exit(0);
+});

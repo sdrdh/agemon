@@ -4,6 +4,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { randomUUID } from 'crypto';
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
+import { spawnAgent, stopAgent, getRunningSession } from '../lib/acp.ts';
 import type { CreateTaskBody, UpdateTaskBody, AgentType, Task } from '@agemon/shared';
 import { AGENT_TYPES } from '@agemon/shared';
 
@@ -145,15 +146,26 @@ tasksRoutes.post('/tasks/:id/start', (c) => {
   if (task.status !== 'todo') {
     sendError(400, 'Task must be in todo status to start');
   }
-  sendError(501, 'Agent spawning not yet implemented');
+  try {
+    const session = spawnAgent(task.id, task.agent);
+    return c.json(session, 202);
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
 });
 
 tasksRoutes.post('/tasks/:id/stop', (c) => {
   const task = requireTask(c.req.param('id'));
-  if (task.status !== 'working') {
-    sendError(400, 'Task must be in working status to stop');
+  const session = getRunningSession(task.id);
+  if (!session) {
+    sendError(404, 'No running session found for this task');
   }
-  sendError(501, 'Agent stopping not yet implemented');
+  try {
+    stopAgent(session!.id);
+    return c.json({ message: 'Stop signal sent', sessionId: session!.id });
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
 });
 
 tasksRoutes.get('/repos', (c) => {
