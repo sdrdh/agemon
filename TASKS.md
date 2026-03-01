@@ -108,6 +108,26 @@ agemon/
 
 ---
 
+### Task 1.5: Schema Rewrite — Agent Sessions
+
+**Priority:** P0
+**Estimated Time:** 2 hours
+
+**Deliverables:**
+- [x] Rewrite `schema.sql`: add `agent_sessions` table; make `session_id` required on `acp_events` + `awaiting_input`; drop `terminal_sessions`; bump schema version to 2
+- [x] Update `db/client.ts`: add session CRUD helpers (`getSession`, `listSessions`, `listSessionsByState`, `insertSession`, `updateSessionState`); remove terminal_session helpers; update `insertEvent` and `insertAwaitingInput` to require `session_id`
+- [x] Update `shared/types/index.ts`: add `AgentSession`, `AgentSessionState`; add `session_id` to `ACPEvent` + `AwaitingInput`; drop `TerminalSession`; add `session_started` + `session_state_changed` WS events
+- [x] Update `backend/src/db/seed.ts` to create sessions before events
+
+**Acceptance Criteria:**
+- `bun run backend/src/db/seed.ts` runs clean against new schema
+- `bun tsc --noEmit` in `backend/` passes with no errors
+- `schema_version` table contains version 2
+
+**Dependencies:** Task 1.2
+
+---
+
 ### Task 1.3: REST API Foundation
 
 **Priority:** P0  
@@ -436,45 +456,69 @@ class GitHubClient {
 
 ### Task 4.1: ACP Client Setup
 
-**Priority:** P0  
+**Priority:** P0
 **Estimated Time:** 10 hours
 
 **Deliverables:**
 - [ ] Install `@agentclientprotocol/sdk`
 - [ ] Create `ACPAgentManager` class
-- [ ] Implement agent spawning
-- [ ] Handle session initialization
+- [ ] Implement session-aware agent spawning (creates `agent_sessions` row on spawn)
+- [ ] Capture `external_session_id` from CLI stdout for `--resume` support
+- [ ] Handle session initialization and state transitions
 - [ ] Send prompts to agent
-- [ ] Store agent PIDs for lifecycle management
+- [ ] Update session `pid` and `state` throughout lifecycle
 
 **Agent Support:**
 - Claude Code (via `claude-code-acp`)
+- OpenCode
 - Aider (via wrapper/adapter)
 - Gemini CLI
 
 **Functions:**
 ```typescript
 class ACPAgentManager {
-  spawnAgent(taskId: string, agent: string, goal: string): Promise<string>
+  spawnAgent(taskId: string, agentType: AgentType, goal: string, resumeSessionId?: string): Promise<AgentSession>
   sendPrompt(sessionId: string, prompt: string): Promise<void>
   stopAgent(sessionId: string): Promise<void>
-  getSessionStatus(sessionId: string): Promise<'active' | 'stopped'>
 }
 ```
 
 **Acceptance Criteria:**
-- Agent process spawns successfully
-- ACP handshake completes
-- Session ID tracked in database
-- Agent responds to prompts
+- Agent process spawns and creates an `agent_sessions` row with `state: 'starting'`
+- `external_session_id` captured from CLI output and written to session row
+- Session moves to `running` after ACP handshake
+- Session moves to `stopped` or `crashed` on exit
 - Clean shutdown on stop command
-- Error handling for agent crashes
+- Error handling for agent crashes (state → `crashed`)
 
-**Dependencies:** Task 1.2, Task 3.1
+**Dependencies:** Task 1.5, Task 3.1
 
 ---
 
-### Task 4.2: ACP Event Stream Parser
+### Task 4.2: Auto-Resume on Startup
+
+**Priority:** P0
+**Estimated Time:** 3 hours
+
+**Deliverables:**
+- [ ] On server boot: query `agent_sessions` where `state IN ('running', 'starting')`
+- [ ] Mark all found sessions as `interrupted`
+- [ ] Re-spawn each with `--resume <external_session_id>` (if `external_session_id` is set)
+- [ ] Insert new `agent_sessions` row for each re-spawned process (linking same task)
+- [ ] Broadcast `session_state_changed` for interrupted sessions
+- [ ] Broadcast `session_started` for re-spawned sessions
+
+**Acceptance Criteria:**
+- Server restart recovers in-progress sessions automatically
+- Sessions without `external_session_id` are marked `interrupted` but not re-spawned
+- New session rows are created (old rows preserved as history)
+- Task status remains correct after recovery
+
+**Dependencies:** Task 4.1
+
+---
+
+### Task 4.3: ACP Event Stream Parser
 
 **Priority:** P0  
 **Estimated Time:** 10 hours
@@ -504,7 +548,7 @@ class ACPAgentManager {
 
 ---
 
-### Task 4.3: "Awaiting Input" Handler
+### Task 4.4: "Awaiting Input" Handler
 
 **Priority:** P0  
 **Estimated Time:** 10 hours
@@ -531,7 +575,7 @@ class ACPAgentManager {
 - Task resumes to "Working" after response
 - Notification sent when input needed
 
-**Dependencies:** Task 4.2
+**Dependencies:** Task 4.3
 
 ---
 
@@ -1182,8 +1226,9 @@ Week 1-2: Foundation
 
 Week 4-5: ACP Integration
 ├─ 4.1 ACP Client (10h)
-├─ 4.2 Event Parser (10h)
-└─ 4.3 Awaiting Input (10h)
+├─ 4.2 Auto-Resume (3h)
+├─ 4.3 Event Parser (10h)
+└─ 4.4 Awaiting Input (10h)
 
 Week 7: Build & Distribution
 ├─ 7.1 Production Build (8h)
@@ -1253,7 +1298,7 @@ Week 7-8: Launch Prep
 - Track C: 3.2 → 3.3
 
 **Week 5:**
-- Track A: 4.2 → 4.3
+- Track A: 4.2 (auto-resume) + 4.3 → 4.4
 - Track B: 5.1 starts (PTY)
 
 **Week 6:**
@@ -1273,7 +1318,7 @@ Week 7-8: Launch Prep
 **Total Critical Path Duration:** ~6 weeks
 ```
 1.1 (4h) → 1.2 (6h) → 1.3 (8h) → 1.4 (6h) →
-4.1 (10h) → 4.2 (10h) → 4.3 (10h) →
+4.1 (10h) → 4.3 (10h) → 4.4 (10h) →
 7.1 (8h) → 7.2 (10h) → 7.3 (6h) → 8.5 (8h)
 ```
 
@@ -1326,13 +1371,14 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 | 3.1  | 1.2        | 1.3, 1.4, 2.1, 2.2 |
 | 3.2  | 3.1        | 2.3, 2.4, 4.1 |
 | 3.3  | 3.2        | 2.3, 2.4, 4.1 |
-| 4.1  | 1.2, 3.1   | 3.2, 3.3 |
-| 4.2  | 4.1        | 3.3, 5.1 |
-| 4.3  | 4.2        | 5.1, 5.2 |
-| 5.1  | 1.4        | 4.2, 4.3, 6.1 |
+| 4.1  | 1.5, 3.1   | 3.2, 3.3 |
+| 4.2  | 4.1        | 4.3, 5.1 |
+| 4.3  | 4.1, 2.4   | 4.2, 5.1 |
+| 4.4  | 4.3        | 5.1, 5.2 |
+| 5.1  | 1.4        | 4.3, 4.4, 6.1 |
 | 5.2  | 5.1        | 6.1, 6.2 |
 | 5.3  | 5.2        | 6.2, 6.3 |
-| 6.1  | 3.1        | 4.3, 5.1, 5.2 |
+| 6.1  | 3.1        | 4.4, 5.1, 5.2 |
 | 6.2  | 6.1        | 5.2, 5.3 |
 | 6.3  | 6.2        | 5.3 |
 | 7.1  | All Phase 1-6 | 8.1, 8.2, 8.6 |

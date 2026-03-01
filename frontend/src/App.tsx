@@ -6,8 +6,8 @@ import {
   RouterProvider,
   Outlet,
 } from '@tanstack/react-router';
-import { hasApiKey } from './lib/api';
-import { connectWs } from './lib/ws';
+import { hasApiKey, clearApiKey } from './lib/api';
+import { connectWs, disconnectWs } from './lib/ws';
 
 const IndexPage = lazy(() => import('./routes/index'));
 const LoginScreen = lazy(() => import('./routes/login'));
@@ -53,9 +53,15 @@ class ErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-4">
             <p className="font-semibold">Something went wrong</p>
-            <p className="text-sm text-muted-foreground">An unexpected error occurred. Please refresh.</p>
+            <p className="text-sm text-muted-foreground">{this.state.error?.message ?? 'An unexpected error occurred.'}</p>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="text-sm underline text-primary"
+            >
+              Try again
+            </button>
           </div>
         </div>
       );
@@ -65,7 +71,7 @@ class ErrorBoundary extends Component<
 }
 
 const SuspenseFallback = () => (
-  <div className="min-h-screen bg-background p-4 space-y-4">
+  <div role="status" aria-busy="true" className="min-h-screen bg-background p-4 space-y-4">
     <div className="h-10 w-1/3 rounded-md bg-muted animate-pulse" />
     <div className="h-40 rounded-md bg-muted animate-pulse" />
     <div className="h-40 rounded-md bg-muted animate-pulse" />
@@ -78,6 +84,12 @@ export default function App() {
   function handleLogin() {
     connectWs();
     setAuthed(true);
+  }
+
+  function handleLogout() {
+    disconnectWs();
+    clearApiKey();
+    setAuthed(false);
   }
 
   if (!authed) {
@@ -93,7 +105,15 @@ export default function App() {
   return (
     <ErrorBoundary>
       <Suspense fallback={<SuspenseFallback />}>
-        <RouterProvider router={router} />
+        <div className="relative">
+          <button
+            onClick={handleLogout}
+            className="absolute top-3 right-3 z-50 text-xs text-muted-foreground underline"
+          >
+            Logout
+          </button>
+          <RouterProvider router={router} />
+        </div>
       </Suspense>
     </ErrorBoundary>
   );

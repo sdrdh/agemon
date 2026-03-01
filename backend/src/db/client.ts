@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { Task, ACPEvent, AwaitingInput, Diff, TerminalSession } from '@agemon/shared';
+import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType } from '@agemon/shared';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
 
@@ -22,7 +23,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export function runMigrations() {
   const db = getDb();
@@ -40,8 +41,10 @@ export function runMigrations() {
   if (current < SCHEMA_VERSION) {
     const schemaPath = join(import.meta.dir, 'schema.sql');
     const sql = readFileSync(schemaPath, 'utf8');
-    db.run(sql);
-    db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
+    db.transaction(() => {
+      db.run(sql);
+      db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
+    })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
   }
 }
@@ -59,16 +62,31 @@ interface RawTask {
 }
 
 const TASK_STATUSES = new Set<Task['status']>(['todo', 'working', 'awaiting_input', 'done']);
-const AGENT_TYPES = new Set<Task['agent']>(['claude-code', 'aider', 'gemini']);
+const AGENT_TYPES_SET = new Set<AgentType>(AGENT_TYPES_ARRAY);
+const TERMINAL_STATES = new Set<AgentSessionState>(['stopped', 'crashed', 'interrupted']);
 
 function parseTask(row: RawTask): Task {
   const status = TASK_STATUSES.has(row.status as Task['status'])
     ? (row.status as Task['status'])
     : (() => { throw new Error(`[db] unexpected task status: ${row.status}`); })();
-  const agent = AGENT_TYPES.has(row.agent as Task['agent'])
-    ? (row.agent as Task['agent'])
+  const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
+    ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
   return { ...row, status, agent, repos: JSON.parse(row.repos) };
+}
+
+const SESSION_STATES = new Set<AgentSessionState>([
+  'starting', 'running', 'stopped', 'crashed', 'interrupted',
+]);
+
+function parseSession(row: AgentSession): AgentSession {
+  if (!SESSION_STATES.has(row.state)) {
+    throw new Error(`[db] unexpected session state: ${row.state}`);
+  }
+  if (!AGENT_TYPES_SET.has(row.agent_type)) {
+    throw new Error(`[db] unexpected agent type: ${row.agent_type}`);
+  }
+  return row;
 }
 
 export const db = {
@@ -98,11 +116,11 @@ export const db = {
 
   updateTask(id: string, fields: Partial<Omit<Task, 'id' | 'created_at'>>): Task | null {
     const sets: string[] = [];
-    const values: unknown[] = [];
+    const values: (string | number | null)[] = [];
 
     // Field names below are hardcoded (not user-supplied) — safe from SQL injection.
     if (fields.title !== undefined) { sets.push('title = ?'); values.push(fields.title); }
-    if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description); }
+    if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description ?? null); }
     if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
     if (fields.repos !== undefined) { sets.push('repos = ?'); values.push(JSON.stringify(fields.repos)); }
     if (fields.agent !== undefined) { sets.push('agent = ?'); values.push(fields.agent); }
@@ -114,7 +132,7 @@ export const db = {
     }
 
     values.push(id);
-    database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values as string[]);
+    database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
     return row ? parseTask(row) : null;
   },
@@ -125,20 +143,85 @@ export const db = {
     return result.changes > 0;
   },
 
+  // ── Agent Sessions ──
+
+  getSession(id: string): AgentSession | null {
+    const db = getDb();
+    const row = db.query<AgentSession, [string]>('SELECT * FROM agent_sessions WHERE id = ?').get(id);
+    return row ? parseSession(row) : null;
+  },
+
+  listSessions(taskId: string): AgentSession[] {
+    const db = getDb();
+    return db.query<AgentSession, [string]>(
+      'SELECT * FROM agent_sessions WHERE task_id = ? ORDER BY started_at ASC'
+    ).all(taskId).map(parseSession);
+  },
+
+  listSessionsByState(state: AgentSessionState): AgentSession[] {
+    const db = getDb();
+    return db.query<AgentSession, [string]>(
+      'SELECT * FROM agent_sessions WHERE state = ? ORDER BY started_at ASC'
+    ).all(state).map(parseSession);
+  },
+
+  insertSession(session: Pick<AgentSession, 'id' | 'task_id' | 'agent_type' | 'pid'>): AgentSession {
+    const db = getDb();
+    db.run(
+      'INSERT INTO agent_sessions (id, task_id, agent_type, pid) VALUES (?, ?, ?, ?)',
+      [session.id, session.task_id, session.agent_type, session.pid ?? null]
+    );
+    const row = db.query<AgentSession, [string]>('SELECT * FROM agent_sessions WHERE id = ?').get(session.id);
+    if (!row) throw new Error(`[db] failed to retrieve newly inserted session with id ${session.id}`);
+    return parseSession(row);
+  },
+
+  updateSessionState(
+    id: string,
+    state: AgentSessionState,
+    extra?: { external_session_id?: string; pid?: number | null; exit_code?: number | null }
+  ): AgentSession | null {
+    const db = getDb();
+    const sets: string[] = ['state = ?'];
+    const values: (string | number | null)[] = [state];
+
+    if (extra?.external_session_id !== undefined) {
+      sets.push('external_session_id = ?');
+      values.push(extra.external_session_id);
+    }
+    if (extra?.pid !== undefined) {
+      sets.push('pid = ?');
+      values.push(extra.pid ?? null);
+    }
+    if (extra?.exit_code !== undefined) {
+      sets.push('exit_code = ?');
+      values.push(extra.exit_code ?? null);
+    }
+
+    if (TERMINAL_STATES.has(state)) {
+      sets.push("ended_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')");
+    }
+
+    values.push(id);
+    db.run(`UPDATE agent_sessions SET ${sets.join(', ')} WHERE id = ?`, values);
+    const row = db.query<AgentSession, [string]>('SELECT * FROM agent_sessions WHERE id = ?').get(id);
+    return row ? parseSession(row) : null;
+  },
+
   // ── ACP Events ──
 
-  listEvents(taskId: string): ACPEvent[] {
+  listEvents(taskId: string, limit: number): ACPEvent[] {
     const db = getDb();
-    return db.query<ACPEvent, [string]>(
-      'SELECT * FROM acp_events WHERE task_id = ? ORDER BY created_at ASC'
-    ).all(taskId);
+    return db.query<ACPEvent, [string, number]>(
+      'SELECT * FROM acp_events WHERE task_id = ? ORDER BY created_at ASC LIMIT ?'
+    ).all(taskId, limit);
   },
 
   insertEvent(event: Omit<ACPEvent, 'created_at'>): ACPEvent {
     const db = getDb();
     db.run(
-      'INSERT INTO acp_events (id, task_id, type, content) VALUES (?, ?, ?, ?)',
-      [event.id, event.task_id, event.type, event.content]
+      'INSERT INTO acp_events (id, task_id, session_id, type, content) VALUES (?, ?, ?, ?, ?)',
+      [event.id, event.task_id, event.session_id, event.type, event.content]
     );
     const row = db.query<ACPEvent, [string]>('SELECT * FROM acp_events WHERE id = ?').get(event.id);
     if (!row) throw new Error(`[db] failed to retrieve newly inserted event with id ${event.id}`);
@@ -157,8 +240,8 @@ export const db = {
   insertAwaitingInput(input: Omit<AwaitingInput, 'created_at' | 'response' | 'status'>): AwaitingInput {
     const db = getDb();
     db.run(
-      'INSERT INTO awaiting_input (id, task_id, question) VALUES (?, ?, ?)',
-      [input.id, input.task_id, input.question]
+      'INSERT INTO awaiting_input (id, task_id, session_id, question) VALUES (?, ?, ?, ?)',
+      [input.id, input.task_id, input.session_id, input.question]
     );
     const row = db.query<AwaitingInput, [string]>('SELECT * FROM awaiting_input WHERE id = ?').get(input.id);
     if (!row) throw new Error(`[db] failed to retrieve newly inserted awaiting_input with id ${input.id}`);
@@ -197,30 +280,5 @@ export const db = {
     const db = getDb();
     db.run('UPDATE diffs SET status = ? WHERE id = ?', [status, id]);
     return db.query<Diff, [string]>('SELECT * FROM diffs WHERE id = ?').get(id) ?? null;
-  },
-
-  // ── Terminal Sessions ──
-
-  getTerminalSession(id: string): TerminalSession | null {
-    const db = getDb();
-    return db.query<TerminalSession, [string]>('SELECT * FROM terminal_sessions WHERE id = ?').get(id) ?? null;
-  },
-
-  listTerminalSessions(taskId: string): TerminalSession[] {
-    const db = getDb();
-    return db.query<TerminalSession, [string]>(
-      'SELECT * FROM terminal_sessions WHERE task_id = ? ORDER BY created_at DESC'
-    ).all(taskId);
-  },
-
-  insertTerminalSession(session: Omit<TerminalSession, 'created_at'>): TerminalSession {
-    const db = getDb();
-    db.run(
-      'INSERT INTO terminal_sessions (id, task_id, shell, pid) VALUES (?, ?, ?, ?)',
-      [session.id, session.task_id, session.shell, session.pid ?? null]
-    );
-    const row = db.query<TerminalSession, [string]>('SELECT * FROM terminal_sessions WHERE id = ?').get(session.id);
-    if (!row) throw new Error(`[db] failed to retrieve newly inserted terminal_session with id ${session.id}`);
-    return row;
   },
 };

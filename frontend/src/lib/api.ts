@@ -2,16 +2,22 @@ import type { Task, CreateTaskBody, UpdateTaskBody } from '@agemon/shared';
 
 const BASE = '/api';
 
+export const STORAGE_KEY = 'agemon_key' as const;
+
 function getKey(): string {
-  return localStorage.getItem('agemon_key') ?? '';
+  return localStorage.getItem(STORAGE_KEY) ?? '';
 }
 
 export function setApiKey(key: string) {
-  localStorage.setItem('agemon_key', key);
+  localStorage.setItem(STORAGE_KEY, key);
 }
 
 export function hasApiKey(): boolean {
-  return !!localStorage.getItem('agemon_key');
+  return !!localStorage.getItem(STORAGE_KEY);
+}
+
+export function clearApiKey() {
+  localStorage.removeItem(STORAGE_KEY);
 }
 
 function headers() {

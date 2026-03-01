@@ -16,5 +16,5 @@ export function showToast(payload: ToastPayload) {
 
 export function onToast(fn: ToastListener) {
   listeners.add(fn);
-  return () => listeners.delete(fn);
+  return () => { listeners.delete(fn); };
 }

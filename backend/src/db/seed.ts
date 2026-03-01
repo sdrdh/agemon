@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
 import { runMigrations, db } from './client.ts';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('[seed] refusing to run seed in production');
+  process.exit(1);
+}
+
 runMigrations();
 
 const taskId1 = randomUUID();
@@ -35,9 +40,29 @@ db.createTask({
   agent: 'aider',
 });
 
-// Sample ACP events for the working task
-db.insertEvent({ id: randomUUID(), task_id: taskId2, type: 'thought', content: 'Looking at the existing query patterns in the codebase...' });
-db.insertEvent({ id: randomUUID(), task_id: taskId2, type: 'action', content: 'Reading backend/src/db/client.ts' });
-db.insertEvent({ id: randomUUID(), task_id: taskId2, type: 'thought', content: 'I see several repeated patterns. I will extract them into typed helpers.' });
+// Agent session for the working task
+const sessionId2 = randomUUID();
+db.insertSession({
+  id: sessionId2,
+  task_id: taskId2,
+  agent_type: 'claude-code',
+  pid: null,
+});
+db.updateSessionState(sessionId2, 'running');
+
+// Sample ACP events for the working task (must reference a session)
+db.insertEvent({ id: randomUUID(), task_id: taskId2, session_id: sessionId2, type: 'thought', content: 'Looking at the existing query patterns in the codebase...' });
+db.insertEvent({ id: randomUUID(), task_id: taskId2, session_id: sessionId2, type: 'action', content: 'Reading backend/src/db/client.ts' });
+db.insertEvent({ id: randomUUID(), task_id: taskId2, session_id: sessionId2, type: 'thought', content: 'I see several repeated patterns. I will extract them into typed helpers.' });
+
+// Completed session for the done task
+const sessionId3 = randomUUID();
+db.insertSession({
+  id: sessionId3,
+  task_id: taskId3,
+  agent_type: 'aider',
+  pid: null,
+});
+db.updateSessionState(sessionId3, 'stopped', { exit_code: 0 });
 
 console.log('[seed] sample data inserted');
