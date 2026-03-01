@@ -23,7 +23,25 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+/**
+ * Extract a display name from a repo URL.
+ * - SSH:   git@github.com:acme/web.git → acme/web
+ * - HTTPS: https://github.com/org/repo  → org/repo
+ * - Fallback: return the URL as-is
+ */
+export function parseRepoName(url: string): string {
+  // SSH format: git@host:owner/repo.git
+  const sshMatch = url.match(/^git@[^:]+:(.+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+
+  // HTTPS format: https://host/owner/repo(.git)?
+  const httpsMatch = url.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?$/);
+  if (httpsMatch) return httpsMatch[1];
+
+  return url;
+}
 
 export function runMigrations() {
   const db = getDb();
@@ -43,6 +61,74 @@ export function runMigrations() {
     const sql = readFileSync(schemaPath, 'utf8');
     db.transaction(() => {
       db.run(sql);
+
+      // ── v3 migration: extract tasks.repos JSON → repos + task_repos tables ──
+      if (current < 3) {
+        // Check if the old tasks table still has a repos column
+        const cols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('tasks')"
+        ).all();
+        const hasReposCol = cols.some(c => c.name === 'repos');
+
+        if (hasReposCol) {
+          // 1. Extract existing JSON repos into the new repos + task_repos tables
+          const rows = db.query<{ id: string; repos: string }, []>(
+            'SELECT id, repos FROM tasks'
+          ).all();
+
+          for (const row of rows) {
+            let urls: string[];
+            try {
+              urls = JSON.parse(row.repos);
+            } catch {
+              urls = [];
+            }
+            if (!Array.isArray(urls)) urls = [];
+
+            for (const url of urls) {
+              if (typeof url !== 'string' || url.length === 0) continue;
+
+              const name = parseRepoName(url);
+              db.run(
+                'INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)',
+                [url, name]
+              );
+              const repo = db.query<{ id: number }, [string]>(
+                'SELECT id FROM repos WHERE url = ?'
+              ).get(url);
+              if (repo) {
+                db.run(
+                  'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
+                  [row.id, repo.id]
+                );
+              }
+            }
+          }
+
+          // 2. Recreate tasks table without the repos column
+          db.run(`
+            CREATE TABLE tasks_new (
+              id          TEXT PRIMARY KEY,
+              title       TEXT NOT NULL CHECK (length(title) <= 500),
+              description TEXT CHECK (description IS NULL OR length(description) <= 10000),
+              status      TEXT NOT NULL DEFAULT 'todo'
+                            CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
+              agent       TEXT NOT NULL DEFAULT 'claude-code'
+                            CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            )
+          `);
+
+          db.run(`
+            INSERT INTO tasks_new (id, title, description, status, agent, created_at)
+            SELECT id, title, description, status, agent, created_at FROM tasks
+          `);
+
+          db.run('DROP TABLE tasks');
+          db.run('ALTER TABLE tasks_new RENAME TO tasks');
+        }
+      }
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
