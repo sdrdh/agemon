@@ -495,7 +495,7 @@ class ACPAgentManager {
 
 ---
 
-### Task 4.0: Auto-Resume on Startup
+### Task 4.2: Auto-Resume on Startup
 
 **Priority:** P0
 **Estimated Time:** 3 hours
@@ -518,7 +518,7 @@ class ACPAgentManager {
 
 ---
 
-### Task 4.2: ACP Event Stream Parser
+### Task 4.3: ACP Event Stream Parser
 
 **Priority:** P0  
 **Estimated Time:** 10 hours
@@ -548,7 +548,7 @@ class ACPAgentManager {
 
 ---
 
-### Task 4.3: "Awaiting Input" Handler
+### Task 4.4: "Awaiting Input" Handler
 
 **Priority:** P0  
 **Estimated Time:** 10 hours
@@ -575,7 +575,7 @@ class ACPAgentManager {
 - Task resumes to "Working" after response
 - Notification sent when input needed
 
-**Dependencies:** Task 4.2
+**Dependencies:** Task 4.3
 
 ---
 
@@ -1226,8 +1226,9 @@ Week 1-2: Foundation
 
 Week 4-5: ACP Integration
 ├─ 4.1 ACP Client (10h)
-├─ 4.2 Event Parser (10h)
-└─ 4.3 Awaiting Input (10h)
+├─ 4.2 Auto-Resume (3h)
+├─ 4.3 Event Parser (10h)
+└─ 4.4 Awaiting Input (10h)
 
 Week 7: Build & Distribution
 ├─ 7.1 Production Build (8h)
@@ -1297,7 +1298,7 @@ Week 7-8: Launch Prep
 - Track C: 3.2 → 3.3
 
 **Week 5:**
-- Track A: 4.2 → 4.3
+- Track A: 4.2 (auto-resume) + 4.3 → 4.4
 - Track B: 5.1 starts (PTY)
 
 **Week 6:**
@@ -1317,7 +1318,7 @@ Week 7-8: Launch Prep
 **Total Critical Path Duration:** ~6 weeks
 ```
 1.1 (4h) → 1.2 (6h) → 1.3 (8h) → 1.4 (6h) →
-4.1 (10h) → 4.2 (10h) → 4.3 (10h) →
+4.1 (10h) → 4.3 (10h) → 4.4 (10h) →
 7.1 (8h) → 7.2 (10h) → 7.3 (6h) → 8.5 (8h)
 ```
 
@@ -1370,13 +1371,14 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 | 3.1  | 1.2        | 1.3, 1.4, 2.1, 2.2 |
 | 3.2  | 3.1        | 2.3, 2.4, 4.1 |
 | 3.3  | 3.2        | 2.3, 2.4, 4.1 |
-| 4.1  | 1.2, 3.1   | 3.2, 3.3 |
-| 4.2  | 4.1        | 3.3, 5.1 |
-| 4.3  | 4.2        | 5.1, 5.2 |
-| 5.1  | 1.4        | 4.2, 4.3, 6.1 |
+| 4.1  | 1.5, 3.1   | 3.2, 3.3 |
+| 4.2  | 4.1        | 4.3, 5.1 |
+| 4.3  | 4.1, 2.4   | 4.2, 5.1 |
+| 4.4  | 4.3        | 5.1, 5.2 |
+| 5.1  | 1.4        | 4.3, 4.4, 6.1 |
 | 5.2  | 5.1        | 6.1, 6.2 |
 | 5.3  | 5.2        | 6.2, 6.3 |
-| 6.1  | 3.1        | 4.3, 5.1, 5.2 |
+| 6.1  | 3.1        | 4.4, 5.1, 5.2 |
 | 6.2  | 6.1        | 5.2, 5.3 |
 | 6.3  | 6.2        | 5.3 |
 | 7.1  | All Phase 1-6 | 8.1, 8.2, 8.6 |
