@@ -157,7 +157,7 @@ function parseTask(row: RawTask): Omit<Task, 'repos'> {
   const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
     ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
-  return { ...row, status, agent };
+  return { id: row.id, title: row.title, description: row.description, status, agent, created_at: row.created_at };
 }
 
 const SESSION_STATES = new Set<AgentSessionState>([
