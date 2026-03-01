@@ -28,13 +28,13 @@ This document breaks down the development of Agemon v1.0 into actionable tasks o
 **Estimated Time:** 4 hours
 
 **Deliverables:**
-- [ ] Initialize Bun project with TypeScript
-- [ ] Setup monorepo structure (backend, frontend, shared)
-- [ ] Configure Vite for React frontend
-- [ ] Setup Fastify backend with TypeScript
-- [ ] Create `.env.example` with required variables
-- [ ] Write `README.md` with quick start instructions
-- [ ] Setup `.gitignore` for node_modules, dist, .env
+- [x] Initialize Bun project with TypeScript
+- [x] Setup monorepo structure (backend, frontend, shared)
+- [x] Configure Vite for React frontend
+- [x] Setup Fastify backend with TypeScript
+- [x] Create `.env.example` with required variables
+- [x] Write `README.md` with quick start instructions
+- [x] Setup `.gitignore` for node_modules, dist, .env
 
 **Project Structure:**
 ```
@@ -82,12 +82,12 @@ agemon/
 **Estimated Time:** 6 hours
 
 **Deliverables:**
-- [ ] Install `better-sqlite3` dependency
-- [ ] Create `schema.sql` with all tables
-- [ ] Write database client wrapper (`db/client.ts`)
-- [ ] Write migration system (version tracking)
-- [ ] Create seed script with sample data
-- [ ] Write database query helpers
+- [x] Install `bun:sqlite` (built-in, replaces better-sqlite3)
+- [x] Create `schema.sql` with all tables
+- [x] Write database client wrapper (`db/client.ts`)
+- [x] Write migration system (version tracking)
+- [x] Create seed script with sample data
+- [x] Write database query helpers
 
 **Tables to Create:**
 - `tasks` - Core task metadata
@@ -191,11 +191,11 @@ type ClientEvent =
 **Estimated Time:** 8 hours
 
 **Deliverables:**
-- [ ] Install Tailwind CSS and configure
-- [ ] Run `shadcn-ui init` to setup base configuration
-- [ ] Add core components via CLI (`button`, `card`, `badge`, `dialog`, `input`, `select`, `toast`, `tabs`, `sheet`)
-- [ ] Customize touch targets for mobile (44×44px minimum)
-- [ ] Configure dark mode with CSS variables
+- [x] Install Tailwind CSS and configure
+- [x] Run `shadcn-ui init` to setup base configuration
+- [x] Add core components (`button`, `card`, `badge`, `dialog`, `input`, `select`, `toast`, `tabs`)
+- [x] Customize touch targets for mobile (44×44px minimum)
+- [x] Configure dark mode with CSS variables
 - [ ] Create mobile-specific variants (bottom sheets, floating action button)
 - [ ] Test components on actual mobile device
 
@@ -920,10 +920,10 @@ curl -fsSL https://get.agemon.dev/exe-dev | bash
 **Estimated Time:** 10 hours
 
 **Deliverables:**
-- [ ] Quick start guide
-- [ ] Architecture overview
-- [ ] API reference
-- [ ] Deployment guides (all options)
+- [x] Quick start guide
+- [x] Architecture overview
+- [x] API reference
+- [x] Deployment guides (local dev done; tailscale/exe-dev/vps pending)
 - [ ] Troubleshooting FAQ
 - [ ] Contributing guide
 

@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@agemon/shared": ["../shared/types/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../shared/types/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

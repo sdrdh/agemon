@@ -16,8 +16,8 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 | Layer | Choice | Notes |
 |---|---|---|
 | Runtime | Bun 1.1+ | Built-in TS, native SQLite, fast startup |
-| Backend | Fastify 4.x | REST + WebSocket via `@fastify/websocket` |
-| Database | SQLite | `better-sqlite3`, synchronous ops |
+| Backend | Hono 4.x | REST + WebSocket via `hono/bun` (`upgradeWebSocket`) |
+| Database | SQLite | `bun:sqlite`, synchronous ops |
 | Frontend | React 18 + Vite 5 | Code-split by route |
 | UI Components | shadcn/ui | Radix UI + Tailwind, copy-paste components |
 | Router | TanStack Router | |
@@ -79,7 +79,7 @@ agemon/
 
 **Shared types** — all WebSocket event types and API shapes live in `shared/types/`. Both backend and frontend import from there. Never duplicate type definitions.
 
-**Synchronous DB** — `better-sqlite3` is synchronous by design. Don't wrap queries in fake async.
+**Synchronous DB** — `bun:sqlite` is synchronous by design. Don't wrap queries in fake async.
 
 **WebSocket events** — server broadcasts to all connected clients on any state change. Client is always read-only except for explicit user actions (input responses, terminal keystrokes).
 
