@@ -1,12 +1,94 @@
-export default function IndexPage() {
+import { useState, useEffect } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { TaskCard } from '@/components/custom/task-card';
+import { api } from '@/lib/api';
+import type { TasksByProject } from '@agemon/shared';
+
+export default function ProjectListView() {
+  const [data, setData] = useState<TasksByProject | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.listTasksByProject()
+      .then(setData)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load tasks'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-4">
+        <div className="h-10 w-1/3 rounded-md bg-muted animate-pulse" />
+        <div className="h-24 rounded-md bg-muted animate-pulse" />
+        <div className="h-24 rounded-md bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-destructive">{error}</p>
+        <Button variant="link" onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
+
+  const projectNames = Object.keys(data?.projects ?? {}).sort();
+  const hasUngrouped = (data?.ungrouped ?? []).length > 0;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4 p-8">
-      <h1 className="text-3xl font-bold tracking-tight">Agemon</h1>
-      <p className="text-muted-foreground text-center max-w-sm">
-        Mobile-first AI agent orchestration. Queue tasks, monitor thought streams, approve diffs — all from your phone.
-      </p>
-      <div className="text-sm text-muted-foreground border border-border rounded-lg px-4 py-2">
-        Kanban board coming soon
+    <div className="pb-20">
+      <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Agemon</h1>
+        <Button size="icon" onClick={() => navigate({ to: '/tasks/new' })}>
+          <Plus className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <div className="p-4 space-y-6">
+        {projectNames.length === 0 && !hasUngrouped && (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No tasks yet.</p>
+            <Button variant="link" onClick={() => navigate({ to: '/tasks/new' })}>
+              Create your first task
+            </Button>
+          </div>
+        )}
+
+        {projectNames.map(name => (
+          <section key={name}>
+            <h2 className="text-sm font-medium text-muted-foreground mb-2">{name}</h2>
+            <div className="space-y-2">
+              {data!.projects[name].map(task => (
+                <TaskCard
+                  key={`${name}-${task.id}`}
+                  task={task}
+                  onClick={() => navigate({ to: '/tasks/$id', params: { id: task.id } })}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {hasUngrouped && (
+          <section>
+            <h2 className="text-sm font-medium text-muted-foreground mb-2">No repository</h2>
+            <div className="space-y-2">
+              {data!.ungrouped.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onClick={() => navigate({ to: '/tasks/$id', params: { id: task.id } })}
+                />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,8 @@ import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 
 const IndexPage = lazy(() => import('./routes/index'));
+const TaskCreatePage = lazy(() => import('./routes/tasks.new'));
+const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
 const LoginScreen = lazy(() => import('./routes/login'));
 
 const rootRoute = createRootRoute({
@@ -26,7 +28,19 @@ const indexRoute = createRoute({
   component: IndexPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const taskNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tasks/new',
+  component: TaskCreatePage,
+});
+
+const taskDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tasks/$id',
+  component: TaskDetailPage,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, taskNewRoute, taskDetailRoute]);
 
 const router = createRouter({ routeTree });
 
