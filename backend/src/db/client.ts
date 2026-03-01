@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus } from '@agemon/shared';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
 
@@ -142,7 +142,6 @@ interface RawTask {
   title: string;
   description: string | null;
   status: string;
-  repos: string;
   agent: string;
   created_at: string;
 }
@@ -151,14 +150,14 @@ const TASK_STATUSES = new Set<Task['status']>(['todo', 'working', 'awaiting_inpu
 const AGENT_TYPES_SET = new Set<AgentType>(AGENT_TYPES_ARRAY);
 const TERMINAL_STATES = new Set<AgentSessionState>(['stopped', 'crashed', 'interrupted']);
 
-function parseTask(row: RawTask): Task {
+function parseTask(row: RawTask): Omit<Task, 'repos'> {
   const status = TASK_STATUSES.has(row.status as Task['status'])
     ? (row.status as Task['status'])
     : (() => { throw new Error(`[db] unexpected task status: ${row.status}`); })();
   const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
     ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
-  return { ...row, status, agent, repos: JSON.parse(row.repos) };
+  return { ...row, status, agent };
 }
 
 const SESSION_STATES = new Set<AgentSessionState>([
@@ -176,57 +175,164 @@ function parseSession(row: AgentSession): AgentSession {
 }
 
 export const db = {
+  // ── Repos ──
+
+  listRepos(): Repo[] {
+    const database = getDb();
+    return database.query<Repo, []>('SELECT * FROM repos ORDER BY name').all();
+  },
+
+  upsertRepo(url: string): Repo {
+    const database = getDb();
+    const name = parseRepoName(url);
+    database.run('INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)', [url, name]);
+    const row = database.query<Repo, [string]>('SELECT * FROM repos WHERE url = ?').get(url);
+    if (!row) throw new Error(`[db] failed to upsert repo with url ${url}`);
+    return row;
+  },
+
+  getTaskRepos(taskId: string): Repo[] {
+    const database = getDb();
+    return database.query<Repo, [string]>(
+      `SELECT r.* FROM repos r
+       JOIN task_repos tr ON tr.repo_id = r.id
+       WHERE tr.task_id = ?
+       ORDER BY r.name`
+    ).all(taskId);
+  },
+
+  setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
+    const database = getDb();
+    database.run('DELETE FROM task_repos WHERE task_id = ?', [taskId]);
+    const repos: Repo[] = [];
+    for (const url of repoUrls) {
+      const repo = this.upsertRepo(url);
+      database.run(
+        'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
+        [taskId, repo.id]
+      );
+      repos.push(repo);
+    }
+    return repos;
+  },
+
   // ── Tasks ──
 
   listTasks(): Task[] {
-    const db = getDb();
-    return db.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all().map(parseTask);
+    const database = getDb();
+    const rows = database.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all();
+    return rows.map(row => ({
+      ...parseTask(row),
+      repos: this.getTaskRepos(row.id),
+    }));
   },
 
   getTask(id: string): Task | null {
-    const db = getDb();
-    const row = db.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-    return row ? parseTask(row) : null;
+    const database = getDb();
+    const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
+    if (!row) return null;
+    return { ...parseTask(row), repos: this.getTaskRepos(id) };
   },
 
-  createTask(task: Omit<Task, 'created_at'>): Task {
+  createTask(task: { id: string; title: string; description: string | null; status: TaskStatus; agent: AgentType; repos?: string[] }): Task {
     const database = getDb();
     database.run(
-      'INSERT INTO tasks (id, title, description, status, repos, agent) VALUES (?, ?, ?, ?, ?, ?)',
-      [task.id, task.title, task.description ?? null, task.status, JSON.stringify(task.repos), task.agent]
+      'INSERT INTO tasks (id, title, description, status, agent) VALUES (?, ?, ?, ?, ?)',
+      [task.id, task.title, task.description ?? null, task.status, task.agent]
     );
+    const repos = task.repos ? this.setTaskRepos(task.id, task.repos) : [];
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(task.id);
     if (!row) throw new Error(`[db] failed to retrieve newly inserted task with id ${task.id}`);
-    return parseTask(row);
+    return { ...parseTask(row), repos };
   },
 
-  updateTask(id: string, fields: Partial<Omit<Task, 'id' | 'created_at'>>): Task | null {
+  updateTask(id: string, fields: { title?: string; description?: string | null; status?: TaskStatus; agent?: AgentType; repos?: string[] }): Task | null {
     const sets: string[] = [];
     const values: (string | number | null)[] = [];
 
-    // Field names below are hardcoded (not user-supplied) — safe from SQL injection.
     if (fields.title !== undefined) { sets.push('title = ?'); values.push(fields.title); }
     if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description ?? null); }
     if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
-    if (fields.repos !== undefined) { sets.push('repos = ?'); values.push(JSON.stringify(fields.repos)); }
     if (fields.agent !== undefined) { sets.push('agent = ?'); values.push(fields.agent); }
 
     const database = getDb();
-    if (sets.length === 0) {
-      const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-      return row ? parseTask(row) : null;
+
+    if (sets.length > 0) {
+      values.push(id);
+      database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
     }
 
-    values.push(id);
-    database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
+    if (fields.repos !== undefined) {
+      this.setTaskRepos(id, fields.repos);
+    }
+
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-    return row ? parseTask(row) : null;
+    if (!row) return null;
+    return { ...parseTask(row), repos: this.getTaskRepos(id) };
   },
 
   deleteTask(id: string): boolean {
     const db = getDb();
     const result = db.run('DELETE FROM tasks WHERE id = ?', [id]);
     return result.changes > 0;
+  },
+
+  listTasksByProject(): TasksByProject {
+    const database = getDb();
+
+    interface TaskRepoRow extends RawTask {
+      repo_url: string;
+      repo_name: string;
+    }
+    const taskRepoRows = database.query<TaskRepoRow, []>(`
+      SELECT t.*, r.url as repo_url, r.name as repo_name
+      FROM tasks t
+      JOIN task_repos tr ON tr.task_id = t.id
+      JOIN repos r ON r.id = tr.repo_id
+      ORDER BY r.name, t.created_at DESC
+    `).all();
+
+    const ungroupedRows = database.query<RawTask, []>(`
+      SELECT t.* FROM tasks t
+      WHERE t.id NOT IN (SELECT task_id FROM task_repos)
+      ORDER BY t.created_at DESC
+    `).all();
+
+    // Cache repos per task to avoid N+1
+    const taskIds = new Set<string>();
+    for (const row of taskRepoRows) taskIds.add(row.id);
+    for (const row of ungroupedRows) taskIds.add(row.id);
+
+    const repoCache = new Map<string, Repo[]>();
+    for (const taskId of taskIds) {
+      repoCache.set(taskId, this.getTaskRepos(taskId));
+    }
+
+    const projects: Record<string, Task[]> = {};
+    const seenPerProject = new Map<string, Set<string>>();
+
+    for (const row of taskRepoRows) {
+      const repoName = row.repo_name;
+      if (!projects[repoName]) {
+        projects[repoName] = [];
+        seenPerProject.set(repoName, new Set());
+      }
+      const seen = seenPerProject.get(repoName)!;
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        projects[repoName].push({
+          ...parseTask(row),
+          repos: repoCache.get(row.id) ?? [],
+        });
+      }
+    }
+
+    const ungrouped: Task[] = ungroupedRows.map(row => ({
+      ...parseTask(row),
+      repos: [],
+    }));
+
+    return { projects, ungrouped };
   },
 
   // ── Agent Sessions ──
