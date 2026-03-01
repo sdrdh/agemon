@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { setApiKey } from '@/lib/api';
+import { Label } from '@/components/ui/label';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -24,14 +25,18 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           <p className="text-sm text-muted-foreground">Enter your API key to continue</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="password"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="AGEMON_KEY"
-            autoComplete="current-password"
-            className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="agemon-key">API Key</Label>
+            <input
+              id="agemon-key"
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="AGEMON_KEY"
+              autoComplete="current-password"
+              className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+          </div>
           <button
             type="submit"
             disabled={!key.trim()}

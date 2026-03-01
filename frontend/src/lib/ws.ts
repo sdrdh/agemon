@@ -1,11 +1,13 @@
 import type { ServerEvent } from '@agemon/shared';
 import { showToast } from './toast';
+import { STORAGE_KEY } from '@/lib/api';
 
 type Listener = (event: ServerEvent) => void;
 type ConnectionListener = (connected: boolean) => void;
 
 let socket: WebSocket | null = null;
 let connected = false;
+let reconnectDelay = 1_000;
 const listeners = new Set<Listener>();
 const connectionListeners = new Set<ConnectionListener>();
 
@@ -17,7 +19,7 @@ function setConnected(value: boolean) {
 
 function getWsUrl() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const token = localStorage.getItem('agemon_key') ?? '';
+  const token = localStorage.getItem(STORAGE_KEY) ?? '';
   return `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
 }
 
@@ -27,6 +29,7 @@ export function connectWs() {
   socket = new WebSocket(getWsUrl());
 
   socket.onopen = () => {
+    reconnectDelay = 1_000;
     setConnected(true);
   };
 
@@ -39,15 +42,20 @@ export function connectWs() {
     }
   };
 
-  socket.onclose = () => {
-    setConnected(false);
-    socket = null;
-    setTimeout(connectWs, 3_000);
-  };
-
   socket.onerror = () => {
     setConnected(false);
-    showToast({ title: 'Connection lost', description: 'Reconnecting…', variant: 'destructive' });
+  };
+
+  socket.onclose = () => {
+    if (connected) {
+      showToast({ title: 'Connection lost', description: 'Reconnecting…', variant: 'destructive' });
+    }
+    setConnected(false);
+    socket = null;
+    setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+      connectWs();
+    }, reconnectDelay);
   };
 }
 

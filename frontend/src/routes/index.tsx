@@ -6,7 +6,7 @@ export default function IndexPage() {
         Mobile-first AI agent orchestration. Queue tasks, monitor thought streams, approve diffs — all from your phone.
       </p>
       <div className="text-sm text-muted-foreground border border-border rounded-lg px-4 py-2">
-        Kanban board coming soon — Task 2.2
+        Kanban board coming soon
       </div>
     </div>
   );

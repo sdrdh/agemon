@@ -289,10 +289,12 @@ Single mobile-friendly action that coordinates:
 
 **Key Tables:**
 - Tasks (status, repos, config)
-- ACP Events (thought stream)
-- Awaiting Input (blocked questions)
+- Agent Sessions (one task → many concurrent sessions; lifecycle state, PID, external session ID for `--resume`)
+- ACP Events (thought stream, per session)
+- Awaiting Input (blocked questions, per session)
 - Diffs (pending reviews)
-- Terminal Sessions (PTY state)
+
+One task can run multiple concurrent agent sessions (e.g. claude-code and opencode in parallel). Session states: `starting` → `running` → `stopped` | `crashed` | `interrupted`.
 
 ### Distribution
 

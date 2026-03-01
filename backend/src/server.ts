@@ -31,12 +31,13 @@ export const app = new Hono();
 export const eventBus = new EventEmitter();
 
 // ─── CORS (scoped to /api/* only — avoids conflict with upgradeWebSocket) ─────
-app.use('/api/*', cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? false
-    : ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true,
-}));
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/*', cors({
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    credentials: true,
+    allowHeaders: ['Authorization', 'Content-Type'],
+  }));
+}
 
 // ─── Request Logger ───────────────────────────────────────────────────────────
 app.use(async (c, next) => {
@@ -49,7 +50,7 @@ app.use(async (c, next) => {
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 app.use(async (c, next) => {
   const path = c.req.path;
-  if (path === '/api/health' || path.startsWith('/ws')) return next();
+  if (path === '/api/health' || path === '/ws') return next();
 
   const auth = c.req.header('authorization') ?? '';
   const authBuf = Buffer.from(auth);
@@ -80,6 +81,8 @@ app.get('/api/health', (c) =>
 );
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
+const WS_OPEN = 1 as const; // WebSocket OPEN readyState
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -100,8 +103,7 @@ app.get('/ws', upgradeWebSocket((_c) => ({
   onMessage(event, _ws) {
     try {
       const ev: ClientEvent = JSON.parse(String(event.data));
-      const validTypes = new Set(['send_input', 'terminal_input']);
-      if (!ev || typeof ev.type !== 'string' || !validTypes.has(ev.type)) {
+      if (!ev || typeof ev.type !== 'string' || !WS_CLIENT_EVENT_TYPES.has(ev.type)) {
         console.warn('[ws] unknown client event type:', ev?.type);
         return;
       }
@@ -124,7 +126,7 @@ app.get('/ws', upgradeWebSocket((_c) => ({
 export function broadcast(event: ServerEvent) {
   const payload = JSON.stringify(event);
   for (const client of [...wsClients]) {
-    if (client.readyState === 1) client.send(payload);
+    if (client.readyState === WS_OPEN) client.send(payload);
   }
 }
 

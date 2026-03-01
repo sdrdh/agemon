@@ -19,9 +19,9 @@ Phone / Browser
        │
 ┌──────▼───────────────────────┐
 │   SQLite Database            │
-│   tasks / acp_events /       │
-│   awaiting_input / diffs /   │
-│   terminal_sessions          │
+│   tasks / agent_sessions /   │
+│   acp_events /               │
+│   awaiting_input / diffs     │
 └──────────────────────────────┘
        │
   Agent Processes
@@ -60,7 +60,8 @@ Phone / Browser
 ### Shared Types (`shared/types/index.ts`)
 
 Single source of truth for:
-- `Task`, `ACPEvent`, `AwaitingInput`, `Diff`, `TerminalSession`
+- `Task`, `AgentSession`, `ACPEvent`, `AwaitingInput`, `Diff`
+- `AgentSessionState`, `AgentType`
 - `ServerEvent` / `ClientEvent` (WebSocket)
 - `CreateTaskBody`, `UpdateTaskBody` (REST)
 
@@ -106,6 +107,8 @@ Agent completes
 { type: 'agent_thought', taskId, content }
 { type: 'awaiting_input', taskId, question, inputId }
 { type: 'terminal_output', sessionId, data }
+{ type: 'session_started', taskId, session: AgentSession }
+{ type: 'session_state_changed', sessionId, state: AgentSessionState }
 
 // Client → Server
 { type: 'send_input', taskId, inputId, response }
@@ -115,12 +118,60 @@ Agent completes
 ## Database Schema
 
 ```sql
-tasks              (id, title, description, status, repos, agent, created_at)
-acp_events         (id, task_id, type, content, created_at)
-awaiting_input     (id, task_id, question, status, response, created_at)
-diffs              (id, task_id, content, status, created_at)
-terminal_sessions  (id, task_id, shell, pid, created_at)
+tasks           (id, title, description, status, repos, agent, created_at)
+agent_sessions  (id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code)
+acp_events      (id, task_id, session_id, type, content, created_at)
+awaiting_input  (id, task_id, session_id, question, status, response, created_at)
+diffs           (id, task_id, content, status, created_at)
 ```
+
+## Agent Session Lifecycle
+
+### State Machine
+
+```
+         ┌──────────┐
+         │ starting │  (session record created, process spawning)
+         └────┬─────┘
+              │ process running + ACP handshake complete
+         ┌────▼─────┐
+         │  running │  (external_session_id captured from CLI output)
+         └────┬─────┘
+              │
+     ┌────────┼────────────┐
+     │        │            │
+┌────▼───┐ ┌──▼────┐ ┌─────▼────────┐
+│ stopped│ │crashed│ │ interrupted  │
+│ (exit 0│ │(exit≠0│ │(server down) │
+│  clean)│ │ crash)│ │              │
+└────────┘ └───────┘ └──────────────┘
+```
+
+- **`interrupted`** — server process went down while the session was active. Distinct from `crashed` (the agent process itself died).
+- **`stopped`** — clean exit (exit code 0).
+- **`crashed`** — agent process exited with non-zero code.
+
+### Relationship to Tasks and Events
+
+```
+Task
+ └── 1..N AgentSessions
+        └── N AcpEvents        (session_id FK + task_id for fast task queries)
+        └── N AwaitingInputs   (session_id FK + task_id for fast task queries)
+```
+
+Both `acp_events` and `awaiting_input` carry `task_id` directly so task-level queries (e.g. Kanban view fetching all events for a task) don't need a join through `agent_sessions`.
+
+### Capturing `external_session_id`
+
+When an agent CLI starts, it emits its own session/run identifier in early stdout output (e.g. Claude Code's `--resume` ID). The agent manager captures this and writes it to `agent_sessions.external_session_id`.
+
+### Auto-Resume on Server Startup
+
+On boot, the server queries for sessions in `running` or `starting` state:
+1. All such sessions are marked `interrupted`.
+2. Each is re-spawned using `--resume <external_session_id>` (if available).
+3. A new `agent_sessions` row is created for the re-spawned process, linked to the same task.
 
 ## Security
 

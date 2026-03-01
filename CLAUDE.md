@@ -97,13 +97,21 @@ agemon/
 
 ```
 tasks           id, title, description, status, repos (JSON), agent, created_at
-acp_events      id, task_id, type (thought|action|await_input|result), content, created_at
-awaiting_input  id, task_id, question, status (pending|answered), response, created_at
+agent_sessions  id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code
+acp_events      id, task_id, session_id, type (thought|action|await_input|result), content, created_at
+awaiting_input  id, task_id, session_id, question, status (pending|answered), response, created_at
 diffs           id, task_id, content, status (pending|approved|rejected), created_at
-terminal_sessions  id, task_id, shell, pid, created_at
 ```
 
 **Task statuses:** `todo` → `working` → `awaiting_input` → `working` → `done`
+
+Task status is derived: `working` if any session is `running`; `awaiting_input` if any session has a pending input; `done` when user marks explicitly done.
+
+**Session states:** `starting` → `running` → `stopped` | `crashed` | `interrupted`
+
+- `interrupted` = server went down while session was running (distinct from `crashed` = process died on its own)
+- One task can have multiple concurrent sessions (e.g. claude-code + opencode running in parallel)
+- `external_session_id` = provider session ID captured from CLI output, used for `--resume` on re-spawn
 
 ---
 
