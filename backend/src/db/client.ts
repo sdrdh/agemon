@@ -210,11 +210,11 @@ export const db = {
 
   // ── ACP Events ──
 
-  listEvents(taskId: string): ACPEvent[] {
+  listEvents(taskId: string, limit: number): ACPEvent[] {
     const db = getDb();
-    return db.query<ACPEvent, [string]>(
-      'SELECT * FROM acp_events WHERE task_id = ? ORDER BY created_at ASC'
-    ).all(taskId);
+    return db.query<ACPEvent, [string, number]>(
+      'SELECT * FROM acp_events WHERE task_id = ? ORDER BY created_at ASC LIMIT ?'
+    ).all(taskId, limit);
   },
 
   insertEvent(event: Omit<ACPEvent, 'created_at'>): ACPEvent {

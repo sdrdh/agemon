@@ -7,7 +7,7 @@ import {
   Outlet,
 } from '@tanstack/react-router';
 import { hasApiKey, clearApiKey } from './lib/api';
-import { connectWs } from './lib/ws';
+import { connectWs, disconnectWs } from './lib/ws';
 
 const IndexPage = lazy(() => import('./routes/index'));
 const LoginScreen = lazy(() => import('./routes/login'));
@@ -87,6 +87,7 @@ export default function App() {
   }
 
   function handleLogout() {
+    disconnectWs();
     clearApiKey();
     setAuthed(false);
   }

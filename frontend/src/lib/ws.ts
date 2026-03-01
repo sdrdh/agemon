@@ -8,6 +8,7 @@ type ConnectionListener = (connected: boolean) => void;
 let socket: WebSocket | null = null;
 let connected = false;
 let reconnectDelay = 1_000;
+let shouldReconnect = false;
 const listeners = new Set<Listener>();
 const connectionListeners = new Set<ConnectionListener>();
 
@@ -25,7 +26,7 @@ function getWsUrl() {
 
 export function connectWs() {
   if (socket && socket.readyState <= WebSocket.OPEN) return;
-
+  shouldReconnect = true;
   socket = new WebSocket(getWsUrl());
 
   socket.onopen = () => {
@@ -52,11 +53,17 @@ export function connectWs() {
     }
     setConnected(false);
     socket = null;
+    if (!shouldReconnect) return;
     setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
       connectWs();
     }, reconnectDelay);
   };
+}
+
+export function disconnectWs() {
+  shouldReconnect = false;
+  socket?.close();
 }
 
 export function onServerEvent(fn: Listener) {

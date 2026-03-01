@@ -111,6 +111,6 @@ tasksRoutes.get('/tasks/:id/events', (c) => {
   const task = requireTask(c.req.param('id'));
   const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
   const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 1000 ? 500 : limitParam;
-  const events = db.listEvents(task.id);
-  return c.json(events.slice(0, limit));
+  const events = db.listEvents(task.id, limit);
+  return c.json(events);
 });
