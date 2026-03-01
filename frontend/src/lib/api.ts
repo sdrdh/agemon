@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, Repo, TasksByProject, AgentSession } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -39,8 +39,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listTasks: () => request<Task[]>('/tasks'),
+  listTasksByProject: () => request<TasksByProject>('/tasks/by-project'),
   getTask: (id: string) => request<Task>(`/tasks/${id}`),
   createTask: (body: CreateTaskBody) => request<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) }),
   updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTask: (id: string) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
+  listRepos: () => request<Repo[]>('/repos'),
+  startTask: (id: string) => request<AgentSession>(`/tasks/${id}/start`, { method: 'POST' }),
+  stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),
 };
