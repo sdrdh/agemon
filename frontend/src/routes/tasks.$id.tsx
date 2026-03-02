@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Play, Square, Send } from 'lucide-react';
@@ -12,6 +12,8 @@ import { sendClientEvent } from '@/lib/ws';
 import { taskDetailQuery, taskKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 
+const EMPTY_THOUGHTS: string[] = [];
+
 export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
@@ -20,9 +22,11 @@ export default function TaskDetailView() {
 
   const taskId = id ?? '';
   const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
-  const thoughts = useWsStore((s) => s.thoughts[taskId] ?? []);
-  const pendingInputs = useWsStore((s) =>
-    s.pendingInputs.filter((p) => p.taskId === taskId)
+  const thoughts = useWsStore((s) => s.thoughts[taskId] ?? EMPTY_THOUGHTS);
+  const allPendingInputs = useWsStore((s) => s.pendingInputs);
+  const pendingInputs = useMemo(
+    () => allPendingInputs.filter((p) => p.taskId === taskId),
+    [allPendingInputs, taskId]
   );
 
   useEffect(() => {

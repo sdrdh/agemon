@@ -96,9 +96,6 @@ const SuspenseFallback = () => (
   </div>
 );
 
-// Connect on load if already authenticated (handles page reload)
-if (hasApiKey()) connectWs();
-
 export default function App() {
   const [authed, setAuthed] = useState(hasApiKey);
 
