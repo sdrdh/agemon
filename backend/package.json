@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@agemon/shared": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "simple-git": "^3.32.3"
   },
   "devDependencies": {
     "@types/bun": "latest"
