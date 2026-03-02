@@ -157,7 +157,7 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
     console.info(`[ws] send_input answered for task=${ev.taskId} input=${ev.inputId}`);
   }
 
-  if (ev.type === 'send_message') {
+  else if (ev.type === 'send_message') {
     const { getRunningSession, sendPromptTurn } = await import('./lib/acp.ts');
     const session = getRunningSession(ev.taskId);
     if (!session) {

@@ -75,7 +75,7 @@ export interface ChatMessage {
 
 export type ServerEvent =
   | { type: 'task_updated'; task: Task }
-  | { type: 'agent_thought'; taskId: string; content: string; eventType: 'thought' | 'action' }
+  | { type: 'agent_thought'; taskId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
   | { type: 'awaiting_input'; taskId: string; question: string; inputId: string }
   | { type: 'terminal_output'; sessionId: string; data: string }
   | { type: 'session_started'; taskId: string; session: AgentSession }

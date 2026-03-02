@@ -12,12 +12,14 @@ interface WsState {
   connected: boolean;
   chatMessages: Record<string, ChatMessage[]>;
   pendingInputs: PendingInput[];
+  agentActivity: Record<string, string | null>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (taskId: string, msg: ChatMessage) => void;
   setChatMessages: (taskId: string, msgs: ChatMessage[]) => void;
   clearChatMessages: (taskId: string) => void;
   addPendingInput: (input: PendingInput) => void;
   removePendingInput: (inputId: string) => void;
+  setAgentActivity: (taskId: string, activity: string | null) => void;
 }
 
 const MAX_MESSAGES_PER_TASK = 500;
@@ -26,14 +28,20 @@ export const useWsStore = create<WsState>((set) => ({
   connected: false,
   chatMessages: {},
   pendingInputs: [],
+  agentActivity: {},
 
   setConnected: (connected) => set({ connected }),
 
   appendChatMessage: (taskId, msg) =>
     set((state) => {
       const existing = state.chatMessages[taskId] ?? [];
-      // Dedup: skip if msg.id already exists
-      if (existing.some((m) => m.id === msg.id)) return state;
+      // If message with same ID exists, append content (streaming chunk accumulation)
+      const idx = existing.findIndex((m) => m.id === msg.id);
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = { ...updated[idx], content: updated[idx].content + msg.content };
+        return { chatMessages: { ...state.chatMessages, [taskId]: updated } };
+      }
       const updated = [...existing, msg];
       const trimmed = updated.length > MAX_MESSAGES_PER_TASK
         ? updated.slice(updated.length - MAX_MESSAGES_PER_TASK)
@@ -60,5 +68,10 @@ export const useWsStore = create<WsState>((set) => ({
   removePendingInput: (inputId) =>
     set((state) => ({
       pendingInputs: state.pendingInputs.filter((p) => p.inputId !== inputId),
+    })),
+
+  setAgentActivity: (taskId, activity) =>
+    set((state) => ({
+      agentActivity: { ...state.agentActivity, [taskId]: activity },
     })),
 }));

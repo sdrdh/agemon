@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 3
+-- Version: 4
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata

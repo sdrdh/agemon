@@ -22,43 +22,61 @@ interface ChatBubbleItem {
   message: ChatMessage;
 }
 
-interface ThoughtGroupItem {
-  kind: 'thought-group';
+interface ActivityGroupItem {
+  kind: 'activity-group';
   messages: ChatMessage[];
 }
 
-type ChatItem = ChatBubbleItem | ThoughtGroupItem;
+type ChatItem = ChatBubbleItem | ActivityGroupItem;
 
 // ─── Grouping logic ────────────────────────────────────────────────────────
 
+/** Returns true for agent messages that should be collapsed (thoughts + tool calls). */
+function isCollapsibleActivity(msg: ChatMessage): boolean {
+  if (msg.role !== 'agent') return false;
+  if (msg.eventType === 'thought') return true;
+  // Tool call / tool update messages are actions that start with [tool]
+  if (msg.eventType === 'action' && msg.content.startsWith('[tool')) return true;
+  return false;
+}
+
 function groupMessages(messages: ChatMessage[]): ChatItem[] {
   const items: ChatItem[] = [];
-  let currentThoughts: ChatMessage[] = [];
+  let currentGroup: ChatMessage[] = [];
 
-  function flushThoughts() {
-    if (currentThoughts.length > 0) {
-      items.push({ kind: 'thought-group', messages: [...currentThoughts] });
-      currentThoughts = [];
+  function flushGroup() {
+    if (currentGroup.length > 0) {
+      items.push({ kind: 'activity-group', messages: [...currentGroup] });
+      currentGroup = [];
     }
   }
 
   for (const msg of messages) {
-    if (msg.eventType === 'thought' && msg.role === 'agent') {
-      currentThoughts.push(msg);
+    if (isCollapsibleActivity(msg)) {
+      currentGroup.push(msg);
     } else {
-      flushThoughts();
+      flushGroup();
       items.push({ kind: 'bubble', message: msg });
     }
   }
-  flushThoughts();
+  flushGroup();
 
   return items;
 }
 
-// ─── ThoughtGroup component ────────────────────────────────────────────────
+// ─── ActivityGroup component ──────────────────────────────────────────────
 
-function ThoughtGroup({ messages }: { messages: ChatMessage[] }) {
+function ActivityGroup({ messages }: { messages: ChatMessage[] }) {
   const [expanded, setExpanded] = useState(false);
+
+  // Count only [tool] starts (not [tool update]) as distinct tool calls
+  const toolCalls = messages.filter((m) => m.content.startsWith('[tool] ')).length;
+  const toolUpdates = messages.filter((m) => m.content.startsWith('[tool update]')).length;
+  const thoughtCount = messages.length - toolCalls - toolUpdates;
+  const parts: string[] = [];
+  if (thoughtCount > 0) parts.push(`${thoughtCount} thought${thoughtCount !== 1 ? 's' : ''}`);
+  if (toolCalls > 0) parts.push(`${toolCalls} tool call${toolCalls !== 1 ? 's' : ''}`);
+  const label = parts.join(', ');
 
   return (
     <div
@@ -79,12 +97,12 @@ function ThoughtGroup({ messages }: { messages: ChatMessage[] }) {
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0" />
         )}
-        <span>{messages.length} agent thought{messages.length !== 1 ? 's' : ''}</span>
+        <span>{label}</span>
       </div>
       {expanded && (
         <div className="space-y-1 pb-2" onClick={(e) => e.stopPropagation()}>
           {messages.map((m) => (
-            <div key={m.id} className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+            <div key={m.id} className="text-sm text-muted-foreground whitespace-pre-wrap break-words font-mono">
               {m.content}
             </div>
           ))}
@@ -163,6 +181,7 @@ export default function TaskDetailView() {
   const appendChatMessage = useWsStore((s) => s.appendChatMessage);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const removePendingInput = useWsStore((s) => s.removePendingInput);
+  const agentActivity = useWsStore((s) => s.agentActivity[taskId] ?? null);
 
   const pendingInputs = useMemo(
     () => allPendingInputs.filter((p) => p.taskId === taskId),
@@ -192,10 +211,10 @@ export default function TaskDetailView() {
     if (taskStatus === 'done' || taskStatus === 'todo') setTurnInFlight(false);
   }, [taskStatus]);
 
-  // ── Auto-scroll on new messages ───────────────────────────────────────
+  // ── Auto-scroll on new messages or activity changes ──────────────────
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages.length]);
+  }, [chatMessages.length, agentActivity]);
 
   // ── Grouped items (memoized) ──────────────────────────────────────────
   const groupedItems = useMemo(() => groupMessages(chatMessages), [chatMessages]);
@@ -343,11 +362,22 @@ export default function TaskDetailView() {
         )}
 
         {groupedItems.map((item) => {
-          if (item.kind === 'thought-group') {
-            return <ThoughtGroup key={`tg-${item.messages[0].id}`} messages={item.messages} />;
+          if (item.kind === 'activity-group') {
+            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} />;
           }
           return <ChatBubble key={item.message.id} message={item.message} />;
         })}
+
+        {/* ── Agent activity indicator ─────────────────────────────────── */}
+        {agentActivity && (isRunning || isAwaiting) && (
+          <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
+            </span>
+            <span className="truncate">{agentActivity}</span>
+          </div>
+        )}
 
         <div ref={chatEndRef} />
       </div>
