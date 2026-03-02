@@ -11,3 +11,4 @@ bun.lockb
 .env.local
 **/.env.local
 .reference_repos/
+.worktrees/
