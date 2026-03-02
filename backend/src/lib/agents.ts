@@ -43,7 +43,16 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
  */
 export function buildAgentEnv(agentType: AgentType): Record<string, string | undefined> {
   const { AGEMON_KEY: _, GITHUB_PAT: __, ...safeEnv } = process.env;
-  return safeEnv;
+  const config = AGENT_CONFIGS[agentType];
+
+  // Ensure agent-specific env vars are passed through
+  const env: Record<string, string | undefined> = { ...safeEnv };
+  for (const key of config.passEnvVars) {
+    if (process.env[key]) {
+      env[key] = process.env[key];
+    }
+  }
+  return env;
 }
 
 /**

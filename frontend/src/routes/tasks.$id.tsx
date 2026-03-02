@@ -1,12 +1,14 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Square } from 'lucide-react';
+import { ArrowLeft, Play, Square, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/custom/status-badge';
 import { RepoSelector } from '@/components/custom/repo-selector';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
+import { sendClientEvent } from '@/lib/ws';
 import { taskDetailQuery, taskKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 
@@ -143,10 +145,12 @@ export default function TaskDetailView() {
           <div className="space-y-3">
             <h2 className="text-sm font-medium text-muted-foreground">Agent needs input</h2>
             {pendingInputs.map((pi) => (
-              <div key={pi.inputId} className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-3">
-                <p className="text-sm font-medium mb-2">{pi.question}</p>
-                <p className="text-xs text-muted-foreground">Input handling coming in next update</p>
-              </div>
+              <InputPrompt
+                key={pi.inputId}
+                inputId={pi.inputId}
+                taskId={pi.taskId}
+                question={pi.question}
+              />
             ))}
           </div>
         )}
@@ -168,6 +172,38 @@ export default function TaskDetailView() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function InputPrompt({ inputId, taskId, question }: { inputId: string; taskId: string; question: string }) {
+  const [response, setResponse] = useState('');
+  const [sending, setSending] = useState(false);
+  const removePendingInput = useWsStore((s) => s.removePendingInput);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!response.trim() || sending) return;
+    setSending(true);
+    sendClientEvent({ type: 'send_input', taskId, inputId, response: response.trim() });
+    removePendingInput(inputId);
+  }
+
+  return (
+    <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-3">
+      <p className="text-sm font-medium mb-2">{question}</p>
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <Input
+          value={response}
+          onChange={(e) => setResponse(e.target.value)}
+          placeholder="Type your response..."
+          className="flex-1 min-h-[44px]"
+          disabled={sending}
+        />
+        <Button type="submit" size="icon" disabled={!response.trim() || sending} className="min-h-[44px] min-w-[44px]">
+          <Send className="h-4 w-4" />
+        </Button>
+      </form>
     </div>
   );
 }

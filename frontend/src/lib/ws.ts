@@ -1,4 +1,4 @@
-import type { ServerEvent } from '@agemon/shared';
+import type { ServerEvent, ClientEvent } from '@agemon/shared';
 import { showToast } from './toast';
 import { STORAGE_KEY } from '@/lib/api';
 
@@ -75,6 +75,15 @@ export function onServerEvent(fn: Listener) {
 export function onConnectionChange(fn: ConnectionListener) {
   connectionListeners.add(fn);
   return () => connectionListeners.delete(fn);
+}
+
+/** Send a client event to the server. */
+export function sendClientEvent(event: ClientEvent) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(event));
+  } else {
+    console.warn('[ws] cannot send event — not connected');
+  }
 }
 
 /** Returns current connection state. */
