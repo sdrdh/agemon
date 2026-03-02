@@ -214,7 +214,7 @@ async function handleExit(
   db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
   sessions.delete(sessionId);
 
-  broadcast({ type: 'session_state_changed', sessionId, state });
+  broadcast({ type: 'session_state_changed', sessionId, taskId, state });
 
   // If no more active sessions for this task, update task status
   const runningSessions = db

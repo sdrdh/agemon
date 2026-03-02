@@ -42,8 +42,8 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'session_state_changed': {
-          // session_state_changed only has sessionId, not taskId — invalidate all
-          qc.invalidateQueries({ queryKey: taskKeys.all });
+          qc.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          qc.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
       }

@@ -71,7 +71,7 @@ export type ServerEvent =
   | { type: 'awaiting_input'; taskId: string; question: string; inputId: string }
   | { type: 'terminal_output'; sessionId: string; data: string }
   | { type: 'session_started'; taskId: string; session: AgentSession }
-  | { type: 'session_state_changed'; sessionId: string; state: AgentSessionState };
+  | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }

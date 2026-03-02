@@ -37,21 +37,26 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
   },
 };
 
+/** System env vars that agents need to function (PATH, HOME, locale, etc.) */
+const ALLOWED_SYSTEM_VARS = [
+  'PATH', 'HOME', 'USER', 'SHELL', 'TERM', 'LANG', 'LC_ALL',
+  'TMPDIR', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME',
+  'NODE_ENV', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+];
+
 /**
  * Build a safe environment for agent subprocesses.
- * Strips AGEMON_KEY and GITHUB_PAT to prevent credential leakage.
+ * Uses a whitelist approach: only system essentials + agent-specific vars are passed.
  */
-export function buildAgentEnv(agentType: AgentType): Record<string, string | undefined> {
-  const { AGEMON_KEY: _, GITHUB_PAT: __, ...safeEnv } = process.env;
+export function buildAgentEnv(agentType: AgentType): Record<string, string> {
   const config = AGENT_CONFIGS[agentType];
+  const env: Record<string, string> = {};
 
-  // Ensure agent-specific env vars are passed through
-  const env: Record<string, string | undefined> = { ...safeEnv };
-  for (const key of config.passEnvVars) {
-    if (process.env[key]) {
-      env[key] = process.env[key];
-    }
+  for (const key of [...ALLOWED_SYSTEM_VARS, ...config.passEnvVars]) {
+    const val = process.env[key];
+    if (val !== undefined) env[key] = val;
   }
+
   return env;
 }
 
