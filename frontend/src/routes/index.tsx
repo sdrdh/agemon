@@ -12,8 +12,8 @@ export default function ProjectListView() {
   if (isLoading) {
     return (
       <div>
-        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Agemon</h1>
+        <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
+          <h1 className="text-lg font-semibold">Projects</h1>
           <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
             <Plus className="h-5 w-5" />
           </Button>
@@ -41,8 +41,8 @@ export default function ProjectListView() {
 
   return (
     <div className="pb-20">
-      <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Agemon</h1>
+      <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Projects</h1>
         <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
           <Plus className="h-5 w-5" />
         </Button>

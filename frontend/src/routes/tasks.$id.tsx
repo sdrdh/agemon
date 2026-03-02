@@ -272,7 +272,7 @@ export default function TaskDetailView() {
   // ── Loading state ─────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="flex flex-col h-dvh">
+      <div className="flex flex-col h-[calc(100dvh-3rem)]">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
           <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
             <ArrowLeft className="h-5 w-5" />
@@ -290,7 +290,7 @@ export default function TaskDetailView() {
   // ── Error state ───────────────────────────────────────────────────────
   if (error || !task) {
     return (
-      <div className="flex flex-col h-dvh">
+      <div className="flex flex-col h-[calc(100dvh-3rem)]">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
           <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
             <ArrowLeft className="h-5 w-5" />
@@ -305,7 +305,7 @@ export default function TaskDetailView() {
   }
 
   return (
-    <div className="flex flex-col h-dvh">
+    <div className="flex flex-col h-[calc(100dvh-3rem)]">
       {/* ── Sticky header ──────────────────────────────────────────────── */}
       <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
         <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>

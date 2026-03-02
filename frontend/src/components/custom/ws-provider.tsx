@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { onServerEvent, onConnectionChange } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
-import { queryClient, taskKeys } from '@/lib/query';
+import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
 import type { ServerEvent } from '@agemon/shared';
 
 /**
@@ -19,6 +19,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           const task = event.task;
           queryClient.setQueryData(taskKeys.detail(task.id), task);
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
           break;
         }
         case 'agent_thought': {
@@ -59,6 +60,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
           break;
         }
         case 'session_state_changed': {
@@ -79,6 +81,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           }
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
           break;
         }
       }

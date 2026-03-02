@@ -21,6 +21,13 @@ export const taskKeys = {
   chat: (id: string) => [...taskKeys.all, 'chat', id] as const,
 };
 
+export function tasksListQuery() {
+  return {
+    queryKey: taskKeys.lists(),
+    queryFn: (): Promise<Task[]> => api.listTasks(),
+  };
+}
+
 export function tasksByProjectQuery() {
   return {
     queryKey: taskKeys.byProject(),
