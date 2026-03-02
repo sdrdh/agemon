@@ -109,13 +109,16 @@ diffs           id, task_id, content, status (pending|approved|rejected), create
 
 **Task statuses:** `todo` → `working` → `awaiting_input` → `working` → `done`
 
-Task status is derived: `working` if any session is `running`; `awaiting_input` if any session has a pending input; `done` when user marks explicitly done.
+Task status is derived: `working` if any session is `running`; `awaiting_input` if any session has a pending input; `done` when user marks explicitly done. Task never auto-transitions to `done`.
 
-**Session states:** `starting` → `running` → `stopped` | `crashed` | `interrupted`
+**Session states:** `starting` → `ready` → `running` → `stopped` | `crashed` | `interrupted`
 
+- `ready` = ACP handshake done, waiting for user's first prompt (no auto-start)
 - `interrupted` = server went down while session was running (distinct from `crashed` = process died on its own)
 - One task can have multiple concurrent sessions (e.g. claude-code + opencode running in parallel)
 - `external_session_id` = provider session ID captured from CLI output, used for `--resume` on re-spawn
+- Task status is **derived** from session states — no auto-done on agent exit, user must explicitly mark done
+- Stopped/crashed sessions can be resumed via ACP `session/load`
 
 ---
 

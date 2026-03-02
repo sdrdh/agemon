@@ -96,15 +96,24 @@ Agemon manages two execution types within a **Multi-Repo Task Folder**:
 - Emits "Thought" and "Action" events
 - Runs in background without user interaction
 
+**Session-Centric Model:**
+- Each task can have multiple concurrent sessions (e.g. claude-code + opencode)
+- Each session has its own chat tab with independent message history
+- Sessions start in `ready` state after ACP handshake — user sends first prompt
+- Task status is derived from session states; user must explicitly mark tasks done
+- Stopped/crashed sessions can be resumed via ACP `session/load`
+
 **Oversight:**
-- User can monitor thought stream
+- User can monitor thought stream per session
 - User intervenes when agent requests input
+- Unread activity indicators on background session tabs (amber for awaiting input, primary for general activity)
 - Full event log maintained
 
 **State Transitions:**
 - Agents auto-transition between states
 - Users don't manually move tasks
 - User only responds to "Awaiting Input" blockers
+- No auto-done: user explicitly marks task complete
 
 ---
 

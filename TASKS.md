@@ -610,6 +610,96 @@ class ACPAgentManager {
 
 ---
 
+## Phase 4.5: Session-Centric UX (Completed)
+
+**Goal:** Make sessions first-class entities with individual chat tabs and per-session state
+
+### Task 4.5: Session-Centric Task Detail
+
+**Priority:** P0
+**Status:** Done
+
+**Deliverables:**
+- [x] Add `ready` state to `AgentSessionState` (schema v5)
+- [x] Split ACP lifecycle into `spawnAndHandshake` (→ ready) and `sendPromptTurn` (ready → running)
+- [x] Add `session/load` resume support with fallback to `session/new`
+- [x] New endpoints: `POST /tasks/:id/sessions`, `GET /sessions/:id/chat`, `POST /sessions/:id/stop`, `POST /sessions/:id/resume`
+- [x] Per-session chat history (`listChatHistoryBySession`)
+- [x] Human-readable task IDs via `slugify(title)`
+- [x] Task status derived from session states (no auto-done)
+- [x] `sessionId` on all broadcast events
+- [x] Session tabs with colored state dots and "+" button for new sessions
+- [x] Per-session chat keyed by `sessionId` in Zustand store
+- [x] Resume button for stopped/crashed sessions
+- [x] "Done" button for explicit task completion with worktree cleanup
+- [x] Tool call parsing with status icons (Check/X/Loader2)
+
+### Task 4.6: Unread Session Activity Indicators
+
+**Priority:** P1
+**Status:** Done
+
+**Deliverables:**
+- [x] `unreadSessions` state in Zustand store with `markUnread`/`clearUnread` actions
+- [x] `WsProvider` marks sessions unread on `agent_thought` and `awaiting_input` events
+- [x] `clearUnread` called on tab switch and when messages arrive for active session
+- [x] Priority-aware indicators: amber pulsing dot for awaiting input, primary pulsing dot for general unread
+- [x] WebSocket connection fully persistent — no stop signals on navigation
+
+### Task 4.7: Session Sidebar, Naming, Markdown & UX Polish
+
+**Priority:** P1
+**Status:** Done
+
+**Deliverables:**
+- [x] Responsive sidebar/list navigation (sidebar on desktop ≥1024px, stacked on mobile)
+- [x] `SessionListPanel` with grouped Active/Previous sections and inline Stop/Resume actions
+- [x] `SessionChatPanel` with mobile back navigation (single header per view)
+- [x] Session naming from first prompt (`name` column, schema v6, auto-set in `sendPromptTurn`)
+- [x] Archive icon for stopping sessions (replaces Square/X)
+- [x] Markdown rendering for agent messages (`react-markdown` + `remark-gfm`)
+- [x] `@tailwindcss/typography` with custom code block styling
+- [x] Task info drawer (ℹ️ button → slide-out with description, repos, metadata)
+- [x] Screen reader text on unread indicator dots (`role="status"` + sr-only labels)
+
+### Task 4.8: Component Splitting (Future)
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Extract `TaskInfoDrawer`, `SessionListPanel`, `SessionChatPanel` from `tasks.$id.tsx` into `src/components/custom/task-detail/`
+- [ ] Reduce `tasks.$id.tsx` to layout composition only
+
+> Prompt: see `docs/future-prompts.md` → Prompt 3
+
+### Task 4.9: Native Chat App Bottom Navigation (Future)
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Replace top `NavBar` with `BottomNav` fixed to bottom (icons + labels)
+- [ ] Hide `BottomNav` on task detail pages
+- [ ] Minimal branding header on non-detail pages
+- [ ] Safe area handling for iOS home indicator on input bar
+
+> Prompt: see `docs/future-prompts.md` → Prompt 1
+
+### Task 4.10: Activity-Specific Icons in Chat (Future)
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Distinct icons for thoughts (Brain), tool calls (Wrench), and skills (Zap)
+- [ ] Update `parseActivityMessages` to categorize skills separately
+- [ ] Render activity-type icons alongside status icons in `ActivityGroup`
+
+> Prompt: see `docs/future-prompts.md` → Prompt 2
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
@@ -1447,4 +1537,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, chat UI, nav bar, kanban, and sessions implemented. Terminal PTY, diff viewer, and GitHub PR flow remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, and sessions page implemented. Terminal PTY, diff viewer, and GitHub PR flow remaining.

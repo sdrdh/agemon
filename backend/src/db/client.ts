@@ -24,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /**
  * Extract a display name from a repo URL.
@@ -175,6 +175,7 @@ export function runMigrations() {
               task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
               agent_type          TEXT NOT NULL
                                     CHECK (agent_type IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              name                TEXT DEFAULT NULL,
               external_session_id TEXT,
               pid                 INTEGER,
               state               TEXT NOT NULL DEFAULT 'starting'
@@ -186,8 +187,8 @@ export function runMigrations() {
           `);
 
           db.run(`
-            INSERT INTO agent_sessions_new (id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code)
-            SELECT id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code FROM agent_sessions
+            INSERT INTO agent_sessions_new (id, task_id, agent_type, name, external_session_id, pid, state, started_at, ended_at, exit_code)
+            SELECT id, task_id, agent_type, NULL, external_session_id, pid, state, started_at, ended_at, exit_code FROM agent_sessions
           `);
 
           db.run('DROP TABLE agent_sessions');
@@ -195,6 +196,17 @@ export function runMigrations() {
 
           db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id)');
           db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state)');
+        }
+      }
+
+      // ── v6 migration: add 'name' column to agent_sessions ──
+      if (current < 6) {
+        const cols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        const hasNameCol = cols.some(c => c.name === 'name');
+        if (!hasNameCol) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN name TEXT DEFAULT NULL');
         }
       }
 
@@ -517,6 +529,11 @@ export const db = {
     db.run(`UPDATE agent_sessions SET ${sets.join(', ')} WHERE id = ?`, values);
     const row = db.query<AgentSession, [string]>('SELECT * FROM agent_sessions WHERE id = ?').get(id);
     return row ? parseSession(row) : null;
+  },
+
+  updateSessionName(id: string, name: string): void {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET name = ? WHERE id = ?', [name, id]);
   },
 
   // ── ACP Events ──

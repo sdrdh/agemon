@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 5
+-- Version: 6
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   agent_type          TEXT NOT NULL
                         CHECK (agent_type IN ('claude-code', 'opencode', 'aider', 'gemini')),
+  name                TEXT DEFAULT NULL,  -- Human-readable label derived from first prompt
   external_session_id TEXT,          -- Provider session ID for --resume (set after first output)
   pid                 INTEGER,       -- OS process ID; NULL if not running
   state               TEXT NOT NULL DEFAULT 'starting'

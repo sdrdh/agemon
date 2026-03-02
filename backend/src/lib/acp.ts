@@ -504,6 +504,13 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     deriveTaskStatus(taskId);
   }
 
+  // Set session name from first prompt (if not already named)
+  const sessionForName = db.getSession(sessionId);
+  if (sessionForName && !sessionForName.name) {
+    const name = content.length > 50 ? content.slice(0, 47) + '...' : content;
+    db.updateSessionName(sessionId, name);
+  }
+
   try {
     await entry.transport.request('session/prompt', {
       sessionId: entry.acpSessionId,

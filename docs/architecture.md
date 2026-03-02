@@ -41,7 +41,7 @@ Phone / Browser
 | `src/db/schema.sql` | SQLite DDL — all 5 tables |
 | `src/db/client.ts` | Typed query helpers using `bun:sqlite` |
 | `src/db/seed.ts` | Sample data for development |
-| `src/routes/tasks.ts` | CRUD endpoints for tasks |
+| `src/routes/tasks.ts` | CRUD endpoints for tasks and sessions |
 | `src/lib/git.ts` | Git worktree management (Task 3.1) |
 | `src/lib/acp.ts` | ACP agent manager (Task 4.1) |
 | `src/lib/pty.ts` | PTY session manager (Task 5.1) |
@@ -50,12 +50,14 @@ Phone / Browser
 
 | File | Purpose |
 |------|---------|
-| `src/App.tsx` | TanStack Router setup |
-| `src/routes/` | Page components (Kanban, Task detail) |
+| `src/App.tsx` | TanStack Router setup + nav bar |
+| `src/routes/` | Page components (task list, task detail, kanban, sessions) |
 | `src/components/ui/` | shadcn/ui components (44px touch targets) |
-| `src/components/custom/` | Kanban board, TaskCard, DiffViewer |
+| `src/components/custom/` | WsProvider, StatusBadge, custom app components |
 | `src/lib/api.ts` | REST API client |
 | `src/lib/ws.ts` | WebSocket client with auto-reconnect |
+| `src/lib/store.ts` | Zustand store — chat messages, pending inputs, agent activity, unread sessions (all keyed by sessionId) |
+| `src/lib/query.ts` | TanStack Query keys and query options for tasks, sessions, chat |
 
 ### Shared Types (`shared/types/index.ts`)
 
@@ -104,16 +106,20 @@ Agent completes
 ```typescript
 // Server → All clients
 { type: 'task_updated', task: Task }
-{ type: 'agent_thought', taskId, content }
-{ type: 'awaiting_input', taskId, question, inputId }
+{ type: 'agent_thought', taskId, sessionId, content, eventType, messageId? }
+{ type: 'awaiting_input', taskId, sessionId, question, inputId }
 { type: 'terminal_output', sessionId, data }
 { type: 'session_started', taskId, session: AgentSession }
-{ type: 'session_state_changed', sessionId, state: AgentSessionState }
+{ type: 'session_ready', taskId, session: AgentSession }
+{ type: 'session_state_changed', sessionId, taskId, state: AgentSessionState }
 
 // Client → Server
 { type: 'send_input', taskId, inputId, response }
 { type: 'terminal_input', sessionId, data }
+{ type: 'send_message', sessionId, content }
 ```
+
+All events carry `sessionId` so the frontend can route messages to per-session chat stores and track unread activity per session.
 
 ## Database Schema
 
@@ -133,7 +139,11 @@ diffs           (id, task_id, content, status, created_at)
          ┌──────────┐
          │ starting │  (session record created, process spawning)
          └────┬─────┘
-              │ process running + ACP handshake complete
+              │ ACP handshake complete
+         ┌────▼─────┐
+         │  ready   │  (waiting for user's first prompt)
+         └────┬─────┘
+              │ first prompt sent
          ┌────▼─────┐
          │  running │  (external_session_id captured from CLI output)
          └────┬─────┘
@@ -147,9 +157,11 @@ diffs           (id, task_id, content, status, created_at)
 └────────┘ └───────┘ └──────────────┘
 ```
 
+- **`ready`** — ACP handshake done, process is running, waiting for user's first prompt. No auto-start.
 - **`interrupted`** — server process went down while the session was active. Distinct from `crashed` (the agent process itself died).
 - **`stopped`** — clean exit (exit code 0).
 - **`crashed`** — agent process exited with non-zero code.
+- Task status is **derived** from session states, never auto-set to `done`. User must explicitly mark done.
 
 ### Relationship to Tasks and Events
 
@@ -183,7 +195,26 @@ See [`docs/acp-agents.md`](./acp-agents.md) for:
 - JSON-RPC message format and lifecycle
 - What needs to change in `acp.ts` for full protocol support
 
-**Current status:** `acp.ts` handles session lifecycle (spawn, stop, crash recovery) but does NOT yet implement the JSON-RPC handshake. Agents exit immediately because stdin is not piped. This is the highest-priority remaining backend work (Task 4.1/4.3).
+**Current status:** `acp.ts` handles the full ACP lifecycle — JSON-RPC handshake (`initialize` → `session/new`), prompt turns (`session/prompt`), session resume (`session/load`), crash recovery, and graceful shutdown. The lifecycle is split into `spawnAndHandshake` (→ ready state) and `sendPromptTurn` (ready → running) to support the session-centric UX where users see a `ready` session before sending their first message.
+
+## Frontend State Management
+
+### Session-Centric Chat
+
+The task detail view uses per-session tabs. Each session has its own chat history, activity indicator, and pending inputs in the Zustand store, all keyed by `sessionId`.
+
+### Unread Activity Indicators
+
+When a user is viewing one session tab, background sessions may still receive events via WebSocket. The store tracks `unreadSessions: Record<string, boolean>`:
+
+- **`markUnread(sessionId)`** — called by `WsProvider` on `agent_thought` and `awaiting_input` events
+- **`clearUnread(sessionId)`** — called when the user switches to a tab or while viewing the active tab
+
+The `SessionTabs` component renders two priority levels of indicators on inactive tabs:
+- **Amber pulsing dot** — session has a pending input (agent is blocked, needs attention). Derived from the existing `pendingInputs` store state, no duplicate tracking.
+- **Primary pulsing dot** — session has general unread activity (thoughts, tool calls).
+
+The WebSocket connection is fully persistent — navigating away from a session never sends stop signals or disconnects.
 
 ## Security
 

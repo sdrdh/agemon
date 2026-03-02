@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Square, Send, ChevronRight, ChevronDown, Check, X, Loader2, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Send, ChevronRight, ChevronDown, Check, X, Loader2, RotateCcw, CheckCircle2, Info, GitFork, Clock, Bot, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/custom/status-badge';
@@ -10,10 +10,34 @@ import { showToast } from '@/lib/toast';
 import { sendClientEvent } from '@/lib/ws';
 import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, sessionKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
-import type { ChatMessage, AgentSession, AgentSessionState } from '@agemon/shared';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { ChatMessage, AgentSession, AgentSessionState, Task } from '@agemon/shared';
 
 // Stable empty array reference to prevent re-renders
 const EMPTY_MESSAGES: ChatMessage[] = [];
+
+// ─── useIsDesktop hook ──────────────────────────────────────────────────────
+
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+function subscribeToMediaQuery(callback: () => void) {
+  const mql = window.matchMedia(DESKTOP_QUERY);
+  mql.addEventListener('change', callback);
+  return () => mql.removeEventListener('change', callback);
+}
+
+function getIsDesktop() {
+  return window.matchMedia(DESKTOP_QUERY).matches;
+}
+
+function getIsDesktopServer() {
+  return false;
+}
+
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(subscribeToMediaQuery, getIsDesktop, getIsDesktopServer);
+}
 
 // ─── Types for grouped chat items ──────────────────────────────────────────
 
@@ -225,8 +249,8 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   if (eventType === 'input_request') {
     return (
       <div className="flex justify-start my-2">
-        <div className="max-w-[85%] rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm whitespace-pre-wrap break-words">
-          {content}
+        <div className="max-w-[85%] rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm break-words prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
+          <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
         </div>
       </div>
     );
@@ -234,8 +258,8 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 
   return (
     <div className="flex justify-start my-2">
-      <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap break-words">
-        {content}
+      <div className="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm break-words prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
+        <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
       </div>
     </div>
   );
@@ -252,6 +276,15 @@ const SESSION_STATE_DOT: Record<AgentSessionState, string> = {
   interrupted: 'bg-amber-500',
 };
 
+const SESSION_STATE_LABEL: Record<AgentSessionState, string> = {
+  starting: 'Starting',
+  ready: 'Ready',
+  running: 'Running',
+  stopped: 'Stopped',
+  crashed: 'Crashed',
+  interrupted: 'Interrupted',
+};
+
 function isSessionActive(state: AgentSessionState): boolean {
   return state === 'running' || state === 'ready' || state === 'starting';
 }
@@ -260,61 +293,481 @@ function isSessionTerminal(state: AgentSessionState): boolean {
   return state === 'stopped' || state === 'crashed' || state === 'interrupted';
 }
 
-// ─── Session tab bar ────────────────────────────────────────────────────────
+// ─── Task info drawer ────────────────────────────────────────────────────────
 
-function SessionTabs({
+function TaskInfoDrawer({
+  task,
+  sessionCount,
+  open,
+  onClose,
+}: {
+  task: Task;
+  sessionCount: number;
+  open: boolean;
+  onClose: () => void;
+}) {
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  // Prevent body scroll when open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [open]);
+
+  const created = new Date(task.created_at);
+  const formattedDate = created.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Drawer panel */}
+      <div
+        className={`fixed top-0 right-0 z-50 h-full w-[85vw] max-w-sm bg-background border-l shadow-xl transition-transform duration-200 ease-out ${
+          open ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        role="dialog"
+        aria-label="Task details"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h2 className="text-sm font-semibold text-foreground">Task Details</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent/50"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto h-[calc(100%-49px)] px-4 py-4 space-y-5">
+          {/* Description */}
+          {task.description && (
+            <section>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{task.description}</p>
+            </section>
+          )}
+
+          {/* Repos */}
+          {task.repos.length > 0 && (
+            <section>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Repositories</h3>
+              <div className="space-y-1.5">
+                {task.repos.map((repo) => (
+                  <div key={repo.id} className="flex items-center gap-2 text-sm">
+                    <GitFork className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-mono text-xs truncate">{repo.name}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Metadata grid */}
+          <section>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Info</h3>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 text-sm">
+                <Bot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Agent</span>
+                <span className="ml-auto font-mono text-xs">{task.agent}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Created</span>
+                <span className="ml-auto text-xs">{formattedDate}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Loader2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">Sessions</span>
+                <span className="ml-auto text-xs">{sessionCount}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="h-3.5 w-3.5 shrink-0" />
+                <span className="text-muted-foreground">Task ID</span>
+                <span className="ml-auto font-mono text-xs truncate max-w-[140px]">{task.id}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Session list panel ──────────────────────────────────────────────────────
+
+function SessionListPanel({
   sessions,
   activeSessionId,
   onSelect,
   onNew,
+  onStop,
+  onResume,
+  onMarkDone,
   newDisabled,
+  isDone,
+  hasActiveSessions,
+  actionLoading,
+  unreadSessions,
+  pendingInputSessionIds,
+  sessionLabels,
 }: {
   sessions: AgentSession[];
   activeSessionId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onStop: (id: string) => void;
+  onResume: (id: string) => void;
+  onMarkDone: () => void;
   newDisabled: boolean;
+  isDone: boolean;
+  hasActiveSessions: boolean;
+  actionLoading: boolean;
+  unreadSessions: Record<string, boolean>;
+  pendingInputSessionIds: Set<string>;
+  sessionLabels: string[];
 }) {
-  // Count per agent type to generate tab labels
-  const labels = useMemo(() => {
-    const counts: Record<string, number> = {};
-    return sessions.map((s) => {
-      counts[s.agent_type] = (counts[s.agent_type] ?? 0) + 1;
-      const shortName = s.agent_type === 'claude-code' ? 'Claude' : s.agent_type;
-      return `${shortName} ${counts[s.agent_type]}`;
-    });
-  }, [sessions]);
+  return (
+    <div className="flex flex-col w-full lg:w-[280px] lg:min-w-[280px] lg:border-r overflow-y-auto bg-background">
+      {/* Session cards */}
+      <div className="flex-1 overflow-y-auto">
+        {sessions.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-4 px-4">
+            <p className="text-muted-foreground text-sm text-center">
+              {isDone ? 'This task is done.' : 'No sessions yet. Start one to begin working.'}
+            </p>
+            {!isDone && (
+              <Button
+                onClick={onNew}
+                disabled={actionLoading}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                {actionLoading ? 'Starting...' : 'Start a session'}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {(() => {
+          // Build a label lookup by session ID
+          const labelMap = new Map<string, string>();
+          sessions.forEach((s, i) => { labelMap.set(s.id, sessionLabels[i]); });
+
+          const activeSessions = sessions.filter(s => isSessionActive(s.state));
+          const previousSessions = sessions.filter(s => isSessionTerminal(s.state));
+
+          const renderSession = (session: AgentSession) => {
+            const label = labelMap.get(session.id) ?? '';
+            const isActiveItem = session.id === activeSessionId;
+            const dotColor = SESSION_STATE_DOT[session.state];
+            const stateLabel = SESSION_STATE_LABEL[session.state];
+            const hasUnread = !isActiveItem && unreadSessions[session.id];
+            const needsAttention = !isActiveItem && pendingInputSessionIds.has(session.id);
+            const canStop = isSessionActive(session.state);
+            const canResume = isSessionTerminal(session.state) && !isDone;
+
+            return (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => onSelect(session.id)}
+                className={`relative w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left transition-colors border-b ${
+                  isActiveItem
+                    ? 'bg-primary/5 border-l-2 border-l-primary'
+                    : 'hover:bg-accent/50 border-l-2 border-l-transparent'
+                }`}
+              >
+                {/* State dot */}
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${dotColor} shrink-0`} />
+
+                {/* Label + state */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{label}</div>
+                  <div className="text-xs text-muted-foreground">{stateLabel}</div>
+                </div>
+
+                {/* Unread indicators */}
+                {needsAttention && (
+                  <span className="flex h-2.5 w-2.5 shrink-0" role="status">
+                    <span className="sr-only">Awaiting input</span>
+                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-amber-400/75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                  </span>
+                )}
+                {hasUnread && !needsAttention && (
+                  <span className="flex h-2 w-2 shrink-0" role="status">
+                    <span className="sr-only">New activity</span>
+                    <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary/60" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                  </span>
+                )}
+
+                {/* Inline action button */}
+                {canStop && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    aria-label={`Archive ${label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStop(session.id);
+                    }}
+                    disabled={actionLoading}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {canResume && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 shrink-0 text-primary hover:bg-primary/10"
+                    aria-label={`Resume ${label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResume(session.id);
+                    }}
+                    disabled={actionLoading}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </button>
+            );
+          };
+
+          return (
+            <>
+              {activeSessions.length > 0 && (
+                <>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Active</div>
+                  {activeSessions.map(renderSession)}
+                </>
+              )}
+              {previousSessions.length > 0 && (
+                <>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Previous</div>
+                  {previousSessions.map(renderSession)}
+                </>
+              )}
+            </>
+          );
+        })()}
+      </div>
+
+      {/* Bottom actions */}
+      {sessions.length > 0 && (
+        <div className="border-t px-4 py-3 space-y-2 bg-background">
+          {!isDone && (
+            <Button
+              variant="outline"
+              className="w-full gap-2 min-h-[44px]"
+              onClick={onNew}
+              disabled={newDisabled}
+            >
+              <Plus className="h-4 w-4" />
+              New Session
+            </Button>
+          )}
+          {!isDone && !hasActiveSessions && sessions.length > 0 && (
+            <Button
+              variant="outline"
+              className="w-full gap-2 min-h-[44px]"
+              onClick={onMarkDone}
+              disabled={actionLoading}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Mark Done
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Session chat panel ──────────────────────────────────────────────────────
+
+function SessionChatPanel({
+  session,
+  sessionLabel,
+  groupedItems,
+  agentActivity,
+  pendingInputs,
+  inputText,
+  setInputText,
+  handleSend,
+  turnInFlight,
+  isDone,
+  actionLoading,
+  onStop,
+  onResume,
+  onBack,
+  isDesktop,
+  chatEndRef,
+}: {
+  session: AgentSession;
+  sessionLabel: string;
+  groupedItems: ChatItem[];
+  agentActivity: string | null;
+  pendingInputs: { inputId: string; question: string }[];
+  inputText: string;
+  setInputText: (text: string) => void;
+  handleSend: () => void;
+  turnInFlight: boolean;
+  isDone: boolean;
+  actionLoading: boolean;
+  onStop: (id: string) => void;
+  onResume: (id: string) => void;
+  onBack: () => void;
+  isDesktop: boolean;
+  chatEndRef: React.RefObject<HTMLDivElement>;
+}) {
+  const sessionRunning = isSessionActive(session.state);
+  const sessionStopped = isSessionTerminal(session.state);
+  const sessionReady = session.state === 'ready';
+  const canType = sessionRunning && !turnInFlight && !isDone;
+
+  const inputPlaceholder = useMemo(() => {
+    if (isDone) return 'Task completed';
+    if (sessionStopped) return 'Session ended';
+    if (sessionReady) return 'Send your first message...';
+    if (turnInFlight) return 'Agent is working...';
+    if (pendingInputs.length > 0) return pendingInputs[0].question;
+    return 'Send a message...';
+  }, [isDone, sessionStopped, sessionReady, turnInFlight, pendingInputs]);
 
   return (
-    <div className="flex items-center gap-1 px-4 py-2 border-b overflow-x-auto">
-      {sessions.map((session, i) => {
-        const isActive = session.id === activeSessionId;
-        const dotColor = SESSION_STATE_DOT[session.state];
-        return (
-          <button
-            key={session.id}
-            type="button"
-            onClick={() => onSelect(session.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap min-h-[36px] transition-colors ${
-              isActive
-                ? 'bg-primary/10 text-primary font-medium'
-                : 'text-muted-foreground hover:bg-accent/50'
-            }`}
+    <div className="flex flex-col flex-1 min-w-0">
+      {/* Mobile chat header with back button */}
+      {!isDesktop && (
+        <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
+          <Button size="icon" variant="ghost" aria-label="Back to sessions" onClick={onBack} className="min-h-[44px] min-w-[44px]">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <span className={`inline-block h-2.5 w-2.5 rounded-full ${SESSION_STATE_DOT[session.state]} shrink-0`} />
+          <span className="text-sm font-medium flex-1 truncate">{sessionLabel}</span>
+          {sessionRunning && (
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Archive session"
+              onClick={() => onStop(session.id)}
+              disabled={actionLoading}
+              className="gap-1.5"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Archive
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Chat area (scrollable) */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {/* Session selected but no messages */}
+        {groupedItems.length === 0 && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-muted-foreground text-sm">
+              {sessionReady
+                ? 'Session ready. Send your first message.'
+                : isSessionActive(session.state)
+                  ? 'Waiting for agent output...'
+                  : 'No messages in this session.'}
+            </p>
+          </div>
+        )}
+
+        {/* Chat messages */}
+        {groupedItems.map((item) => {
+          if (item.kind === 'activity-group') {
+            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} />;
+          }
+          return <ChatBubble key={item.message.id} message={item.message} />;
+        })}
+
+        {/* Agent activity indicator */}
+        {agentActivity && sessionRunning && (
+          <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
+            </span>
+            <span className="truncate">{agentActivity}</span>
+          </div>
+        )}
+
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Sticky input bar */}
+      <div className="border-t px-4 py-3 bg-background">
+        {/* Stopped/crashed session -> resume button */}
+        {sessionStopped && !isDone ? (
+          <Button
+            className="w-full gap-2 min-h-[44px]"
+            onClick={() => onResume(session.id)}
+            disabled={actionLoading}
           >
-            <span className={`inline-block h-2 w-2 rounded-full ${dotColor} shrink-0`} />
-            {labels[i]}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        onClick={onNew}
-        disabled={newDisabled}
-        className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent/50 disabled:opacity-50 shrink-0"
-        aria-label="New session"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+            <RotateCcw className="h-4 w-4" />
+            {actionLoading ? 'Resuming...' : 'Resume Session'}
+          </Button>
+        ) : (
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+          >
+            <Input
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={inputPlaceholder}
+              disabled={!canType && !sessionReady}
+              className="flex-1 min-h-[44px]"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={(!canType && !sessionReady) || !inputText.trim()}
+              className="min-h-[44px] min-w-[44px]"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -328,7 +781,9 @@ export default function TaskDetailView() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
   const [turnInFlight, setTurnInFlight] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const isDesktop = useIsDesktop();
 
   const taskId = id ?? '';
 
@@ -336,53 +791,91 @@ export default function TaskDetailView() {
   const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
   const { data: sessions = [] } = useQuery(taskSessionsQuery(taskId));
 
-  // Auto-select first session or latest session
+  // ── Session labels ────────────────────────────────────────────────────
+  const sessionLabels = useMemo(() => {
+    const counts: Record<string, number> = {};
+    return sessions.map((s) => {
+      counts[s.agent_type] = (counts[s.agent_type] ?? 0) + 1;
+      if (s.name) return s.name;
+      const shortName = s.agent_type === 'claude-code' ? 'Claude' : s.agent_type;
+      return `${shortName} ${counts[s.agent_type]}`;
+    });
+  }, [sessions]);
+
+  // ── Auto-select logic (desktop only) ──────────────────────────────────
   useEffect(() => {
-    if (sessions.length > 0 && !activeSessionId) {
-      // Select the last session (most recently created)
-      setActiveSessionId(sessions[sessions.length - 1].id);
+    if (sessions.length === 0) {
+      setSelectedSessionId(null);
+      return;
     }
-    // If activeSessionId no longer exists in sessions, reset
-    if (activeSessionId && sessions.length > 0 && !sessions.find(s => s.id === activeSessionId)) {
-      setActiveSessionId(sessions[sessions.length - 1].id);
+    // On desktop, auto-select the latest session if none selected
+    if (isDesktop && !selectedSessionId) {
+      setSelectedSessionId(sessions[sessions.length - 1].id);
     }
-  }, [sessions, activeSessionId]);
+    // If selected session no longer exists, reset
+    if (selectedSessionId && !sessions.find(s => s.id === selectedSessionId)) {
+      if (isDesktop) {
+        setSelectedSessionId(sessions[sessions.length - 1].id);
+      } else {
+        setSelectedSessionId(null);
+      }
+    }
+  }, [sessions, selectedSessionId, isDesktop]);
 
   const activeSession = useMemo(
-    () => sessions.find(s => s.id === activeSessionId) ?? null,
-    [sessions, activeSessionId],
+    () => sessions.find(s => s.id === selectedSessionId) ?? null,
+    [sessions, selectedSessionId],
   );
+
+  const activeSessionLabel = useMemo(() => {
+    const idx = sessions.findIndex(s => s.id === selectedSessionId);
+    return idx >= 0 ? sessionLabels[idx] : '';
+  }, [sessions, selectedSessionId, sessionLabels]);
 
   // ── Per-session chat history from server ──────────────────────────────
   const { data: sessionChatHistory } = useQuery(
-    sessionChatQuery(activeSessionId ?? '', 500),
+    sessionChatQuery(selectedSessionId ?? '', 500),
   );
 
   // ── Store selectors (keyed by sessionId) ──────────────────────────────
   const chatMessages = useWsStore((s) =>
-    activeSessionId ? (s.chatMessages[activeSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
+    selectedSessionId ? (s.chatMessages[selectedSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
   );
   const setChatMessages = useWsStore((s) => s.setChatMessages);
   const appendChatMessage = useWsStore((s) => s.appendChatMessage);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const removePendingInput = useWsStore((s) => s.removePendingInput);
   const agentActivity = useWsStore((s) =>
-    activeSessionId ? (s.agentActivity[activeSessionId] ?? null) : null
+    selectedSessionId ? (s.agentActivity[selectedSessionId] ?? null) : null
   );
+  const unreadSessions = useWsStore((s) => s.unreadSessions);
+  const clearUnread = useWsStore((s) => s.clearUnread);
 
   const pendingInputs = useMemo(
-    () => activeSessionId
-      ? allPendingInputs.filter((p) => p.sessionId === activeSessionId)
+    () => selectedSessionId
+      ? allPendingInputs.filter((p) => p.sessionId === selectedSessionId)
       : [],
-    [allPendingInputs, activeSessionId],
+    [allPendingInputs, selectedSessionId],
   );
+
+  // ── Clear unread for the active session ─────────────────────────────
+  useEffect(() => {
+    if (selectedSessionId) clearUnread(selectedSessionId);
+  }, [selectedSessionId, chatMessages, clearUnread]);
+
+  // Derive set of session IDs with pending inputs (for priority indicator)
+  const pendingInputSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of allPendingInputs) ids.add(p.sessionId);
+    return ids;
+  }, [allPendingInputs]);
 
   // ── Seed store from server chat history ───────────────────────────────
   useEffect(() => {
-    if (activeSessionId && sessionChatHistory && sessionChatHistory.length > 0) {
-      setChatMessages(activeSessionId, sessionChatHistory);
+    if (selectedSessionId && sessionChatHistory && sessionChatHistory.length > 0) {
+      setChatMessages(selectedSessionId, sessionChatHistory);
     }
-  }, [sessionChatHistory, activeSessionId, setChatMessages]);
+  }, [sessionChatHistory, selectedSessionId, setChatMessages]);
 
   // ── Clear turn-in-flight when agent responds ──────────────────────────
   useEffect(() => {
@@ -411,7 +904,7 @@ export default function TaskDetailView() {
   const createSessionMutation = useMutation({
     mutationFn: () => api.createSession(taskId),
     onSuccess: (session) => {
-      setActiveSessionId(session.id);
+      setSelectedSessionId(session.id);
       // Pre-fill with task description for the first session
       if (sessions.length === 0 && task?.description) {
         setInputText(task.description);
@@ -464,14 +957,14 @@ export default function TaskDetailView() {
   // ── Send handler ──────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = inputText.trim();
-    if (!text || !activeSessionId) return;
+    if (!text || !selectedSessionId) return;
 
     if (pendingInputs.length > 0) {
       const pi = pendingInputs[0];
       sendClientEvent({ type: 'send_input', taskId, inputId: pi.inputId, response: text });
       removePendingInput(pi.inputId);
     } else {
-      sendClientEvent({ type: 'send_message', sessionId: activeSessionId, content: text });
+      sendClientEvent({ type: 'send_message', sessionId: selectedSessionId, content: text });
     }
 
     const optimisticMsg: ChatMessage = {
@@ -481,31 +974,26 @@ export default function TaskDetailView() {
       eventType: pendingInputs.length > 0 ? 'input_response' : 'prompt',
       timestamp: new Date().toISOString(),
     };
-    appendChatMessage(activeSessionId, optimisticMsg);
+    appendChatMessage(selectedSessionId, optimisticMsg);
     setInputText('');
     setTurnInFlight(true);
-  }, [inputText, pendingInputs, taskId, activeSessionId, removePendingInput, appendChatMessage]);
+  }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage]);
+
+  // ── Session selection handler (for mobile navigation) ──────────────────
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    clearUnread(sessionId);
+  }, [clearUnread]);
+
+  const handleBackToList = useCallback(() => {
+    setSelectedSessionId(null);
+  }, []);
 
   // ── Derived state ─────────────────────────────────────────────────────
   const isDone = task?.status === 'done';
   const hasSessions = sessions.length > 0;
   const hasActiveSessions = sessions.some(s => isSessionActive(s.state));
-  const activeSessionRunning = activeSession && isSessionActive(activeSession.state);
-  const activeSessionStopped = activeSession && isSessionTerminal(activeSession.state);
-  const activeSessionReady = activeSession?.state === 'ready';
   const actionLoading = createSessionMutation.isPending || stopMutation.isPending || resumeMutation.isPending;
-
-  // Input bar state
-  const canType = activeSessionRunning && !turnInFlight && !isDone;
-  const inputPlaceholder = useMemo(() => {
-    if (isDone) return 'Task completed';
-    if (!activeSession) return 'Create a session to begin...';
-    if (activeSessionStopped) return 'Session ended';
-    if (activeSessionReady) return 'Send your first message...';
-    if (turnInFlight) return 'Agent is working...';
-    if (pendingInputs.length > 0) return pendingInputs[0].question;
-    return 'Send a message...';
-  }, [isDone, activeSession, activeSessionStopped, activeSessionReady, turnInFlight, pendingInputs]);
 
   // ── Loading state ─────────────────────────────────────────────────────
   if (isLoading) {
@@ -541,149 +1029,85 @@ export default function TaskDetailView() {
     );
   }
 
+  // Determine which panels to show
+  const showSessionList = isDesktop || !selectedSessionId;
+  const showChatPanel = selectedSessionId && activeSession;
+
   return (
     <div className="flex flex-col h-[calc(100dvh-3rem)]">
-      {/* ── Sticky header ──────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
-        <StatusBadge status={task.status} />
-        {/* Stop active session button */}
-        {activeSessionRunning && (
-          <Button
-            size="icon"
-            variant="destructive"
-            aria-label="Stop session"
-            onClick={() => activeSessionId && stopMutation.mutate(activeSessionId)}
-            disabled={actionLoading}
-          >
-            <Square className="h-4 w-4" />
+      {/* ── Sticky header (hidden on mobile when viewing a session chat) ── */}
+      {(isDesktop || !selectedSessionId) && (
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-        )}
-        {/* Mark done button — visible when no active sessions and not already done */}
-        {!isDone && !hasActiveSessions && hasSessions && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => markDoneMutation.mutate()}
-            disabled={markDoneMutation.isPending}
-            className="gap-1.5"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            Done
+          <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
+          <Button size="icon" variant="ghost" aria-label="Task info" onClick={() => setInfoOpen(true)}>
+            <Info className="h-4 w-4" />
           </Button>
-        )}
-      </div>
-
-      {/* ── Session tabs ───────────────────────────────────────────────── */}
-      {hasSessions && (
-        <SessionTabs
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onSelect={setActiveSessionId}
-          onNew={() => createSessionMutation.mutate()}
-          newDisabled={isDone || actionLoading}
-        />
-      )}
-
-      {/* ── Chat area (scrollable) ─────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        {/* No sessions yet — empty state */}
-        {!hasSessions && (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <p className="text-muted-foreground text-sm text-center">
-              {isDone ? 'This task is done.' : 'No sessions yet. Start one to begin working.'}
-            </p>
-            {!isDone && (
-              <Button
-                onClick={() => createSessionMutation.mutate()}
-                disabled={actionLoading}
-                className="gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                {createSessionMutation.isPending ? 'Starting...' : 'Start a session'}
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Session selected but no messages */}
-        {hasSessions && groupedItems.length === 0 && activeSession && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground text-sm">
-              {activeSessionReady
-                ? 'Session ready. Send your first message.'
-                : isSessionActive(activeSession.state)
-                  ? 'Waiting for agent output...'
-                  : 'No messages in this session.'}
-            </p>
-          </div>
-        )}
-
-        {/* Chat messages */}
-        {groupedItems.map((item) => {
-          if (item.kind === 'activity-group') {
-            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} />;
-          }
-          return <ChatBubble key={item.message.id} message={item.message} />;
-        })}
-
-        {/* Agent activity indicator */}
-        {agentActivity && activeSessionRunning && (
-          <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
-            </span>
-            <span className="truncate">{agentActivity}</span>
-          </div>
-        )}
-
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* ── Sticky input bar ───────────────────────────────────────────── */}
-      {hasSessions && activeSession && (
-        <div className="sticky bottom-0 z-40 bg-background border-t px-4 py-3">
-          {/* Stopped/crashed session → resume button */}
-          {activeSessionStopped && !isDone ? (
-            <Button
-              className="w-full gap-2"
-              onClick={() => activeSessionId && resumeMutation.mutate(activeSessionId)}
-              disabled={actionLoading}
-            >
-              <RotateCcw className="h-4 w-4" />
-              {resumeMutation.isPending ? 'Resuming...' : 'Resume Session'}
-            </Button>
-          ) : (
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-            >
-              <Input
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={inputPlaceholder}
-                disabled={!canType && !activeSessionReady}
-                className="flex-1 min-h-[44px]"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={(!canType && !activeSessionReady) || !inputText.trim()}
-                className="min-h-[44px] min-w-[44px]"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-          )}
+          <StatusBadge status={task.status} />
         </div>
       )}
+
+      {/* ── Main content area ──────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Session list — always visible on desktop, visible on mobile when no session selected */}
+        {showSessionList && (
+          <SessionListPanel
+            sessions={sessions}
+            activeSessionId={selectedSessionId}
+            onSelect={handleSelectSession}
+            onNew={() => createSessionMutation.mutate()}
+            onStop={(sid) => stopMutation.mutate(sid)}
+            onResume={(sid) => resumeMutation.mutate(sid)}
+            onMarkDone={() => markDoneMutation.mutate()}
+            newDisabled={isDone || actionLoading}
+            isDone={isDone}
+            hasActiveSessions={hasActiveSessions}
+            actionLoading={actionLoading}
+            unreadSessions={unreadSessions}
+            pendingInputSessionIds={pendingInputSessionIds}
+            sessionLabels={sessionLabels}
+          />
+        )}
+
+        {/* Chat panel — visible when a session is selected */}
+        {showChatPanel && (
+          <SessionChatPanel
+            session={activeSession}
+            sessionLabel={activeSessionLabel}
+            groupedItems={groupedItems}
+            agentActivity={agentActivity}
+            pendingInputs={pendingInputs}
+            inputText={inputText}
+            setInputText={setInputText}
+            handleSend={handleSend}
+            turnInFlight={turnInFlight}
+            isDone={isDone}
+            actionLoading={actionLoading}
+            onStop={(sid) => stopMutation.mutate(sid)}
+            onResume={(sid) => resumeMutation.mutate(sid)}
+            onBack={handleBackToList}
+            isDesktop={isDesktop}
+            chatEndRef={chatEndRef}
+          />
+        )}
+
+        {/* Desktop: no session selected placeholder */}
+        {isDesktop && hasSessions && !selectedSessionId && (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-muted-foreground text-sm">Select a session</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Info drawer ──────────────────────────────────────────────── */}
+      <TaskInfoDrawer
+        task={task}
+        sessionCount={sessions.length}
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+      />
     </div>
   );
 }

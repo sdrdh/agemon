@@ -28,6 +28,7 @@ export interface AgentSession {
   id: string;
   task_id: string;
   agent_type: AgentType;
+  name: string | null;                // Human-readable label from first prompt
   external_session_id: string | null; // Provider session ID for --resume
   pid: number | null;                 // OS process ID; null if not running
   state: AgentSessionState;

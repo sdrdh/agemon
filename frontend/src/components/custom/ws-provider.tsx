@@ -58,6 +58,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
             eventType: event.eventType ?? 'thought',
             timestamp: new Date().toISOString(),
           });
+          store().markUnread(event.sessionId);
 
           if (event.eventType === 'thought') {
             store().setAgentActivity(event.sessionId, 'Thinking...');
@@ -68,7 +69,8 @@ export function WsProvider({ children }: { children: ReactNode }) {
             } else if (event.content.startsWith('[tool update]')) {
               store().setAgentActivity(event.sessionId, null);
             } else {
-              store().setAgentActivity(event.sessionId, 'Writing...');
+              // Regular text — the chat bubble itself is the indicator
+              store().setAgentActivity(event.sessionId, null);
             }
           }
           break;
@@ -88,6 +90,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
             question: event.question,
             receivedAt: Date.now(),
           });
+          store().markUnread(event.sessionId);
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });

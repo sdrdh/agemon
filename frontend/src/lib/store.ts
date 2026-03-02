@@ -16,6 +16,8 @@ interface WsState {
   pendingInputs: PendingInput[];
   /** Agent activity indicator keyed by sessionId */
   agentActivity: Record<string, string | null>;
+  /** Sessions with unread activity (not currently viewed) */
+  unreadSessions: Record<string, boolean>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -23,6 +25,8 @@ interface WsState {
   addPendingInput: (input: PendingInput) => void;
   removePendingInput: (inputId: string) => void;
   setAgentActivity: (sessionId: string, activity: string | null) => void;
+  markUnread: (sessionId: string) => void;
+  clearUnread: (sessionId: string) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -32,6 +36,7 @@ export const useWsStore = create<WsState>((set) => ({
   chatMessages: {},
   pendingInputs: [],
   agentActivity: {},
+  unreadSessions: {},
 
   setConnected: (connected) => set({ connected }),
 
@@ -77,4 +82,16 @@ export const useWsStore = create<WsState>((set) => ({
     set((state) => ({
       agentActivity: { ...state.agentActivity, [sessionId]: activity },
     })),
+
+  markUnread: (sessionId) =>
+    set((state) => ({
+      unreadSessions: { ...state.unreadSessions, [sessionId]: true },
+    })),
+
+  clearUnread: (sessionId) =>
+    set((state) => {
+      if (!state.unreadSessions[sessionId]) return state;
+      const { [sessionId]: _, ...rest } = state.unreadSessions;
+      return { unreadSessions: rest };
+    }),
 }));

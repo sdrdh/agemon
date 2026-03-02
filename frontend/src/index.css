@@ -62,3 +62,18 @@
     padding-right: env(safe-area-inset-right);
   }
 }
+
+/* Markdown code blocks inside chat bubbles */
+@layer components {
+  .prose pre {
+    @apply bg-zinc-900 text-zinc-100 rounded-md p-3 overflow-x-auto text-xs leading-relaxed;
+  }
+  .prose :not(pre) > code {
+    @apply bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded px-1.5 py-0.5 text-xs font-mono;
+    font-weight: normal;
+  }
+  .prose :not(pre) > code::before,
+  .prose :not(pre) > code::after {
+    content: none;
+  }
+}
