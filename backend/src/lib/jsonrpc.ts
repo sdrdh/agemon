@@ -166,8 +166,16 @@ export class JsonRpcTransport {
     const line = JSON.stringify(msg) + '\n';
     try {
       this._stdin.write(this._encoder.encode(line));
-    } catch {
-      // stdin may already be closed if process exited
+    } catch (err) {
+      // stdin may already be closed if process exited — reject any pending request
+      if ('id' in msg && typeof msg.id === 'number') {
+        const pending = this._pending.get(msg.id);
+        if (pending) {
+          this._pending.delete(msg.id);
+          clearTimeout(pending.timer);
+          pending.reject(new Error(`Failed to send request: ${err instanceof Error ? err.message : 'stdin closed'}`));
+        }
+      }
     }
   }
 

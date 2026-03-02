@@ -1,4 +1,4 @@
-import { Suspense, Component, lazy, useState, type ReactNode } from 'react';
+import { Suspense, Component, lazy, useState, useEffect, type ReactNode } from 'react';
 import {
   createRouter,
   createRootRoute,
@@ -99,13 +99,17 @@ const SuspenseFallback = () => (
 export default function App() {
   const [authed, setAuthed] = useState(hasApiKey);
 
+  // Connect WebSocket on mount when already authenticated (e.g. page reload)
+  useEffect(() => {
+    if (authed) connectWs();
+    return () => { if (authed) disconnectWs(); };
+  }, [authed]);
+
   function handleLogin() {
-    connectWs();
     setAuthed(true);
   }
 
   function handleLogout() {
-    disconnectWs();
     clearApiKey();
     setAuthed(false);
   }

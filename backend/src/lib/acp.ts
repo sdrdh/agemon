@@ -294,17 +294,40 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
 
   // Run the ACP lifecycle asynchronously
   const task = db.getTask(taskId);
-  if (task) {
-    runAcpLifecycle(transport, sessionId, taskId, {
-      title: task.title,
-      description: task.description,
-    });
+  if (!task) {
+    console.error(`[acp] task ${taskId} not found — killing spawned process`);
+    proc.kill('SIGKILL');
+    transport.close();
+    sessions.delete(sessionId);
+    db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
+    throw new Error(`Task ${taskId} not found`);
   }
 
+  runAcpLifecycle(transport, sessionId, taskId, {
+    title: task.title,
+    description: task.description,
+  }).catch((err) => {
+    console.error(`[acp] lifecycle error for session ${sessionId}:`, err);
+  });
+
   // Monitor process exit
-  handleExit(proc, transport, sessionId, taskId);
+  handleExit(proc, transport, sessionId, taskId).catch((err) => {
+    console.error(`[acp] handleExit error for session ${sessionId}:`, err);
+  });
 
   return updated!;
+}
+
+/**
+ * Send a user's input response to the running agent via JSON-RPC.
+ * Returns true if the message was sent, false if no active session was found.
+ */
+export function sendInputToAgent(sessionId: string, inputId: string, response: string): boolean {
+  const entry = sessions.get(sessionId);
+  if (!entry || entry.transport.isClosed) return false;
+
+  entry.transport.notify('acp/inputResponse', { inputId, response });
+  return true;
 }
 
 /**

@@ -126,12 +126,17 @@ check "list repos" 200 GET /api/repos
 
 echo ""
 echo "=== Start/Stop Agent ==="
+# Use a task with no repos so worktree creation is skipped
+check "create task for agent test" 201 POST /api/tasks \
+  '{"title":"Agent test task"}'
+TASK_AGENT=$(jq_field "['id']")
+
 # If claude-agent-acp is on PATH, start succeeds (202); otherwise 500
 if command -v claude-agent-acp &>/dev/null; then
-  check "start agent (binary on PATH)" 202 POST "/api/tasks/$TASK_A/start"
+  check "start agent (binary on PATH)" 202 POST "/api/tasks/$TASK_AGENT/start"
   # Agent may exit quickly if not configured — stop may find it already gone
   sleep 1
-  STOP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "$AUTH" "$BASE/api/tasks/$TASK_A/stop")
+  STOP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "$AUTH" "$BASE/api/tasks/$TASK_AGENT/stop")
   if [[ "$STOP_STATUS" == "200" || "$STOP_STATUS" == "404" ]]; then
     echo "  PASS  stop agent ($STOP_STATUS — agent may have already exited)"
     PASS=$((PASS+1))
@@ -140,9 +145,12 @@ if command -v claude-agent-acp &>/dev/null; then
     FAIL=$((FAIL+1))
   fi
 else
-  check "start agent (no binary on PATH)" 500 POST "/api/tasks/$TASK_A/start"
-  check "stop agent (no running session)" 404 POST "/api/tasks/$TASK_A/stop"
+  check "start agent (no binary on PATH)" 500 POST "/api/tasks/$TASK_AGENT/start"
+  check "stop agent (no running session)" 404 POST "/api/tasks/$TASK_AGENT/stop"
 fi
+
+# Clean up agent test task
+curl -s -o /dev/null -X DELETE -H "$AUTH" "$BASE/api/tasks/$TASK_AGENT"
 
 echo ""
 echo "=== Delete Task ==="

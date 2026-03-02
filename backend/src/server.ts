@@ -131,13 +131,23 @@ export function broadcast(event: ServerEvent) {
 }
 
 // ─── Client Event Handlers ───────────────────────────────────────────────────
-eventBus.on('ws:client_event', (ev: ClientEvent) => {
+eventBus.on('ws:client_event', async (ev: ClientEvent) => {
   if (ev.type === 'send_input') {
     const input = db.answerInput(ev.inputId, ev.response);
     if (!input) {
       console.warn(`[ws] send_input: unknown inputId ${ev.inputId}`);
       return;
     }
+
+    // Relay the response to the running agent process
+    const { sendInputToAgent } = await import('./lib/acp.ts');
+    if (input.session_id) {
+      const sent = sendInputToAgent(input.session_id, ev.inputId, ev.response);
+      if (!sent) {
+        console.warn(`[ws] send_input: could not relay to agent session ${input.session_id}`);
+      }
+    }
+
     const pending = db.listPendingInputs(ev.taskId);
     if (pending.length === 0) {
       db.updateTask(ev.taskId, { status: 'working' });

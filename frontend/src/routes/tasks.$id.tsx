@@ -18,10 +18,11 @@ export default function TaskDetailView() {
   const qc = useQueryClient();
   const thoughtsEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: task, isLoading, error } = useQuery(taskDetailQuery(id ?? ''));
-  const thoughts = useWsStore((s) => s.thoughts[id ?? ''] ?? []);
+  const taskId = id ?? '';
+  const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
+  const thoughts = useWsStore((s) => s.thoughts[taskId] ?? []);
   const pendingInputs = useWsStore((s) =>
-    s.pendingInputs.filter((p) => p.taskId === id)
+    s.pendingInputs.filter((p) => p.taskId === taskId)
   );
 
   useEffect(() => {
@@ -29,9 +30,9 @@ export default function TaskDetailView() {
   }, [thoughts.length]);
 
   const startMutation = useMutation({
-    mutationFn: () => api.startTask(id!),
+    mutationFn: () => api.startTask(taskId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: taskKeys.detail(id!) });
+      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
       showToast({ title: 'Agent started' });
     },
     onError: (err: Error) => {
@@ -40,9 +41,9 @@ export default function TaskDetailView() {
   });
 
   const stopMutation = useMutation({
-    mutationFn: () => api.stopTask(id!),
+    mutationFn: () => api.stopTask(taskId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: taskKeys.detail(id!) });
+      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
       showToast({ title: 'Stop signal sent' });
     },
     onError: (err: Error) => {

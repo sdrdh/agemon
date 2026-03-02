@@ -64,6 +64,14 @@ export class GitWorktreeManager {
     const worktreePath = this.getWorktreePath(taskId, repoName);
     const branchName = this.getBranchName(taskId, repoName);
 
+    // If worktree already exists, return its path (idempotent)
+    try {
+      await access(worktreePath);
+      return worktreePath;
+    } catch {
+      // Does not exist yet — create it
+    }
+
     await mkdir(join(TASKS_DIR, taskId), { recursive: true });
 
     // Determine the starting point: prefer origin/{baseBranch}, fall back to origin/master
