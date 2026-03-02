@@ -5,7 +5,7 @@ export type TaskStatus = 'todo' | 'working' | 'awaiting_input' | 'done';
 export const AGENT_TYPES = ['claude-code', 'opencode', 'aider', 'gemini'] as const;
 export type AgentType = typeof AGENT_TYPES[number];
 
-export type AgentSessionState = 'starting' | 'running' | 'stopped' | 'crashed' | 'interrupted';
+export type AgentSessionState = 'starting' | 'ready' | 'running' | 'stopped' | 'crashed' | 'interrupted';
 
 export interface Repo {
   id: number;
@@ -75,16 +75,17 @@ export interface ChatMessage {
 
 export type ServerEvent =
   | { type: 'task_updated'; task: Task }
-  | { type: 'agent_thought'; taskId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
-  | { type: 'awaiting_input'; taskId: string; question: string; inputId: string }
+  | { type: 'agent_thought'; taskId: string; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
+  | { type: 'awaiting_input'; taskId: string; sessionId: string; question: string; inputId: string }
   | { type: 'terminal_output'; sessionId: string; data: string }
   | { type: 'session_started'; taskId: string; session: AgentSession }
+  | { type: 'session_ready'; taskId: string; session: AgentSession }
   | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
   | { type: 'terminal_input'; sessionId: string; data: string }
-  | { type: 'send_message'; taskId: string; content: string };
+  | { type: 'send_message'; sessionId: string; content: string };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 
@@ -98,8 +99,13 @@ export interface CreateTaskBody {
 export interface UpdateTaskBody {
   title?: string;
   description?: string;
+  status?: TaskStatus;
   repos?: string[];  // SSH URLs; replaces full set
   agent?: AgentType;
+}
+
+export interface CreateSessionBody {
+  agentType?: AgentType;
 }
 
 export interface TasksByProject {

@@ -158,16 +158,11 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
   }
 
   else if (ev.type === 'send_message') {
-    const { getRunningSession, sendPromptTurn } = await import('./lib/acp.ts');
-    const session = getRunningSession(ev.taskId);
-    if (!session) {
-      console.warn(`[ws] send_message: no running session for task=${ev.taskId}`);
-      return;
-    }
+    const { sendPromptTurn } = await import('./lib/acp.ts');
     try {
-      await sendPromptTurn(session.id, ev.content);
+      await sendPromptTurn(ev.sessionId, ev.content);
     } catch (err) {
-      console.error(`[ws] send_message error for task=${ev.taskId}:`, (err as Error).message);
+      console.error(`[ws] send_message error for session=${ev.sessionId}:`, (err as Error).message);
     }
   }
 });

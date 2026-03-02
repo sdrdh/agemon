@@ -6,10 +6,9 @@ import type { ServerEvent } from '@agemon/shared';
 
 /** Extract a short activity label from a tool-call content string. */
 function parseToolActivity(content: string): string {
-  // content looks like: "[tool] Read /long/path/to/file.ts (1 - 80) (pending)"
-  // or "[tool update] toolu_xxx: completed"
+  // Handles both [tool] and [tool:toolCallId] formats
   if (content.startsWith('[tool update]')) return ''; // skip updates
-  const match = content.match(/^\[tool\]\s+(\S+)\s+(.*?)(?:\s*\((?:pending|in_progress)\))?$/);
+  const match = content.match(/^\[tool(?::[^\]]+)?\]\s+(\S+)\s+(.*?)(?:\s*\((?:pending|in_progress)\))?$/);
   if (!match) return 'Running tool...';
 
   const toolName = match[1];
@@ -35,8 +34,7 @@ function parseToolActivity(content: string): string {
 
 /**
  * Subscribes to WebSocket events once on mount and bridges them to
- * React Query cache + Zustand store. Uses module-level queryClient
- * and Zustand getState() to avoid React render dependencies.
+ * React Query cache + Zustand store. Events are keyed by sessionId.
  */
 export function WsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -52,9 +50,8 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'agent_thought': {
-          // Use messageId for streaming chunk accumulation; random ID for one-shot events
           const msgId = event.messageId ?? crypto.randomUUID();
-          store().appendChatMessage(event.taskId, {
+          store().appendChatMessage(event.sessionId, {
             id: msgId,
             role: 'agent',
             content: event.content,
@@ -62,21 +59,22 @@ export function WsProvider({ children }: { children: ReactNode }) {
             timestamp: new Date().toISOString(),
           });
 
-          // Update agent activity indicator
           if (event.eventType === 'thought') {
-            store().setAgentActivity(event.taskId, 'Thinking...');
+            store().setAgentActivity(event.sessionId, 'Thinking...');
           } else if (event.eventType === 'action') {
-            if (event.content.startsWith('[tool]')) {
+            if (event.content.startsWith('[tool]') || event.content.startsWith('[tool:')) {
               const label = parseToolActivity(event.content);
-              if (label) store().setAgentActivity(event.taskId, label);
-            } else if (!event.content.startsWith('[tool update]')) {
-              store().setAgentActivity(event.taskId, 'Writing...');
+              if (label) store().setAgentActivity(event.sessionId, label);
+            } else if (event.content.startsWith('[tool update]')) {
+              store().setAgentActivity(event.sessionId, null);
+            } else {
+              store().setAgentActivity(event.sessionId, 'Writing...');
             }
           }
           break;
         }
         case 'awaiting_input': {
-          store().appendChatMessage(event.taskId, {
+          store().appendChatMessage(event.sessionId, {
             id: event.inputId,
             role: 'agent',
             content: event.question,
@@ -86,37 +84,38 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().addPendingInput({
             inputId: event.inputId,
             taskId: event.taskId,
+            sessionId: event.sessionId,
             question: event.question,
             receivedAt: Date.now(),
           });
-          store().setAgentActivity(event.taskId, null);
+          store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
         case 'session_started': {
-          store().appendChatMessage(event.taskId, {
-            id: crypto.randomUUID(),
-            role: 'system',
-            content: 'Agent started',
-            eventType: 'status',
-            timestamp: new Date().toISOString(),
-          });
-          store().setAgentActivity(event.taskId, 'Starting...');
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
+          break;
+        }
+        case 'session_ready': {
+          store().setAgentActivity(event.session.id, null);
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
           break;
         }
         case 'session_state_changed': {
           const stateMessages: Record<string, string> = {
-            stopped: 'Agent stopped',
-            crashed: 'Agent crashed',
-            interrupted: 'Agent session interrupted (server restart)',
+            stopped: 'Session ended',
+            crashed: 'Session crashed',
+            interrupted: 'Session interrupted (server restart)',
           };
           const msg = stateMessages[event.state];
           if (msg) {
-            store().appendChatMessage(event.taskId, {
+            store().appendChatMessage(event.sessionId, {
               id: crypto.randomUUID(),
               role: 'system',
               content: msg,
@@ -124,10 +123,11 @@ export function WsProvider({ children }: { children: ReactNode }) {
               timestamp: new Date().toISOString(),
             });
           }
-          store().setAgentActivity(event.taskId, null);
+          store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
           break;
         }
       }

@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
 import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage } from '@agemon/shared';
+import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
 
@@ -23,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * Extract a display name from a repo URL.
@@ -161,10 +162,70 @@ export function runMigrations() {
         }
       }
 
+      // ── v5 migration: add 'ready' to agent_sessions.state CHECK constraint ──
+      if (current < 5) {
+        const hasSessionsTable = db.query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_sessions'"
+        ).get();
+
+        if (hasSessionsTable) {
+          db.run(`
+            CREATE TABLE agent_sessions_new (
+              id                  TEXT PRIMARY KEY,
+              task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+              agent_type          TEXT NOT NULL
+                                    CHECK (agent_type IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              external_session_id TEXT,
+              pid                 INTEGER,
+              state               TEXT NOT NULL DEFAULT 'starting'
+                                    CHECK (state IN ('starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted')),
+              started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+              ended_at            TEXT,
+              exit_code           INTEGER
+            )
+          `);
+
+          db.run(`
+            INSERT INTO agent_sessions_new (id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code)
+            SELECT id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code FROM agent_sessions
+          `);
+
+          db.run('DROP TABLE agent_sessions');
+          db.run('ALTER TABLE agent_sessions_new RENAME TO agent_sessions');
+
+          db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id)');
+          db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state)');
+        }
+      }
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
   }
+}
+
+// ─── ID Generation ───────────────────────────────────────────────────────────
+
+export function generateTaskId(title: string): string {
+  const base = slugify(title);
+  const database = getDb();
+
+  const existing = database.query<{ id: string }, [string, string]>(
+    "SELECT id FROM tasks WHERE id = ? OR id LIKE ? || '-%'"
+  ).all(base, base);
+
+  if (existing.length === 0) return base;
+
+  // Find the highest numeric suffix among collisions
+  let maxSuffix = 1;
+  for (const row of existing) {
+    if (row.id === base) continue;
+    const suffix = row.id.slice(base.length + 1);
+    const num = parseInt(suffix, 10);
+    if (!isNaN(num) && num >= maxSuffix) maxSuffix = num;
+  }
+
+  return `${base}-${maxSuffix + 1}`;
 }
 
 // ─── Query Helpers ────────────────────────────────────────────────────────────
@@ -193,7 +254,7 @@ function parseTask(row: RawTask): Omit<Task, 'repos'> {
 }
 
 const SESSION_STATES = new Set<AgentSessionState>([
-  'starting', 'running', 'stopped', 'crashed', 'interrupted',
+  'starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted',
 ]);
 
 function parseSession(row: AgentSession): AgentSession {
@@ -553,6 +614,44 @@ export const db = {
         FROM awaiting_input WHERE task_id = ? AND status = 'answered'
       ORDER BY timestamp ASC LIMIT ?
     `).all(taskId, taskId, limit);
+
+    const eventTypeMap: Record<string, ChatMessage['eventType']> = {
+      thought: 'thought',
+      action: 'action',
+      await_input: 'input_request',
+      result: 'action',
+      prompt: 'prompt',
+      input_response: 'input_response',
+    };
+
+    return rows.map((row): ChatMessage => ({
+      id: row.id,
+      role: row.role === 'user' ? 'user' : (row.event_type === 'prompt' ? 'user' : 'agent'),
+      content: row.content ?? '',
+      eventType: eventTypeMap[row.event_type] ?? 'thought',
+      timestamp: row.timestamp,
+    }));
+  },
+
+  listChatHistoryBySession(sessionId: string, limit: number): ChatMessage[] {
+    const database = getDb();
+
+    interface RawChatRow {
+      id: string;
+      role: string;
+      content: string;
+      event_type: string;
+      timestamp: string;
+    }
+
+    const rows = database.query<RawChatRow, [string, string, number]>(`
+      SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
+        FROM acp_events WHERE session_id = ?
+      UNION ALL
+      SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
+        FROM awaiting_input WHERE session_id = ? AND status = 'answered'
+      ORDER BY timestamp ASC LIMIT ?
+    `).all(sessionId, sessionId, limit);
 
     const eventTypeMap: Record<string, ChatMessage['eventType']> = {
       thought: 'thought',

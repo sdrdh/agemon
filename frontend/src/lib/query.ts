@@ -18,7 +18,6 @@ export const taskKeys = {
   lists: () => [...taskKeys.all, 'list'] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
   events: (id: string) => [...taskKeys.all, 'events', id] as const,
-  chat: (id: string) => [...taskKeys.all, 'chat', id] as const,
 };
 
 export function tasksListQuery() {
@@ -51,22 +50,32 @@ export function taskEventsQuery(id: string, limit = 500) {
   };
 }
 
-export function taskChatQuery(id: string, limit = 500) {
-  return {
-    queryKey: taskKeys.chat(id),
-    queryFn: (): Promise<ChatMessage[]> => api.getChatHistory(id, limit),
-    enabled: !!id,
-  };
-}
-
 export const sessionKeys = {
   all: ['sessions'] as const,
   list: () => [...sessionKeys.all, 'list'] as const,
+  forTask: (taskId: string) => [...sessionKeys.all, 'task', taskId] as const,
+  chat: (sessionId: string) => [...sessionKeys.all, 'chat', sessionId] as const,
 };
 
 export function sessionsListQuery(limit = 100) {
   return {
     queryKey: sessionKeys.list(),
-    queryFn: (): Promise<AgentSession[]> => api.listSessions(limit),
+    queryFn: (): Promise<AgentSession[]> => api.listAllSessions(limit),
+  };
+}
+
+export function taskSessionsQuery(taskId: string) {
+  return {
+    queryKey: sessionKeys.forTask(taskId),
+    queryFn: (): Promise<AgentSession[]> => api.getTaskSessions(taskId),
+    enabled: !!taskId,
+  };
+}
+
+export function sessionChatQuery(sessionId: string, limit = 500) {
+  return {
+    queryKey: sessionKeys.chat(sessionId),
+    queryFn: (): Promise<ChatMessage[]> => api.getSessionChat(sessionId, limit),
+    enabled: !!sessionId,
   };
 }

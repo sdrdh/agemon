@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 4
+-- Version: 5
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   external_session_id TEXT,          -- Provider session ID for --resume (set after first output)
   pid                 INTEGER,       -- OS process ID; NULL if not running
   state               TEXT NOT NULL DEFAULT 'starting'
-                        CHECK (state IN ('starting', 'running', 'stopped', 'crashed', 'interrupted')),
+                        CHECK (state IN ('starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted')),
   started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   ended_at            TEXT,          -- NULL while running
   exit_code           INTEGER        -- NULL while running; 0=clean exit; non-zero=error

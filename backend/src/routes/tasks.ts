@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { randomUUID } from 'crypto';
-import { db } from '../db/client.ts';
+import { db, generateTaskId } from '../db/client.ts';
 import { broadcast } from '../server.ts';
-import { spawnAgent, stopAgent, getRunningSession } from '../lib/acp.ts';
+import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession } from '../lib/acp.ts';
 import { gitManager } from '../lib/git.ts';
-import type { CreateTaskBody, UpdateTaskBody, AgentType, Task } from '@agemon/shared';
+import type { CreateTaskBody, UpdateTaskBody, CreateSessionBody, AgentType, Task, TaskStatus } from '@agemon/shared';
 import { AGENT_TYPES, SSH_REPO_REGEX } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
@@ -37,7 +36,11 @@ function requireTask(id: string): Task {
   return task!;
 }
 
+const VALID_TASK_STATUSES = new Set<TaskStatus>(['todo', 'working', 'awaiting_input', 'done']);
+
 export const tasksRoutes = new Hono();
+
+// ── Task CRUD ────────────────────────────────────────────────────────────────
 
 tasksRoutes.get('/tasks', (c) => {
   return c.json(db.listTasks());
@@ -64,7 +67,7 @@ tasksRoutes.post('/tasks', async (c) => {
   validateTaskFields({ title, description, agent: agentType });
 
   const task = db.createTask({
-    id: randomUUID(),
+    id: generateTaskId(title),
     title,
     description: description ?? null,
     status: 'todo',
@@ -96,14 +99,31 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
     sendError(400, 'Request body must be valid JSON');
   }
 
-  const { title, description, agent, repos } = body;
+  const { title, description, agent, repos, status } = body;
   validateTaskFields({ title, description, agent });
+
+  if (status !== undefined && !VALID_TASK_STATUSES.has(status)) {
+    sendError(400, `status must be one of: ${[...VALID_TASK_STATUSES].join(', ')}`);
+  }
 
   if (repos !== undefined) {
     validateRepoUrls(repos);
   }
 
-  const updated = db.updateTask(task.id, { title, description, agent, repos });
+  // Handle "mark done" — clean up worktrees
+  if (status === 'done' && task.status !== 'done') {
+    // Stop any active sessions first
+    const active = getActiveSession(task.id);
+    if (active) {
+      try { stopAgent(active.id); } catch { /* already stopping */ }
+    }
+    // Clean up worktrees
+    await gitManager.deleteTaskWorktrees(task.id).catch((err) => {
+      console.warn(`[routes] failed to clean worktrees for task ${task.id}:`, err);
+    });
+  }
+
+  const updated = db.updateTask(task.id, { title, description, agent, repos, status });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
   broadcast({ type: 'task_updated', task: updated });
   return c.json(updated);
@@ -115,9 +135,9 @@ tasksRoutes.delete('/tasks/:id', (c) => {
   if (!task) sendError(404, 'Task not found');
 
   // Stop any running agent before deleting
-  const running = getRunningSession(id);
-  if (running) {
-    try { stopAgent(running.id); } catch { /* already stopping */ }
+  const active = getActiveSession(id);
+  if (active) {
+    try { stopAgent(active.id); } catch { /* already stopping */ }
   }
 
   db.deleteTask(id);
@@ -133,33 +153,111 @@ tasksRoutes.get('/tasks/:id/events', (c) => {
   return c.json(events);
 });
 
-tasksRoutes.post('/tasks/:id/start', async (c) => {
+// ── Sessions ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /tasks/:id/sessions — create a new session for a task.
+ * Spawns an agent process, runs ACP handshake, returns session in `starting` state.
+ * Worktrees are created on first session for the task.
+ */
+tasksRoutes.post('/tasks/:id/sessions', async (c) => {
   const task = requireTask(c.req.param('id'));
-  if (task.status !== 'todo') {
-    sendError(400, 'Task must be in todo status to start');
+
+  let body: CreateSessionBody = {};
+  try {
+    const raw = await c.req.text();
+    if (raw) body = JSON.parse(raw);
+  } catch {
+    sendError(400, 'Request body must be valid JSON');
   }
 
-  // Create worktrees for each attached repo
-  for (const repo of task.repos) {
-    try {
-      await gitManager.createWorktree(task.id, repo.url);
-    } catch (err) {
-      await gitManager.deleteTaskWorktrees(task.id).catch(() => {});
-      sendError(500, `Failed to create worktree for ${repo.name}: ${(err as Error).message}`);
+  const agentType = body.agentType ?? task.agent;
+  if (!(AGENT_TYPES as readonly string[]).includes(agentType)) {
+    sendError(400, `agentType must be one of: ${[...AGENT_TYPES].join(', ')}`);
+  }
+
+  // Create worktrees if this is the first session for the task
+  const existingSessions = db.listSessions(task.id);
+  if (existingSessions.length === 0) {
+    for (const repo of task.repos) {
+      try {
+        await gitManager.createWorktree(task.id, repo.url);
+      } catch (err) {
+        await gitManager.deleteTaskWorktrees(task.id).catch(() => {});
+        sendError(500, `Failed to create worktree for ${repo.name}: ${(err as Error).message}`);
+      }
     }
   }
 
   try {
-    const session = spawnAgent(task.id, task.agent);
+    const session = spawnAndHandshake(task.id, agentType);
     return c.json(session, 202);
   } catch (err) {
     sendError(500, (err as Error).message);
   }
 });
 
+/**
+ * GET /tasks/:id/sessions — list all sessions for a task.
+ */
+tasksRoutes.get('/tasks/:id/sessions', (c) => {
+  const task = requireTask(c.req.param('id'));
+  return c.json(db.listSessions(task.id));
+});
+
+/**
+ * GET /sessions/:id/chat — get chat history for a specific session.
+ */
+tasksRoutes.get('/sessions/:id/chat', (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+
+  const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
+  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 5000 ? 500 : limitParam;
+  const messages = db.listChatHistoryBySession(sessionId, limit);
+  return c.json(messages);
+});
+
+/**
+ * POST /sessions/:id/stop — stop a specific session.
+ */
+tasksRoutes.post('/sessions/:id/stop', (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+  if (session!.state !== 'running' && session!.state !== 'ready' && session!.state !== 'starting') {
+    sendError(400, `Session is in state ${session!.state}, not stoppable`);
+  }
+  try {
+    stopAgent(sessionId);
+    return c.json({ message: 'Stop signal sent', sessionId });
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
+});
+
+/**
+ * POST /sessions/:id/resume — resume a stopped/crashed session.
+ */
+tasksRoutes.post('/sessions/:id/resume', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+
+  try {
+    const resumed = await resumeSession(sessionId);
+    return c.json(resumed, 202);
+  } catch (err) {
+    sendError(400, (err as Error).message);
+  }
+});
+
+// ── Legacy endpoints (backward compat) ──────────────────────────────────────
+
 tasksRoutes.post('/tasks/:id/stop', (c) => {
   const task = requireTask(c.req.param('id'));
-  const session = getRunningSession(task.id);
+  const session = getActiveSession(task.id);
   if (!session) {
     sendError(404, 'No running session found for this task');
   }
@@ -178,6 +276,8 @@ tasksRoutes.get('/tasks/:id/chat', (c) => {
   const messages = db.listChatHistory(task.id, limit);
   return c.json(messages);
 });
+
+// ── Global session + repo endpoints ──────────────────────────────────────────
 
 tasksRoutes.get('/sessions', (c) => {
   const limitParam = parseInt(c.req.query('limit') ?? '100', 10);

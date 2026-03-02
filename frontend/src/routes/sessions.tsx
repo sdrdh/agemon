@@ -9,6 +9,10 @@ const STATE_STYLES: Record<AgentSessionState, { label: string; className: string
     label: 'Starting',
     className: 'border-transparent bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
   },
+  ready: {
+    label: 'Ready',
+    className: 'border-transparent bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300',
+  },
   running: {
     label: 'Running',
     className: 'border-transparent bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',

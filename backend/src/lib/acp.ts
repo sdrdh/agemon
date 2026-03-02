@@ -2,14 +2,19 @@
  * ACP (Agent Client Protocol) session manager.
  *
  * Spawns agent processes, performs the JSON-RPC 2.0 handshake
- * (initialize → session/new → session/prompt), maps agent session/update
- * notifications to internal event types, and handles graceful shutdown.
+ * (initialize → session/new), waits for user prompt, then fires
+ * session/prompt. Maps agent session/update notifications to
+ * internal event types and handles graceful shutdown.
+ *
+ * Session lifecycle: starting → ready → running → stopped/crashed
+ * - ready = process spawned + ACP handshake done, waiting for first prompt
+ * - running = prompt turn in flight
  */
 
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentSession, AgentType } from '@agemon/shared';
+import type { AgentSession, AgentSessionState, AgentType } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
@@ -20,6 +25,7 @@ interface RunningSession {
   proc: ReturnType<typeof Bun.spawn>;
   transport: JsonRpcTransport;
   sessionId: string;
+  taskId: string;
   acpSessionId: string | null;
   turnInFlight: boolean;
   /** Stable ID for the current streaming message (accumulates chunks). */
@@ -33,26 +39,57 @@ const userStopped = new Set<string>(); // Track sessions stopped by user
 const KILL_TIMEOUT_MS = 5_000;
 const SHUTDOWN_REQUEST_TIMEOUT_MS = 3_000;
 
-// ─── ACP Lifecycle ───────────────────────────────────────────────────────────
+// ─── Task Status Derivation ─────────────────────────────────────────────────
 
 /**
- * Run the ACP handshake and prompt turn for a session.
- * Called asynchronously after spawn; errors are logged, not thrown.
+ * Derive and update task status from the current state of all its sessions.
+ * Called whenever a session state changes.
  */
-async function runAcpLifecycle(
+function deriveTaskStatus(taskId: string): void {
+  const task = db.getTask(taskId);
+  if (!task || task.status === 'done') return; // don't override explicit done
+
+  const taskSessions = db.listSessions(taskId);
+
+  const hasRunning = taskSessions.some(s => s.state === 'running');
+  const hasReady = taskSessions.some(s => s.state === 'ready' || s.state === 'starting');
+  const hasPendingInput = db.listPendingInputs(taskId).length > 0;
+
+  let newStatus = task.status;
+  if (hasRunning) {
+    newStatus = 'working';
+  } else if (hasPendingInput) {
+    newStatus = 'awaiting_input';
+  } else if (hasReady) {
+    // Sessions exist but none running yet — still todo
+    newStatus = 'todo';
+  } else {
+    // All sessions stopped/crashed — back to todo (user must mark done explicitly)
+    newStatus = 'todo';
+  }
+
+  if (newStatus !== task.status) {
+    db.updateTask(taskId, { status: newStatus });
+    const updated = db.getTask(taskId);
+    if (updated) broadcast({ type: 'task_updated', task: updated });
+  }
+}
+
+// ─── ACP Handshake ──────────────────────────────────────────────────────────
+
+/**
+ * Run the ACP handshake only (initialize + session/new).
+ * Transitions session to `ready` state — does NOT send a prompt.
+ */
+async function runAcpHandshake(
   transport: JsonRpcTransport,
   sessionId: string,
   taskId: string,
-  task: { title: string; description: string | null },
   cwd: string
 ): Promise<void> {
-  // Mark turn as in-flight for the initial prompt
-  const runningSession = sessions.get(sessionId);
-  if (runningSession) runningSession.turnInFlight = true;
-
   try {
     // 1. Initialize — exchange capabilities
-    await transport.request('initialize', {
+    const initResult = await transport.request('initialize', {
       protocolVersion: 1,
       clientInfo: { name: 'agemon', version: '1.0.0' },
       clientCapabilities: {
@@ -60,6 +97,14 @@ async function runAcpLifecycle(
         terminal: true,
       },
     });
+
+    // Store loadSession capability for resume support
+    const capabilities = initResult &&
+      typeof initResult === 'object' &&
+      'capabilities' in (initResult as Record<string, unknown>)
+        ? (initResult as Record<string, unknown>).capabilities as Record<string, unknown> | undefined
+        : undefined;
+    const supportsLoadSession = !!capabilities?.loadSession;
 
     // 2. Create ACP session via session/new
     const sessionResult = await transport.request('session/new', {
@@ -76,53 +121,25 @@ async function runAcpLifecycle(
         : null;
 
     // Store ACP session ID on the running session
-    if (runningSession && acpSessionId) {
-      runningSession.acpSessionId = acpSessionId;
+    const rs = sessions.get(sessionId);
+    if (rs && acpSessionId) {
+      rs.acpSessionId = acpSessionId;
     }
 
-    // Transition to running
+    // Transition to ready (not running — waiting for first prompt)
     const extra: { external_session_id?: string } = {};
     if (acpSessionId) extra.external_session_id = acpSessionId;
 
-    db.updateSessionState(sessionId, 'running', extra);
-    broadcast({
-      type: 'session_started',
-      taskId,
-      session: db.getSession(sessionId)!,
-    });
-    db.updateTask(taskId, { status: 'working' });
-    const updatedTask = db.getTask(taskId);
-    if (updatedTask) broadcast({ type: 'task_updated', task: updatedTask });
+    db.updateSessionState(sessionId, 'ready', extra);
 
-    // 3. Send prompt turn with the task
-    const prompt = task.description
-      ? `${task.title}\n\n${task.description}`
-      : task.title;
+    const session = db.getSession(sessionId)!;
+    broadcast({ type: 'session_ready', taskId, session });
 
-    if (!acpSessionId) {
-      throw new Error('No ACP session ID returned from session/new');
-    }
-
-    // session/prompt is a long-running request — results stream as notifications
-    // Use a long timeout (10 minutes) since agent work can take a while
-    await transport.request('session/prompt', {
-      sessionId: acpSessionId,
-      prompt: [{ type: 'text', text: prompt }],
-    });
-
-    console.info(`[acp] session ${sessionId} prompt turn completed`);
+    console.info(`[acp] session ${sessionId} ready (ACP handshake done, supportsLoad=${supportsLoadSession})`);
   } catch (err) {
     if (!transport.isClosed) {
-      console.error(`[acp] lifecycle error for session ${sessionId}:`, err);
+      console.error(`[acp] handshake error for session ${sessionId}:`, err);
     }
-    // Lifecycle failure doesn't necessarily mean the process died —
-    // handleExit will take care of final state transitions
-  } finally {
-    // Flush any accumulated streaming message
-    flushCurrentMessage(sessionId, taskId);
-    // Mark initial turn as complete so follow-up turns can be sent
-    const rs = sessions.get(sessionId);
-    if (rs) rs.turnInFlight = false;
   }
 }
 
@@ -157,7 +174,7 @@ function handleNotification(
       type: 'thought',
       content: line,
     });
-    broadcast({ type: 'agent_thought', taskId, content: line, eventType: 'thought' });
+    broadcast({ type: 'agent_thought', taskId, sessionId, content: line, eventType: 'thought' });
     return;
   }
 
@@ -170,7 +187,7 @@ function handleNotification(
     type: 'thought',
     content: `[${method}] ${content}`,
   });
-  broadcast({ type: 'agent_thought', taskId, content: `[${method}] ${content}`, eventType: 'thought' });
+  broadcast({ type: 'agent_thought', taskId, sessionId, content: `[${method}] ${content}`, eventType: 'thought' });
 }
 
 /**
@@ -232,7 +249,7 @@ function handleSessionUpdate(
 
       // Broadcast the delta with a stable messageId so frontend can merge
       broadcast({
-        type: 'agent_thought', taskId, content: text,
+        type: 'agent_thought', taskId, sessionId, content: text,
         eventType: 'action', messageId: rs.currentMessageId,
       });
       break;
@@ -252,7 +269,7 @@ function handleSessionUpdate(
       rs.currentMessageText += text;
 
       broadcast({
-        type: 'agent_thought', taskId, content: text,
+        type: 'agent_thought', taskId, sessionId, content: text,
         eventType: 'thought', messageId: rs.currentMessageId,
       });
       break;
@@ -262,9 +279,12 @@ function handleSessionUpdate(
       // Flush any pending streaming message before tool output
       flushCurrentMessage(sessionId, taskId);
 
+      const toolCallId = (update.toolCallId as string) ?? '';
       const title = (update.title as string) ?? 'tool';
       const status = (update.status as string) ?? '';
-      const content = `[tool] ${title} (${status})`;
+      const content = toolCallId
+        ? `[tool:${toolCallId}] ${title} (${status})`
+        : `[tool] ${title} (${status})`;
 
       db.insertEvent({
         id: randomUUID(),
@@ -273,7 +293,7 @@ function handleSessionUpdate(
         type: 'action',
         content,
       });
-      broadcast({ type: 'agent_thought', taskId, content, eventType: 'action' });
+      broadcast({ type: 'agent_thought', taskId, sessionId, content, eventType: 'action' });
       break;
     }
 
@@ -290,7 +310,7 @@ function handleSessionUpdate(
         type: 'action',
         content,
       });
-      broadcast({ type: 'agent_thought', taskId, content, eventType: 'action' });
+      broadcast({ type: 'agent_thought', taskId, sessionId, content, eventType: 'action' });
       break;
     }
 
@@ -310,60 +330,35 @@ async function handleExit(
   taskId: string
 ): Promise<void> {
   const exitCode = await proc.exited;
-  const state = exitCode === 0 ? 'stopped' : 'crashed';
+  const state: AgentSessionState = exitCode === 0 ? 'stopped' : 'crashed';
 
   transport.close();
   db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
   sessions.delete(sessionId);
+  userStopped.delete(sessionId);
 
   broadcast({ type: 'session_state_changed', sessionId, taskId, state });
 
-  // If no more active sessions for this task, update task status
-  const runningSessions = db
-    .listSessions(taskId)
-    .filter((s) => s.state === 'running' || s.state === 'starting');
-
-  // Always clean up userStopped, even if other sessions remain
-  const wasUserStopped = userStopped.has(sessionId);
-  userStopped.delete(sessionId);
-
-  if (runningSessions.length === 0) {
-
-    if (state === 'stopped' && !wasUserStopped) {
-      // Agent exited cleanly on its own -> task is done
-      db.updateTask(taskId, { status: 'done' });
-    } else {
-      // User-stopped or crashed -> back to todo
-      db.updateTask(taskId, { status: 'todo' });
-    }
-    const task = db.getTask(taskId);
-    if (task) broadcast({ type: 'task_updated', task });
-  }
+  // Derive task status from remaining sessions
+  deriveTaskStatus(taskId);
 
   console.info(`[acp] session ${sessionId} exited with code ${exitCode} (${state})`);
 }
 
-// ─── Exported API ────────────────────────────────────────────────────────────
+// ─── Spawn Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Spawn an ACP agent process for a task and begin the JSON-RPC lifecycle.
- * Returns the initial AgentSession record (state: starting).
+ * Create the process, transport, and session map entry.
+ * Returns the sessionId. Does NOT run the handshake.
  */
-export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
+function spawnProcess(
+  sessionId: string,
+  taskId: string,
+  agentType: AgentType
+): RunningSession {
   const binaryPath = resolveAgentBinary(agentType);
   const config = AGENT_CONFIGS[agentType];
-  const sessionId = randomUUID();
-
-  db.insertSession({
-    id: sessionId,
-    task_id: taskId,
-    agent_type: agentType,
-    pid: null,
-  });
-
   const env = buildAgentEnv(agentType);
-
-  // Build the full command: replace the first element with the resolved binary path
   const command = [binaryPath, ...config.command.slice(1)];
 
   const proc = Bun.spawn(command, {
@@ -373,13 +368,12 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
     env,
   });
 
-  const updated = db.updateSessionState(sessionId, 'starting', { pid: proc.pid });
+  db.updateSessionState(sessionId, 'starting', { pid: proc.pid });
 
-  // Create JSON-RPC transport over the process's stdio
   const transport = new JsonRpcTransport({
     stdin: proc.stdin,
     stdout: proc.stdout as ReadableStream<Uint8Array>,
-    timeoutMs: 600_000, // 10 minutes for long-running prompt turns
+    timeoutMs: 600_000,
   });
 
   // Register notification handler
@@ -390,16 +384,13 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
   // Register incoming request handler (for agent -> client requests)
   transport.onRequest((method, params) => {
     if (method === 'requestPermission') {
-      // Auto-approve all tool calls for headless operation
       const reqParams = params as Record<string, unknown> | undefined;
       const options = (reqParams?.options ?? []) as Array<{ kind: string; optionId: string }>;
-      // Prefer allow_once or allow_always
       const allowOption = options.find((o) => o.kind === 'allow_once' || o.kind === 'allow_always');
       if (allowOption) {
         console.info(`[acp] auto-approved permission for session ${sessionId}`);
         return { outcome: { outcome: 'selected', optionId: allowOption.optionId } };
       }
-      // Fallback: select the first option
       if (options.length > 0) {
         return { outcome: { outcome: 'selected', optionId: options[0].optionId } };
       }
@@ -410,56 +401,62 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
     return {};
   });
 
-  sessions.set(sessionId, {
-    proc, transport, sessionId, acpSessionId: null, turnInFlight: false,
+  const rs: RunningSession = {
+    proc, transport, sessionId, taskId, acpSessionId: null, turnInFlight: false,
     currentMessageId: null, currentMessageText: '', currentMessageType: 'action',
-  });
+  };
 
-  // Run the ACP lifecycle asynchronously
-  const task = db.getTask(taskId);
-  if (!task) {
-    console.error(`[acp] task ${taskId} not found — killing spawned process`);
-    proc.kill('SIGKILL');
-    transport.close();
-    sessions.delete(sessionId);
-    db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
-    throw new Error(`Task ${taskId} not found`);
-  }
-
-  // Resolve working directory: use first repo's worktree if available
-  const agentCwd = task.repos.length > 0
-    ? gitManager.getWorktreePath(taskId, task.repos[0].name)
-    : process.cwd();
-
-  runAcpLifecycle(transport, sessionId, taskId, {
-    title: task.title,
-    description: task.description,
-  }, agentCwd).catch((err) => {
-    console.error(`[acp] lifecycle error for session ${sessionId}:`, err);
-  });
+  sessions.set(sessionId, rs);
 
   // Monitor process exit
   handleExit(proc, transport, sessionId, taskId).catch((err) => {
     console.error(`[acp] handleExit error for session ${sessionId}:`, err);
   });
 
-  return updated!;
+  return rs;
 }
 
+// ─── Exported API ────────────────────────────────────────────────────────────
+
 /**
- * Send a user's input response to the running agent via JSON-RPC.
- * Returns true if the message was sent, false if no active session was found.
+ * Spawn an ACP agent process for a task, run the handshake,
+ * and transition to `ready` state. Does NOT send a prompt.
+ * Returns the session in `starting` state (handshake is async).
  */
-export function sendInputToAgent(sessionId: string, inputId: string, response: string): boolean {
-  const entry = sessions.get(sessionId);
-  if (!entry || entry.transport.isClosed) return false;
+export function spawnAndHandshake(taskId: string, agentType: AgentType): AgentSession {
+  const sessionId = randomUUID();
 
-  entry.transport.notify('acp/inputResponse', { inputId, response });
-  return true;
+  db.insertSession({
+    id: sessionId,
+    task_id: taskId,
+    agent_type: agentType,
+    pid: null,
+  });
+
+  const task = db.getTask(taskId);
+  if (!task) {
+    db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
+    throw new Error(`Task ${taskId} not found`);
+  }
+
+  const rs = spawnProcess(sessionId, taskId, agentType);
+
+  // Resolve working directory
+  const agentCwd = task.repos.length > 0
+    ? gitManager.getWorktreePath(taskId, task.repos[0].name)
+    : process.cwd();
+
+  // Run handshake asynchronously (transitions to ready)
+  runAcpHandshake(rs.transport, sessionId, taskId, agentCwd).catch((err) => {
+    console.error(`[acp] handshake error for session ${sessionId}:`, err);
+  });
+
+  return db.getSession(sessionId)!;
 }
 
 /**
- * Send a follow-up prompt turn to a running agent session.
+ * Send a prompt turn to a session. Handles both first prompt (ready → running)
+ * and follow-up prompts.
  * Throws if a turn is already in flight.
  */
 export async function sendPromptTurn(sessionId: string, content: string): Promise<void> {
@@ -472,10 +469,8 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     throw new Error('Agent is still processing');
   }
 
-  // Set flag immediately after check to prevent race conditions
   entry.turnInFlight = true;
 
-  // Look up taskId from the database session record
   const sessionRecord = db.getSession(sessionId);
   if (!sessionRecord) {
     entry.turnInFlight = false;
@@ -497,20 +492,153 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     throw new Error(`No ACP session ID for session ${sessionId}`);
   }
 
+  // If session is in `ready` state, transition to `running`
+  if (sessionRecord.state === 'ready') {
+    db.updateSessionState(sessionId, 'running');
+    broadcast({
+      type: 'session_state_changed',
+      sessionId,
+      taskId,
+      state: 'running',
+    });
+    deriveTaskStatus(taskId);
+  }
+
   try {
     await entry.transport.request('session/prompt', {
       sessionId: entry.acpSessionId,
       prompt: [{ type: 'text', text: content }],
     });
-    console.info(`[acp] session ${sessionId} follow-up prompt turn completed`);
+    console.info(`[acp] session ${sessionId} prompt turn completed`);
   } catch (err) {
     if (!entry.transport.isClosed) {
-      console.error(`[acp] follow-up prompt turn error for session ${sessionId}:`, err);
+      console.error(`[acp] prompt turn error for session ${sessionId}:`, err);
     }
   } finally {
     flushCurrentMessage(sessionId, taskId);
     entry.turnInFlight = false;
   }
+}
+
+/**
+ * Resume a stopped/crashed session by spawning a new process.
+ * Attempts session/load if the agent supports it, falls back to session/new.
+ */
+export async function resumeSession(sessionId: string): Promise<AgentSession> {
+  const sessionRecord = db.getSession(sessionId);
+  if (!sessionRecord) {
+    throw new Error(`Session ${sessionId} not found`);
+  }
+  if (sessionRecord.state !== 'stopped' && sessionRecord.state !== 'crashed') {
+    throw new Error(`Session ${sessionId} is in state ${sessionRecord.state}, can only resume stopped or crashed sessions`);
+  }
+
+  const taskId = sessionRecord.task_id;
+  const task = db.getTask(taskId);
+  if (!task) {
+    throw new Error(`Task ${taskId} not found`);
+  }
+
+  const agentType = sessionRecord.agent_type;
+  const storedExternalId = sessionRecord.external_session_id;
+
+  // Reset session state for re-use
+  db.updateSessionState(sessionId, 'starting', { pid: null, exit_code: null });
+
+  const rs = spawnProcess(sessionId, taskId, agentType);
+
+  const agentCwd = task.repos.length > 0
+    ? gitManager.getWorktreePath(taskId, task.repos[0].name)
+    : process.cwd();
+
+  // Run handshake, then attempt session/load
+  try {
+    // 1. Initialize
+    const initResult = await rs.transport.request('initialize', {
+      protocolVersion: 1,
+      clientInfo: { name: 'agemon', version: '1.0.0' },
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+        terminal: true,
+      },
+    });
+
+    const capabilities = initResult &&
+      typeof initResult === 'object' &&
+      'capabilities' in (initResult as Record<string, unknown>)
+        ? (initResult as Record<string, unknown>).capabilities as Record<string, unknown> | undefined
+        : undefined;
+    const supportsLoadSession = !!capabilities?.loadSession;
+
+    let acpSessionId: string | null = null;
+
+    // 2. Try session/load if supported and we have a stored external ID
+    if (supportsLoadSession && storedExternalId) {
+      try {
+        const loadResult = await rs.transport.request('session/load', {
+          sessionId: storedExternalId,
+          cwd: agentCwd,
+          mcpServers: [],
+        });
+
+        acpSessionId = loadResult &&
+          typeof loadResult === 'object' &&
+          'sessionId' in (loadResult as Record<string, unknown>)
+            ? String((loadResult as Record<string, unknown>).sessionId)
+            : storedExternalId;
+
+        console.info(`[acp] session ${sessionId} resumed via session/load`);
+      } catch (err) {
+        console.warn(`[acp] session/load failed for ${sessionId}, falling back to session/new:`, err);
+        acpSessionId = null;
+      }
+    }
+
+    // 3. Fall back to session/new if load didn't work
+    if (!acpSessionId) {
+      const sessionResult = await rs.transport.request('session/new', {
+        cwd: agentCwd,
+        mcpServers: [],
+      });
+
+      acpSessionId = sessionResult &&
+        typeof sessionResult === 'object' &&
+        'sessionId' in (sessionResult as Record<string, unknown>)
+          ? String((sessionResult as Record<string, unknown>).sessionId)
+          : null;
+
+      console.info(`[acp] session ${sessionId} resumed via session/new (fresh)`);
+    }
+
+    if (rs && acpSessionId) {
+      rs.acpSessionId = acpSessionId;
+    }
+
+    const extra: { external_session_id?: string } = {};
+    if (acpSessionId) extra.external_session_id = acpSessionId;
+
+    db.updateSessionState(sessionId, 'ready', extra);
+    const session = db.getSession(sessionId)!;
+    broadcast({ type: 'session_ready', taskId, session });
+
+    return session;
+  } catch (err) {
+    console.error(`[acp] resume error for session ${sessionId}:`, err);
+    // Don't change state here — handleExit will handle it when the process dies
+    throw err;
+  }
+}
+
+/**
+ * Send a user's input response to the running agent via JSON-RPC.
+ * Returns true if the message was sent, false if no active session was found.
+ */
+export function sendInputToAgent(sessionId: string, inputId: string, response: string): boolean {
+  const entry = sessions.get(sessionId);
+  if (!entry || entry.transport.isClosed) return false;
+
+  entry.transport.notify('acp/inputResponse', { inputId, response });
+  return true;
 }
 
 /**
@@ -554,23 +682,23 @@ export function stopAgent(sessionId: string): void {
 }
 
 /**
- * Get a running or starting session for a task.
+ * Get a running, ready, or starting session for a task.
  */
-export function getRunningSession(taskId: string): AgentSession | null {
+export function getActiveSession(taskId: string): AgentSession | null {
   const taskSessions = db.listSessions(taskId);
-  return taskSessions.find((s) => s.state === 'running' || s.state === 'starting') ?? null;
+  return taskSessions.find((s) => s.state === 'running' || s.state === 'ready' || s.state === 'starting') ?? null;
 }
 
 /**
- * On server startup, mark any sessions that were running/starting as interrupted.
+ * On server startup, mark any sessions that were running/starting/ready as interrupted.
  */
 export function recoverInterruptedSessions(): void {
-  const startingSessions = db.listSessionsByState('starting');
-  const runningSessions = db.listSessionsByState('running');
-
-  for (const session of [...startingSessions, ...runningSessions]) {
-    db.updateSessionState(session.id, 'interrupted', { pid: null });
-    console.info(`[acp] marked session ${session.id} as interrupted (crash recovery)`);
+  for (const state of ['starting', 'ready', 'running'] as const) {
+    const stateSessions = db.listSessionsByState(state);
+    for (const session of stateSessions) {
+      db.updateSessionState(session.id, 'interrupted', { pid: null });
+      console.info(`[acp] marked session ${session.id} as interrupted (crash recovery)`);
+    }
   }
 }
 
