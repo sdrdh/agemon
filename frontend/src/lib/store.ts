@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ChatMessage } from '@agemon/shared';
 
 interface PendingInput {
   inputId: string;
@@ -9,39 +10,47 @@ interface PendingInput {
 
 interface WsState {
   connected: boolean;
-  thoughts: Record<string, string[]>;
+  chatMessages: Record<string, ChatMessage[]>;
   pendingInputs: PendingInput[];
   setConnected: (connected: boolean) => void;
-  appendThought: (taskId: string, content: string) => void;
-  clearThoughts: (taskId: string) => void;
+  appendChatMessage: (taskId: string, msg: ChatMessage) => void;
+  setChatMessages: (taskId: string, msgs: ChatMessage[]) => void;
+  clearChatMessages: (taskId: string) => void;
   addPendingInput: (input: PendingInput) => void;
   removePendingInput: (inputId: string) => void;
 }
 
-const MAX_THOUGHTS_PER_TASK = 500;
+const MAX_MESSAGES_PER_TASK = 500;
 
 export const useWsStore = create<WsState>((set) => ({
   connected: false,
-  thoughts: {},
+  chatMessages: {},
   pendingInputs: [],
 
   setConnected: (connected) => set({ connected }),
 
-  appendThought: (taskId, content) =>
+  appendChatMessage: (taskId, msg) =>
     set((state) => {
-      const existing = state.thoughts[taskId] ?? [];
-      const updated = [...existing, content];
-      const trimmed = updated.length > MAX_THOUGHTS_PER_TASK
-        ? updated.slice(updated.length - MAX_THOUGHTS_PER_TASK)
+      const existing = state.chatMessages[taskId] ?? [];
+      // Dedup: skip if msg.id already exists
+      if (existing.some((m) => m.id === msg.id)) return state;
+      const updated = [...existing, msg];
+      const trimmed = updated.length > MAX_MESSAGES_PER_TASK
+        ? updated.slice(updated.length - MAX_MESSAGES_PER_TASK)
         : updated;
-      return { thoughts: { ...state.thoughts, [taskId]: trimmed } };
+      return { chatMessages: { ...state.chatMessages, [taskId]: trimmed } };
     }),
 
-  clearThoughts: (taskId) =>
+  setChatMessages: (taskId, msgs) =>
+    set((state) => ({
+      chatMessages: { ...state.chatMessages, [taskId]: msgs },
+    })),
+
+  clearChatMessages: (taskId) =>
     set((state) => {
-      const { [taskId]: _, ...rest } = state.thoughts;
+      const { [taskId]: _, ...rest } = state.chatMessages;
       void _;
-      return { thoughts: rest };
+      return { chatMessages: rest };
     }),
 
   addPendingInput: (input) =>

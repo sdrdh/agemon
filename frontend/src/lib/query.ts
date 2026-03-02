@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { Task, TasksByProject, ACPEvent } from '@agemon/shared';
+import type { Task, TasksByProject, ACPEvent, ChatMessage, AgentSession } from '@agemon/shared';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,6 +18,7 @@ export const taskKeys = {
   lists: () => [...taskKeys.all, 'list'] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
   events: (id: string) => [...taskKeys.all, 'events', id] as const,
+  chat: (id: string) => [...taskKeys.all, 'chat', id] as const,
 };
 
 export function tasksByProjectQuery() {
@@ -40,5 +41,25 @@ export function taskEventsQuery(id: string, limit = 500) {
     queryKey: taskKeys.events(id),
     queryFn: (): Promise<ACPEvent[]> => api.listEvents(id, limit),
     enabled: !!id,
+  };
+}
+
+export function taskChatQuery(id: string, limit = 500) {
+  return {
+    queryKey: taskKeys.chat(id),
+    queryFn: (): Promise<ChatMessage[]> => api.getChatHistory(id, limit),
+    enabled: !!id,
+  };
+}
+
+export const sessionKeys = {
+  all: ['sessions'] as const,
+  list: () => [...sessionKeys.all, 'list'] as const,
+};
+
+export function sessionsListQuery(limit = 100) {
+  return {
+    queryKey: sessionKeys.list(),
+    queryFn: (): Promise<AgentSession[]> => api.listSessions(limit),
   };
 }

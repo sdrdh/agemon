@@ -12,7 +12,9 @@ import { sendClientEvent } from '@/lib/ws';
 import { taskDetailQuery, taskKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 
-const EMPTY_THOUGHTS: string[] = [];
+import type { ChatMessage } from '@agemon/shared';
+
+const EMPTY_MESSAGES: ChatMessage[] = [];
 
 export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
@@ -22,7 +24,7 @@ export default function TaskDetailView() {
 
   const taskId = id ?? '';
   const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
-  const thoughts = useWsStore((s) => s.thoughts[taskId] ?? EMPTY_THOUGHTS);
+  const chatMessages = useWsStore((s) => s.chatMessages[taskId] ?? EMPTY_MESSAGES);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const pendingInputs = useMemo(
     () => allPendingInputs.filter((p) => p.taskId === taskId),
@@ -31,7 +33,7 @@ export default function TaskDetailView() {
 
   useEffect(() => {
     thoughtsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [thoughts.length]);
+  }, [chatMessages.length]);
 
   const startMutation = useMutation({
     mutationFn: () => api.startTask(taskId),
@@ -160,17 +162,17 @@ export default function TaskDetailView() {
           </div>
         )}
 
-        {(isRunning || thoughts.length > 0) && (
+        {(isRunning || chatMessages.length > 0) && (
           <div>
             <h2 className="text-sm font-medium text-muted-foreground mb-2">
               Agent thoughts {isRunning && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse ml-1" />}
             </h2>
             <div className="rounded-lg border bg-muted/30 p-3 max-h-96 overflow-y-auto font-mono text-xs space-y-1">
-              {thoughts.length === 0 && isRunning && (
+              {chatMessages.length === 0 && isRunning && (
                 <p className="text-muted-foreground">Waiting for agent output...</p>
               )}
-              {thoughts.map((t, i) => (
-                <p key={i} className="break-all whitespace-pre-wrap">{t}</p>
+              {chatMessages.map((m) => (
+                <p key={m.id} className="break-all whitespace-pre-wrap">{m.content}</p>
               ))}
               <div ref={thoughtsEndRef} />
             </div>

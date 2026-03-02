@@ -22,11 +22,24 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'agent_thought': {
-          store().appendThought(event.taskId, event.content);
+          store().appendChatMessage(event.taskId, {
+            id: crypto.randomUUID(),
+            role: 'agent',
+            content: event.content,
+            eventType: event.eventType ?? 'thought',
+            timestamp: new Date().toISOString(),
+          });
           queryClient.invalidateQueries({ queryKey: taskKeys.events(event.taskId) });
           break;
         }
         case 'awaiting_input': {
+          store().appendChatMessage(event.taskId, {
+            id: event.inputId,
+            role: 'agent',
+            content: event.question,
+            eventType: 'input_request',
+            timestamp: new Date().toISOString(),
+          });
           store().addPendingInput({
             inputId: event.inputId,
             taskId: event.taskId,
@@ -38,11 +51,27 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'session_started': {
+          store().appendChatMessage(event.taskId, {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: 'Agent started',
+            eventType: 'status',
+            timestamp: new Date().toISOString(),
+          });
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
         case 'session_state_changed': {
+          if (event.state === 'stopped' || event.state === 'crashed') {
+            store().appendChatMessage(event.taskId, {
+              id: crypto.randomUUID(),
+              role: 'system',
+              content: event.state === 'stopped' ? 'Agent stopped' : 'Agent crashed',
+              eventType: 'status',
+              timestamp: new Date().toISOString(),
+            });
+          }
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
