@@ -171,6 +171,21 @@ tasksRoutes.post('/tasks/:id/stop', (c) => {
   }
 });
 
+tasksRoutes.get('/tasks/:id/chat', (c) => {
+  const task = requireTask(c.req.param('id'));
+  const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
+  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 5000 ? 500 : limitParam;
+  const messages = db.listChatHistory(task.id, limit);
+  return c.json(messages);
+});
+
+tasksRoutes.get('/sessions', (c) => {
+  const limitParam = parseInt(c.req.query('limit') ?? '100', 10);
+  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 1000 ? 100 : limitParam;
+  const sessions = db.listAllSessions(limit);
+  return c.json(sessions);
+});
+
 tasksRoutes.get('/repos', (c) => {
   return c.json(db.listRepos());
 });

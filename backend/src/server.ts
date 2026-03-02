@@ -82,7 +82,7 @@ app.get('/api/health', (c) =>
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input']);
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -155,6 +155,20 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
       if (task) broadcast({ type: 'task_updated', task });
     }
     console.info(`[ws] send_input answered for task=${ev.taskId} input=${ev.inputId}`);
+  }
+
+  if (ev.type === 'send_message') {
+    const { getRunningSession, sendPromptTurn } = await import('./lib/acp.ts');
+    const session = getRunningSession(ev.taskId);
+    if (!session) {
+      console.warn(`[ws] send_message: no running session for task=${ev.taskId}`);
+      return;
+    }
+    try {
+      await sendPromptTurn(session.id, ev.content);
+    } catch (err) {
+      console.error(`[ws] send_message error for task=${ev.taskId}:`, (err as Error).message);
+    }
   }
 });
 

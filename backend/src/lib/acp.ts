@@ -19,6 +19,7 @@ interface RunningSession {
   proc: ReturnType<typeof Bun.spawn>;
   transport: JsonRpcTransport;
   sessionId: string;
+  turnInFlight: boolean;
 }
 
 const sessions = new Map<string, RunningSession>();
@@ -38,6 +39,10 @@ async function runAcpLifecycle(
   taskId: string,
   task: { title: string; description: string | null }
 ): Promise<void> {
+  // Mark turn as in-flight for the initial prompt
+  const runningSession = sessions.get(sessionId);
+  if (runningSession) runningSession.turnInFlight = true;
+
   try {
     // 1. Initialize — exchange capabilities
     const initResult = await transport.request('initialize', {
@@ -92,6 +97,10 @@ async function runAcpLifecycle(
     }
     // Lifecycle failure doesn't necessarily mean the process died —
     // handleExit will take care of final state transitions
+  } finally {
+    // Mark initial turn as complete so follow-up turns can be sent
+    const rs = sessions.get(sessionId);
+    if (rs) rs.turnInFlight = false;
   }
 }
 
@@ -121,7 +130,7 @@ function handleNotification(
         type: 'thought',
         content,
       });
-      broadcast({ type: 'agent_thought', taskId, content });
+      broadcast({ type: 'agent_thought', taskId, content, eventType: 'thought' });
       break;
     }
 
@@ -133,7 +142,7 @@ function handleNotification(
         type: 'action',
         content,
       });
-      broadcast({ type: 'agent_thought', taskId, content });
+      broadcast({ type: 'agent_thought', taskId, content, eventType: 'action' });
       break;
     }
 
@@ -180,7 +189,7 @@ function handleNotification(
         type: 'thought',
         content: line,
       });
-      broadcast({ type: 'agent_thought', taskId, content: line });
+      broadcast({ type: 'agent_thought', taskId, content: line, eventType: 'thought' });
       break;
     }
 
@@ -193,7 +202,7 @@ function handleNotification(
         type: 'thought',
         content: `[${method}] ${content}`,
       });
-      broadcast({ type: 'agent_thought', taskId, content: `[${method}] ${content}` });
+      broadcast({ type: 'agent_thought', taskId, content: `[${method}] ${content}`, eventType: 'thought' });
       break;
     }
   }
@@ -290,7 +299,7 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
     return {};
   });
 
-  sessions.set(sessionId, { proc, transport, sessionId });
+  sessions.set(sessionId, { proc, transport, sessionId, turnInFlight: false });
 
   // Run the ACP lifecycle asynchronously
   const task = db.getTask(taskId);
@@ -328,6 +337,52 @@ export function sendInputToAgent(sessionId: string, inputId: string, response: s
 
   entry.transport.notify('acp/inputResponse', { inputId, response });
   return true;
+}
+
+/**
+ * Send a follow-up prompt turn to a running agent session.
+ * Throws if a turn is already in flight.
+ */
+export async function sendPromptTurn(sessionId: string, content: string): Promise<void> {
+  const entry = sessions.get(sessionId);
+  if (!entry || entry.transport.isClosed) {
+    throw new Error(`No active session found with id ${sessionId}`);
+  }
+
+  if (entry.turnInFlight) {
+    throw new Error('Agent is still processing');
+  }
+
+  // Look up taskId from the database session record
+  const sessionRecord = db.getSession(sessionId);
+  if (!sessionRecord) {
+    throw new Error(`Session ${sessionId} not found in database`);
+  }
+  const taskId = sessionRecord.task_id;
+
+  entry.turnInFlight = true;
+
+  // Store user message as an acp_event with type 'prompt'
+  db.insertEvent({
+    id: randomUUID(),
+    task_id: taskId,
+    session_id: sessionId,
+    type: 'prompt',
+    content,
+  });
+
+  try {
+    await entry.transport.request('acp/promptTurn', {
+      messages: [{ role: 'user', content }],
+    });
+    console.info(`[acp] session ${sessionId} follow-up prompt turn completed`);
+  } catch (err) {
+    if (!entry.transport.isClosed) {
+      console.error(`[acp] follow-up prompt turn error for session ${sessionId}:`, err);
+    }
+  } finally {
+    entry.turnInFlight = false;
+  }
 }
 
 /**

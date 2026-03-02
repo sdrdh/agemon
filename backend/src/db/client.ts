@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage } from '@agemon/shared';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
 
@@ -23,7 +23,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * Extract a display name from a repo URL.
@@ -126,6 +126,38 @@ export function runMigrations() {
 
           db.run('DROP TABLE tasks');
           db.run('ALTER TABLE tasks_new RENAME TO tasks');
+        }
+      }
+
+      // ── v4 migration: add 'prompt' to acp_events.type CHECK constraint ──
+      if (current < 4) {
+        // SQLite doesn't support ALTER COLUMN, so recreate the table
+        const hasEventsTable = db.query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='acp_events'"
+        ).get();
+
+        if (hasEventsTable) {
+          db.run(`
+            CREATE TABLE acp_events_new (
+              id         TEXT PRIMARY KEY,
+              task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+              session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+              type       TEXT NOT NULL CHECK (type IN ('thought', 'action', 'await_input', 'result', 'prompt')),
+              content    TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            )
+          `);
+
+          db.run(`
+            INSERT INTO acp_events_new (id, task_id, session_id, type, content, created_at)
+            SELECT id, task_id, session_id, type, content, created_at FROM acp_events
+          `);
+
+          db.run('DROP TABLE acp_events');
+          db.run('ALTER TABLE acp_events_new RENAME TO acp_events');
+
+          db.run('CREATE INDEX IF NOT EXISTS idx_acp_events_task_id ON acp_events(task_id)');
+          db.run('CREATE INDEX IF NOT EXISTS idx_acp_events_session_id ON acp_events(session_id)');
         }
       }
 
@@ -498,5 +530,52 @@ export const db = {
     const db = getDb();
     db.run('UPDATE diffs SET status = ? WHERE id = ?', [status, id]);
     return db.query<Diff, [string]>('SELECT * FROM diffs WHERE id = ?').get(id) ?? null;
+  },
+
+  // ── Chat History ──
+
+  listChatHistory(taskId: string, limit: number): ChatMessage[] {
+    const database = getDb();
+
+    interface RawChatRow {
+      id: string;
+      role: string;
+      content: string;
+      event_type: string;
+      timestamp: string;
+    }
+
+    const rows = database.query<RawChatRow, [string, string, number]>(`
+      SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
+        FROM acp_events WHERE task_id = ?
+      UNION ALL
+      SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
+        FROM awaiting_input WHERE task_id = ? AND status = 'answered'
+      ORDER BY timestamp ASC LIMIT ?
+    `).all(taskId, taskId, limit);
+
+    const eventTypeMap: Record<string, ChatMessage['eventType']> = {
+      thought: 'thought',
+      action: 'action',
+      await_input: 'input_request',
+      result: 'action',
+      prompt: 'prompt',
+      input_response: 'input_response',
+    };
+
+    return rows.map((row): ChatMessage => ({
+      id: row.id,
+      role: row.role === 'user' ? 'user' : (row.event_type === 'prompt' ? 'user' : 'agent'),
+      content: row.content ?? '',
+      eventType: eventTypeMap[row.event_type] ?? 'thought',
+      timestamp: row.timestamp,
+    }));
+  },
+
+  listAllSessions(limit: number): AgentSession[] {
+    const database = getDb();
+    return database.query<AgentSession, [number]>(
+      'SELECT * FROM agent_sessions ORDER BY started_at DESC LIMIT ?'
+    ).all(limit).map(parseSession);
   },
 };
