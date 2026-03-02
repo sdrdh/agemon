@@ -103,3 +103,8 @@ export interface ApiError {
   message: string;
   statusCode: number;
 }
+
+// ─── Shared Validation ──────────────────────────────────────────────────────
+
+/** Matches SSH repo URLs: git@host:org/repo(.git)? */
+export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;

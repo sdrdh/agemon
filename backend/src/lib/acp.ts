@@ -35,6 +35,7 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
   const { AGEMON_KEY: _, GITHUB_PAT: __, ...safeEnv } = process.env;
 
   const proc = Bun.spawn([binaryPath, '--agent', agentType], {
+    stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'inherit',
     env: safeEnv,

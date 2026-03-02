@@ -4,14 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Plus, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { SSH_REPO_REGEX } from '@agemon/shared';
 import type { Repo } from '@agemon/shared';
 
 interface RepoSelectorProps {
   selected: string[];
   onChange: (urls: string[]) => void;
 }
-
-const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
 
 export function RepoSelector({ selected, onChange }: RepoSelectorProps) {
   const [registryRepos, setRegistryRepos] = useState<Repo[]>([]);

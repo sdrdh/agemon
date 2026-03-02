@@ -37,7 +37,7 @@ export function parseRepoName(url: string): string {
   if (sshMatch) return sshMatch[1];
 
   // HTTPS format: https://host/owner/repo(.git)?
-  const httpsMatch = url.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?$/);
+  const httpsMatch = url.match(/^https?:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/);
   if (httpsMatch) return httpsMatch[1];
 
   return url;
