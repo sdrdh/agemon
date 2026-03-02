@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 2
+-- Version: 3
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS tasks (
   description TEXT CHECK (description IS NULL OR length(description) <= 10000),
   status      TEXT NOT NULL DEFAULT 'todo'
                 CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
-  repos       TEXT NOT NULL DEFAULT '[]',  -- JSON array of repo URLs
   agent       TEXT NOT NULL DEFAULT 'claude-code'
                 CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -70,3 +69,20 @@ CREATE TABLE IF NOT EXISTS diffs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_diffs_task_id ON diffs(task_id);
+
+-- Repository registry
+CREATE TABLE IF NOT EXISTS repos (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  url        TEXT UNIQUE NOT NULL,
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Many-to-many: tasks <-> repos
+CREATE TABLE IF NOT EXISTS task_repos (
+  task_id  TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  repo_id  INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, repo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_repos_repo ON task_repos(repo_id);

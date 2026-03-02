@@ -4,11 +4,9 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { randomUUID } from 'crypto';
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
+import { spawnAgent, stopAgent, getRunningSession } from '../lib/acp.ts';
 import type { CreateTaskBody, UpdateTaskBody, AgentType, Task } from '@agemon/shared';
-import { AGENT_TYPES } from '@agemon/shared';
-
-const isValidRepoUrl = (r: string) =>
-  r.startsWith('https://') || r.startsWith('http://') || r.startsWith('git@') || r.startsWith('/');
+import { AGENT_TYPES, SSH_REPO_REGEX } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
   throw new HTTPException(statusCode as ContentfulStatusCode, { message });
@@ -21,6 +19,15 @@ function validateTaskFields(fields: { title?: string; description?: string | nul
     sendError(400, 'title must be 500 characters or fewer');
   if (fields.description !== undefined && fields.description !== null && fields.description.length > 10000)
     sendError(400, 'description must be 10000 characters or fewer');
+}
+
+function validateRepoUrls(repos: unknown): asserts repos is string[] {
+  if (!Array.isArray(repos)) sendError(400, 'repos must be an array');
+  if (repos.length > 20) sendError(400, 'repos must contain 20 or fewer entries');
+  if (!repos.every(r => typeof r === 'string' && SSH_REPO_REGEX.test(r)))
+    sendError(400, 'each repo must be a valid SSH URL (git@host:org/repo.git)');
+  if (!repos.every(r => r.length <= 500))
+    sendError(400, 'each repo URL must be 500 characters or fewer');
 }
 
 function requireTask(id: string): Task {
@@ -48,34 +55,29 @@ tasksRoutes.post('/tasks', async (c) => {
   if (!title || typeof title !== 'string') {
     sendError(400, 'title is required');
   }
-  if (!Array.isArray(repos) || repos.length === 0) {
-    sendError(400, 'repos must be a non-empty array');
-  }
-  if (!repos.every(r => typeof r === 'string' && r.length > 0 && isValidRepoUrl(r))) {
-    sendError(400, 'each repo must start with https://, http://, git@, or /');
-  }
-  if (repos.length > 20) {
-    sendError(400, 'repos must contain 20 or fewer entries');
-  }
-  if (!repos.every(r => r.length <= 500)) {
-    sendError(400, 'each repo URL must be 500 characters or fewer');
-  }
-  if (!agent) {
-    sendError(400, 'agent is required');
-  }
-  validateTaskFields({ title, description, agent });
+
+  const repoUrls = repos ?? [];
+  validateRepoUrls(repoUrls);
+
+  const agentType = agent ?? 'claude-code';
+  validateTaskFields({ title, description, agent: agentType });
 
   const task = db.createTask({
     id: randomUUID(),
     title,
     description: description ?? null,
     status: 'todo',
-    repos,
-    agent,
+    agent: agentType,
+    repos: repoUrls,
   });
 
   broadcast({ type: 'task_updated', task });
   return c.json(task, 201);
+});
+
+// IMPORTANT: /tasks/by-project MUST be before /tasks/:id to avoid Hono matching "by-project" as an :id
+tasksRoutes.get('/tasks/by-project', (c) => {
+  return c.json(db.listTasksByProject());
 });
 
 tasksRoutes.get('/tasks/:id', (c) => {
@@ -92,18 +94,33 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
   } catch {
     sendError(400, 'Request body must be valid JSON');
   }
-  // Status is system-controlled — strip it from user PATCH requests
-  const { title, description, agent } = body;
+
+  const { title, description, agent, repos } = body;
   validateTaskFields({ title, description, agent });
-  const updated = db.updateTask(task.id, { title, description, agent });
+
+  if (repos !== undefined) {
+    validateRepoUrls(repos);
+  }
+
+  const updated = db.updateTask(task.id, { title, description, agent, repos });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
   broadcast({ type: 'task_updated', task: updated });
   return c.json(updated);
 });
 
 tasksRoutes.delete('/tasks/:id', (c) => {
-  const deleted = db.deleteTask(c.req.param('id'));
-  if (!deleted) sendError(404, 'Task not found');
+  const id = c.req.param('id');
+  const task = db.getTask(id);
+  if (!task) sendError(404, 'Task not found');
+
+  // Stop any running agent before deleting
+  const running = getRunningSession(id);
+  if (running) {
+    try { stopAgent(running.id); } catch { /* already stopping */ }
+  }
+
+  db.deleteTask(id);
+  broadcast({ type: 'task_updated', task: { ...task!, status: 'done' } });
   return new Response(null, { status: 204 });
 });
 
@@ -113,4 +130,35 @@ tasksRoutes.get('/tasks/:id/events', (c) => {
   const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 1000 ? 500 : limitParam;
   const events = db.listEvents(task.id, limit);
   return c.json(events);
+});
+
+tasksRoutes.post('/tasks/:id/start', (c) => {
+  const task = requireTask(c.req.param('id'));
+  if (task.status !== 'todo') {
+    sendError(400, 'Task must be in todo status to start');
+  }
+  try {
+    const session = spawnAgent(task.id, task.agent);
+    return c.json(session, 202);
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
+});
+
+tasksRoutes.post('/tasks/:id/stop', (c) => {
+  const task = requireTask(c.req.param('id'));
+  const session = getRunningSession(task.id);
+  if (!session) {
+    sendError(404, 'No running session found for this task');
+  }
+  try {
+    stopAgent(session!.id);
+    return c.json({ message: 'Stop signal sent', sessionId: session!.id });
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
+});
+
+tasksRoutes.get('/repos', (c) => {
+  return c.json(db.listRepos());
 });

@@ -173,9 +173,22 @@ On boot, the server queries for sessions in `running` or `starting` state:
 2. Each is re-spawned using `--resume <external_session_id>` (if available).
 3. A new `agent_sessions` row is created for the re-spawned process, linked to the same task.
 
+## ACP Agent Integration
+
+Agents communicate via the **Agent Client Protocol (ACP)** — JSON-RPC 2.0 over stdin/stdout.
+
+See [`docs/acp-agents.md`](./acp-agents.md) for:
+- Supported agents (claude-agent-acp, OpenCode, Gemini CLI)
+- Authentication requirements per agent
+- JSON-RPC message format and lifecycle
+- What needs to change in `acp.ts` for full protocol support
+
+**Current status:** `acp.ts` handles session lifecycle (spawn, stop, crash recovery) but does NOT yet implement the JSON-RPC handshake. Agents exit immediately because stdin is not piped. This is the highest-priority remaining backend work (Task 4.1/4.3).
+
 ## Security
 
 - Static token auth: `Authorization: Bearer <AGEMON_KEY>`
 - All API routes require auth (except `/api/health` and `/ws`)
 - GitHub PAT loaded from env, never stored in DB
+- `AGEMON_KEY` and `GITHUB_PAT` are filtered from agent subprocess environments
 - Agents run in isolated git worktrees

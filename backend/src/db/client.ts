@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus } from '@agemon/shared';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
 
@@ -23,7 +23,25 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+/**
+ * Extract a display name from a repo URL.
+ * - SSH:   git@github.com:acme/web.git → acme/web
+ * - HTTPS: https://github.com/org/repo  → org/repo
+ * - Fallback: return the URL as-is
+ */
+export function parseRepoName(url: string): string {
+  // SSH format: git@host:owner/repo.git
+  const sshMatch = url.match(/^git@[^:]+:(.+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+
+  // HTTPS format: https://host/owner/repo(.git)?
+  const httpsMatch = url.match(/^https?:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (httpsMatch) return httpsMatch[1];
+
+  return url;
+}
 
 export function runMigrations() {
   const db = getDb();
@@ -43,6 +61,74 @@ export function runMigrations() {
     const sql = readFileSync(schemaPath, 'utf8');
     db.transaction(() => {
       db.run(sql);
+
+      // ── v3 migration: extract tasks.repos JSON → repos + task_repos tables ──
+      if (current < 3) {
+        // Check if the old tasks table still has a repos column
+        const cols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('tasks')"
+        ).all();
+        const hasReposCol = cols.some(c => c.name === 'repos');
+
+        if (hasReposCol) {
+          // 1. Extract existing JSON repos into the new repos + task_repos tables
+          const rows = db.query<{ id: string; repos: string }, []>(
+            'SELECT id, repos FROM tasks'
+          ).all();
+
+          for (const row of rows) {
+            let urls: string[];
+            try {
+              urls = JSON.parse(row.repos);
+            } catch {
+              urls = [];
+            }
+            if (!Array.isArray(urls)) urls = [];
+
+            for (const url of urls) {
+              if (typeof url !== 'string' || url.length === 0) continue;
+
+              const name = parseRepoName(url);
+              db.run(
+                'INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)',
+                [url, name]
+              );
+              const repo = db.query<{ id: number }, [string]>(
+                'SELECT id FROM repos WHERE url = ?'
+              ).get(url);
+              if (repo) {
+                db.run(
+                  'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
+                  [row.id, repo.id]
+                );
+              }
+            }
+          }
+
+          // 2. Recreate tasks table without the repos column
+          db.run(`
+            CREATE TABLE tasks_new (
+              id          TEXT PRIMARY KEY,
+              title       TEXT NOT NULL CHECK (length(title) <= 500),
+              description TEXT CHECK (description IS NULL OR length(description) <= 10000),
+              status      TEXT NOT NULL DEFAULT 'todo'
+                            CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
+              agent       TEXT NOT NULL DEFAULT 'claude-code'
+                            CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            )
+          `);
+
+          db.run(`
+            INSERT INTO tasks_new (id, title, description, status, agent, created_at)
+            SELECT id, title, description, status, agent, created_at FROM tasks
+          `);
+
+          db.run('DROP TABLE tasks');
+          db.run('ALTER TABLE tasks_new RENAME TO tasks');
+        }
+      }
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
@@ -56,7 +142,6 @@ interface RawTask {
   title: string;
   description: string | null;
   status: string;
-  repos: string;
   agent: string;
   created_at: string;
 }
@@ -65,14 +150,14 @@ const TASK_STATUSES = new Set<Task['status']>(['todo', 'working', 'awaiting_inpu
 const AGENT_TYPES_SET = new Set<AgentType>(AGENT_TYPES_ARRAY);
 const TERMINAL_STATES = new Set<AgentSessionState>(['stopped', 'crashed', 'interrupted']);
 
-function parseTask(row: RawTask): Task {
+function parseTask(row: RawTask): Omit<Task, 'repos'> {
   const status = TASK_STATUSES.has(row.status as Task['status'])
     ? (row.status as Task['status'])
     : (() => { throw new Error(`[db] unexpected task status: ${row.status}`); })();
   const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
     ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
-  return { ...row, status, agent, repos: JSON.parse(row.repos) };
+  return { id: row.id, title: row.title, description: row.description, status, agent, created_at: row.created_at };
 }
 
 const SESSION_STATES = new Set<AgentSessionState>([
@@ -90,57 +175,190 @@ function parseSession(row: AgentSession): AgentSession {
 }
 
 export const db = {
+  // ── Repos ──
+
+  listRepos(): Repo[] {
+    const database = getDb();
+    return database.query<Repo, []>('SELECT * FROM repos ORDER BY name').all();
+  },
+
+  upsertRepo(url: string): Repo {
+    const database = getDb();
+    const name = parseRepoName(url);
+    database.run('INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)', [url, name]);
+    const row = database.query<Repo, [string]>('SELECT * FROM repos WHERE url = ?').get(url);
+    if (!row) throw new Error(`[db] failed to upsert repo with url ${url}`);
+    return row;
+  },
+
+  getTaskRepos(taskId: string): Repo[] {
+    const database = getDb();
+    return database.query<Repo, [string]>(
+      `SELECT r.* FROM repos r
+       JOIN task_repos tr ON tr.repo_id = r.id
+       WHERE tr.task_id = ?
+       ORDER BY r.name`
+    ).all(taskId);
+  },
+
+  /** Batch-fetch repos for multiple tasks in 2 queries (avoids N+1). */
+  _buildRepoMap(taskIds: string[]): Map<string, Repo[]> {
+    const map = new Map<string, Repo[]>();
+    if (taskIds.length === 0) return map;
+
+    const database = getDb();
+    interface TaskRepoLink { task_id: string; repo_id: number; url: string; name: string; created_at: string }
+    const placeholders = taskIds.map(() => '?').join(',');
+    const links = database.query<TaskRepoLink, string[]>(
+      `SELECT tr.task_id, r.id as repo_id, r.url, r.name, r.created_at
+       FROM task_repos tr
+       JOIN repos r ON r.id = tr.repo_id
+       WHERE tr.task_id IN (${placeholders})
+       ORDER BY r.name`
+    ).all(...taskIds);
+
+    for (const link of links) {
+      let repos = map.get(link.task_id);
+      if (!repos) { repos = []; map.set(link.task_id, repos); }
+      repos.push({ id: link.repo_id, url: link.url, name: link.name, created_at: link.created_at });
+    }
+    return map;
+  },
+
+  setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
+    const database = getDb();
+    const repos: Repo[] = [];
+    database.transaction(() => {
+      database.run('DELETE FROM task_repos WHERE task_id = ?', [taskId]);
+      for (const url of repoUrls) {
+        const repo = this.upsertRepo(url);
+        database.run(
+          'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
+          [taskId, repo.id]
+        );
+        repos.push(repo);
+      }
+    })();
+    return repos;
+  },
+
   // ── Tasks ──
 
   listTasks(): Task[] {
-    const db = getDb();
-    return db.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all().map(parseTask);
+    const database = getDb();
+    const rows = database.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all();
+    const repoMap = this._buildRepoMap(rows.map(r => r.id));
+    return rows.map(row => ({
+      ...parseTask(row),
+      repos: repoMap.get(row.id) ?? [],
+    }));
   },
 
   getTask(id: string): Task | null {
-    const db = getDb();
-    const row = db.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-    return row ? parseTask(row) : null;
+    const database = getDb();
+    const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
+    if (!row) return null;
+    return { ...parseTask(row), repos: this.getTaskRepos(id) };
   },
 
-  createTask(task: Omit<Task, 'created_at'>): Task {
+  createTask(task: { id: string; title: string; description: string | null; status: TaskStatus; agent: AgentType; repos?: string[] }): Task {
     const database = getDb();
-    database.run(
-      'INSERT INTO tasks (id, title, description, status, repos, agent) VALUES (?, ?, ?, ?, ?, ?)',
-      [task.id, task.title, task.description ?? null, task.status, JSON.stringify(task.repos), task.agent]
-    );
+    let repos: Repo[] = [];
+    database.transaction(() => {
+      database.run(
+        'INSERT INTO tasks (id, title, description, status, agent) VALUES (?, ?, ?, ?, ?)',
+        [task.id, task.title, task.description ?? null, task.status, task.agent]
+      );
+      if (task.repos) repos = this.setTaskRepos(task.id, task.repos);
+    })();
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(task.id);
     if (!row) throw new Error(`[db] failed to retrieve newly inserted task with id ${task.id}`);
-    return parseTask(row);
+    return { ...parseTask(row), repos };
   },
 
-  updateTask(id: string, fields: Partial<Omit<Task, 'id' | 'created_at'>>): Task | null {
+  updateTask(id: string, fields: { title?: string; description?: string | null; status?: TaskStatus; agent?: AgentType; repos?: string[] }): Task | null {
     const sets: string[] = [];
     const values: (string | number | null)[] = [];
 
-    // Field names below are hardcoded (not user-supplied) — safe from SQL injection.
     if (fields.title !== undefined) { sets.push('title = ?'); values.push(fields.title); }
     if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description ?? null); }
     if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
-    if (fields.repos !== undefined) { sets.push('repos = ?'); values.push(JSON.stringify(fields.repos)); }
     if (fields.agent !== undefined) { sets.push('agent = ?'); values.push(fields.agent); }
 
     const database = getDb();
-    if (sets.length === 0) {
-      const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-      return row ? parseTask(row) : null;
-    }
 
-    values.push(id);
-    database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
+    database.transaction(() => {
+      if (sets.length > 0) {
+        values.push(id);
+        database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
+      }
+      if (fields.repos !== undefined) {
+        this.setTaskRepos(id, fields.repos);
+      }
+    })();
+
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-    return row ? parseTask(row) : null;
+    if (!row) return null;
+    return { ...parseTask(row), repos: this.getTaskRepos(id) };
   },
 
   deleteTask(id: string): boolean {
     const db = getDb();
     const result = db.run('DELETE FROM tasks WHERE id = ?', [id]);
     return result.changes > 0;
+  },
+
+  listTasksByProject(): TasksByProject {
+    const database = getDb();
+
+    interface TaskRepoRow extends RawTask {
+      repo_url: string;
+      repo_name: string;
+    }
+    const taskRepoRows = database.query<TaskRepoRow, []>(`
+      SELECT t.*, r.url as repo_url, r.name as repo_name
+      FROM tasks t
+      JOIN task_repos tr ON tr.task_id = t.id
+      JOIN repos r ON r.id = tr.repo_id
+      ORDER BY r.name, t.created_at DESC
+    `).all();
+
+    const ungroupedRows = database.query<RawTask, []>(`
+      SELECT t.* FROM tasks t
+      WHERE t.id NOT IN (SELECT task_id FROM task_repos)
+      ORDER BY t.created_at DESC
+    `).all();
+
+    const allTaskIds = new Set<string>();
+    for (const row of taskRepoRows) allTaskIds.add(row.id);
+    for (const row of ungroupedRows) allTaskIds.add(row.id);
+    const repoCache = this._buildRepoMap([...allTaskIds]);
+
+    const projects: Record<string, Task[]> = {};
+    const seenPerProject = new Map<string, Set<string>>();
+
+    for (const row of taskRepoRows) {
+      const repoName = row.repo_name;
+      if (!projects[repoName]) {
+        projects[repoName] = [];
+        seenPerProject.set(repoName, new Set());
+      }
+      const seen = seenPerProject.get(repoName)!;
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        projects[repoName].push({
+          ...parseTask(row),
+          repos: repoCache.get(row.id) ?? [],
+        });
+      }
+    }
+
+    const ungrouped: Task[] = ungroupedRows.map(row => ({
+      ...parseTask(row),
+      repos: [],
+    }));
+
+    return { projects, ungrouped };
   },
 
   // ── Agent Sessions ──

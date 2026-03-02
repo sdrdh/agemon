@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, Repo, TasksByProject, AgentSession } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -30,6 +30,11 @@ function headers() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...init, headers: headers() });
   if (!res.ok) {
+    if (res.status === 401) {
+      clearApiKey();
+      window.location.reload();
+      throw new Error('Session expired');
+    }
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(err.message ?? 'Request failed');
   }
@@ -37,10 +42,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/** Validate key against the server. Returns true if valid. */
+export async function validateKey(key: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/health`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export const api = {
   listTasks: () => request<Task[]>('/tasks'),
+  listTasksByProject: () => request<TasksByProject>('/tasks/by-project'),
   getTask: (id: string) => request<Task>(`/tasks/${id}`),
   createTask: (body: CreateTaskBody) => request<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) }),
   updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTask: (id: string) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
+  listRepos: () => request<Repo[]>('/repos'),
+  startTask: (id: string) => request<AgentSession>(`/tasks/${id}/start`, { method: 'POST' }),
+  stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),
 };
