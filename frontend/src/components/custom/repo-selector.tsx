@@ -18,9 +18,12 @@ export function RepoSelector({ selected, onChange }: RepoSelectorProps) {
   const [showAddInput, setShowAddInput] = useState(false);
   const [newUrl, setNewUrl] = useState('');
   const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
-    api.listRepos().then(setRegistryRepos).catch(() => {});
+    api.listRepos()
+      .then(setRegistryRepos)
+      .catch((err: unknown) => setFetchError(err instanceof Error ? err.message : 'Failed to load repos'));
   }, []);
 
   const selectedSet = new Set(selected);
@@ -56,6 +59,10 @@ export function RepoSelector({ selected, onChange }: RepoSelectorProps) {
   return (
     <div className="space-y-2">
       <Label>Repositories</Label>
+
+      {fetchError && (
+        <p className="text-sm text-destructive">{fetchError}</p>
+      )}
 
       {registryRepos.map(repo => (
         <label

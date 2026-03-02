@@ -10,8 +10,11 @@ interface TaskCardProps {
 export function TaskCard({ task, onClick }: TaskCardProps) {
   return (
     <Card
-      className="cursor-pointer active:bg-accent/50 transition-colors"
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer active:bg-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
       <CardHeader className="p-4">
         <div className="flex items-start justify-between gap-2">

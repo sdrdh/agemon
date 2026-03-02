@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { setApiKey } from '@/lib/api';
+import { setApiKey, validateKey } from '@/lib/api';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 
 interface LoginScreenProps {
@@ -8,11 +10,24 @@ interface LoginScreenProps {
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
   const [key, setKey] = useState('');
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState('');
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = key.trim();
     if (!trimmed) return;
+
+    setValidating(true);
+    setError('');
+
+    const valid = await validateKey(trimmed);
+    if (!valid) {
+      setError('Invalid API key or server unreachable');
+      setValidating(false);
+      return;
+    }
+
     setApiKey(trimmed);
     onLogin();
   }
@@ -27,23 +42,24 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="agemon-key">API Key</Label>
-            <input
+            <Input
               id="agemon-key"
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               placeholder="AGEMON_KEY"
               autoComplete="current-password"
-              className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="h-11"
             />
           </div>
-          <button
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button
             type="submit"
-            disabled={!key.trim()}
-            className="flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+            className="w-full h-11"
+            disabled={!key.trim() || validating}
           >
-            Connect
-          </button>
+            {validating ? 'Validating...' : 'Connect'}
+          </Button>
         </form>
       </div>
     </div>

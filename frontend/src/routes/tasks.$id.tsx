@@ -66,18 +66,33 @@ export default function TaskDetailView() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-4">
-        <div className="h-8 w-2/3 rounded-md bg-muted animate-pulse" />
-        <div className="h-20 rounded-md bg-muted animate-pulse" />
+      <div>
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="h-6 w-1/3 rounded-md bg-muted animate-pulse" />
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="h-8 w-2/3 rounded-md bg-muted animate-pulse" />
+          <div className="h-20 rounded-md bg-muted animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (error || !task) {
     return (
-      <div className="p-4 text-center">
-        <p className="text-destructive">{error || 'Task not found'}</p>
-        <Button variant="link" onClick={() => navigate({ to: '/' })}>Back to tasks</Button>
+      <div>
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="p-4 text-center">
+          <p className="text-destructive">{error || 'Task not found'}</p>
+          <Button variant="link" onClick={() => navigate({ to: '/' })}>Back to tasks</Button>
+        </div>
       </div>
     );
   }
@@ -87,7 +102,7 @@ export default function TaskDetailView() {
   return (
     <div>
       <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => navigate({ to: '/' })}>
+        <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>

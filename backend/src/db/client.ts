@@ -203,16 +203,18 @@ export const db = {
 
   setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
     const database = getDb();
-    database.run('DELETE FROM task_repos WHERE task_id = ?', [taskId]);
     const repos: Repo[] = [];
-    for (const url of repoUrls) {
-      const repo = this.upsertRepo(url);
-      database.run(
-        'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
-        [taskId, repo.id]
-      );
-      repos.push(repo);
-    }
+    database.transaction(() => {
+      database.run('DELETE FROM task_repos WHERE task_id = ?', [taskId]);
+      for (const url of repoUrls) {
+        const repo = this.upsertRepo(url);
+        database.run(
+          'INSERT OR IGNORE INTO task_repos (task_id, repo_id) VALUES (?, ?)',
+          [taskId, repo.id]
+        );
+        repos.push(repo);
+      }
+    })();
     return repos;
   },
 
@@ -236,11 +238,14 @@ export const db = {
 
   createTask(task: { id: string; title: string; description: string | null; status: TaskStatus; agent: AgentType; repos?: string[] }): Task {
     const database = getDb();
-    database.run(
-      'INSERT INTO tasks (id, title, description, status, agent) VALUES (?, ?, ?, ?, ?)',
-      [task.id, task.title, task.description ?? null, task.status, task.agent]
-    );
-    const repos = task.repos ? this.setTaskRepos(task.id, task.repos) : [];
+    let repos: Repo[] = [];
+    database.transaction(() => {
+      database.run(
+        'INSERT INTO tasks (id, title, description, status, agent) VALUES (?, ?, ?, ?, ?)',
+        [task.id, task.title, task.description ?? null, task.status, task.agent]
+      );
+      if (task.repos) repos = this.setTaskRepos(task.id, task.repos);
+    })();
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(task.id);
     if (!row) throw new Error(`[db] failed to retrieve newly inserted task with id ${task.id}`);
     return { ...parseTask(row), repos };
@@ -257,14 +262,15 @@ export const db = {
 
     const database = getDb();
 
-    if (sets.length > 0) {
-      values.push(id);
-      database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
-    }
-
-    if (fields.repos !== undefined) {
-      this.setTaskRepos(id, fields.repos);
-    }
+    database.transaction(() => {
+      if (sets.length > 0) {
+        values.push(id);
+        database.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
+      }
+      if (fields.repos !== undefined) {
+        this.setTaskRepos(id, fields.repos);
+      }
+    })();
 
     const row = database.query<RawTask, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
     if (!row) return null;

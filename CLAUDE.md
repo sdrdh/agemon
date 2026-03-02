@@ -21,10 +21,10 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 | Frontend | React 18 + Vite 5 | Code-split by route |
 | UI Components | shadcn/ui | Radix UI + Tailwind, copy-paste components |
 | Router | TanStack Router | |
-| State | TanStack Query + Zustand | Server state + client state |
+| State | TanStack Query + Zustand | Server state + client state. TanStack Query not yet wired — add when real-time/caching is needed |
 | Terminal | xterm.js | Lazy-loaded, ~800KB |
 | Styling | Tailwind CSS | |
-| Git | simple-git | Worktree management |
+| Git | simple-git (deferred) | Worktree management — not yet installed, add when Task 3.1 begins |
 | Agent protocol | ACP SDK | `@agentclientprotocol/sdk` |
 | GitHub API | Octokit | PR creation |
 | Website/Docs | Astro 4.x | Static site for product page + docs |
@@ -65,6 +65,8 @@ agemon/
 │   └── astro.config.mjs
 ├── shared/
 │   └── types/           # shared TS types (events, tasks, diffs)
+├── scripts/
+│   └── test-api.sh      # backend API smoke tests
 ├── CLAUDE.md
 ├── PRD.md
 ├── TASKS.md
@@ -96,7 +98,9 @@ agemon/
 ## Core Data Model
 
 ```
-tasks           id, title, description, status, repos (JSON), agent, created_at
+tasks           id, title, description, status, agent, created_at
+repos           id, url (unique), name, created_at
+task_repos      task_id, repo_id  (many-to-many join table)
 agent_sessions  id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code
 acp_events      id, task_id, session_id, type (thought|action|await_input|result), content, created_at
 awaiting_input  id, task_id, session_id, question, status (pending|answered), response, created_at
@@ -139,6 +143,25 @@ GITHUB_PAT        # required for PR creation
 PORT              # optional, default 3000
 DB_PATH           # optional, default ./agemon.db
 ```
+
+---
+
+## Testing
+
+**Backend API smoke tests** — `scripts/test-api.sh` runs 21 curl-based checks covering auth, CRUD, SSH validation, project grouping, repo attachment, agent start/stop stubs, and deletion. Requires a running backend.
+
+```bash
+# Terminal 1: start backend
+cd backend && rm -f agemon.db* && AGEMON_KEY=test bun run src/server.ts
+
+# Terminal 2: run tests (defaults to port 3000)
+./scripts/test-api.sh
+
+# Or specify a different port/key:
+API_BASE=http://127.0.0.1:3001 AGEMON_KEY=mykey ./scripts/test-api.sh
+```
+
+Run these after any backend route, DB, or schema changes.
 
 ---
 

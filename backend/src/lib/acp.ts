@@ -9,6 +9,7 @@ interface RunningSession {
 }
 
 const sessions = new Map<string, RunningSession>();
+const userStopped = new Set<string>(); // Track sessions stopped by user
 const KILL_TIMEOUT_MS = 5_000;
 
 function checkBinary(): string {
@@ -23,26 +24,29 @@ export function spawnAgent(taskId: string, agentType: AgentType): AgentSession {
   const binaryPath = checkBinary();
   const sessionId = randomUUID();
 
-  const session = db.insertSession({
+  db.insertSession({
     id: sessionId,
     task_id: taskId,
     agent_type: agentType,
     pid: null,
   });
 
+  // Filter sensitive env vars from subprocess
+  const { AGEMON_KEY: _, GITHUB_PAT: __, ...safeEnv } = process.env;
+
   const proc = Bun.spawn([binaryPath, '--agent', agentType], {
     stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env },
+    stderr: 'inherit',
+    env: safeEnv,
   });
 
-  db.updateSessionState(sessionId, 'starting', { pid: proc.pid });
+  const updated = db.updateSessionState(sessionId, 'starting', { pid: proc.pid });
   sessions.set(sessionId, { proc, sessionId });
 
   readStdout(proc, sessionId, taskId);
   handleExit(proc, sessionId, taskId);
 
-  return session;
+  return updated!;
 }
 
 async function readStdout(
@@ -174,9 +178,14 @@ async function handleExit(
   // If no more active sessions for this task, update task status
   const runningSessions = db.listSessions(taskId).filter(s => s.state === 'running' || s.state === 'starting');
   if (runningSessions.length === 0) {
-    if (state === 'stopped') {
+    const wasUserStopped = userStopped.has(sessionId);
+    userStopped.delete(sessionId);
+
+    if (state === 'stopped' && !wasUserStopped) {
+      // Agent exited cleanly on its own → task is done
       db.updateTask(taskId, { status: 'done' });
     } else {
+      // User-stopped or crashed → back to todo
       db.updateTask(taskId, { status: 'todo' });
     }
     const task = db.getTask(taskId);
@@ -192,6 +201,7 @@ export function stopAgent(sessionId: string): void {
     throw new Error(`No running session found with id ${sessionId}`);
   }
 
+  userStopped.add(sessionId);
   entry.proc.kill('SIGTERM');
 
   setTimeout(() => {

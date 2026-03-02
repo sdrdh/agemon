@@ -6,6 +6,7 @@ import {
   RouterProvider,
   Outlet,
 } from '@tanstack/react-router';
+import { Button } from './components/ui/button';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 
@@ -120,12 +121,14 @@ export default function App() {
     <ErrorBoundary>
       <Suspense fallback={<SuspenseFallback />}>
         <div className="relative">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleLogout}
-            className="absolute top-3 right-3 z-50 text-xs text-muted-foreground underline"
+            className="absolute top-2 right-2 z-50 min-h-[44px] min-w-[44px] text-xs text-muted-foreground"
           >
             Logout
-          </button>
+          </Button>
           <RouterProvider router={router} />
         </div>
       </Suspense>

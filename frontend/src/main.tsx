@@ -1,8 +1,7 @@
 import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose } from './components/ui/toast';
-import { showToast, onToast, type ToastPayload } from './lib/toast';
+import { onToast, type ToastPayload } from './lib/toast';
 import { connectWs } from './lib/ws';
 import { hasApiKey } from './lib/api';
 import './index.css';
@@ -40,36 +39,15 @@ function GlobalToast() {
   );
 }
 
-const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error) => {
-      showToast({ title: 'Request failed', description: String(error.message), variant: 'destructive' });
-    },
-  }),
-  mutationCache: new MutationCache({
-    onError: (error) => {
-      showToast({ title: 'Request failed', description: String(error.message), variant: 'destructive' });
-    },
-  }),
-  defaultOptions: {
-    queries: {
-      staleTime: 5_000,
-      retry: 1,
-    },
-  },
-});
-
 // Only connect if a key is already stored — login screen handles the first-time case.
 if (hasApiKey()) connectWs();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <App />
-        <GlobalToast />
-        <ToastViewport />
-      </ToastProvider>
-    </QueryClientProvider>
+    <ToastProvider>
+      <App />
+      <GlobalToast />
+      <ToastViewport />
+    </ToastProvider>
   </StrictMode>,
 );

@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS tasks (
   description TEXT CHECK (description IS NULL OR length(description) <= 10000),
   status      TEXT NOT NULL DEFAULT 'todo'
                 CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
-  repos       TEXT NOT NULL DEFAULT '[]',  -- JSON array of repo URLs
   agent       TEXT NOT NULL DEFAULT 'claude-code'
                 CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))

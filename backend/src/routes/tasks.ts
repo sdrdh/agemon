@@ -128,8 +128,18 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
 });
 
 tasksRoutes.delete('/tasks/:id', (c) => {
-  const deleted = db.deleteTask(c.req.param('id'));
-  if (!deleted) sendError(404, 'Task not found');
+  const id = c.req.param('id');
+  const task = db.getTask(id);
+  if (!task) sendError(404, 'Task not found');
+
+  // Stop any running agent before deleting
+  const running = getRunningSession(id);
+  if (running) {
+    try { stopAgent(running.id); } catch { /* already stopping */ }
+  }
+
+  db.deleteTask(id);
+  broadcast({ type: 'task_updated', task: { ...task!, status: 'done' } });
   return new Response(null, { status: 204 });
 });
 

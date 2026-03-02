@@ -43,7 +43,7 @@ export default function TaskCreateForm() {
   return (
     <div>
       <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => navigate({ to: '/' })}>
+        <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-semibold">New Task</h1>
