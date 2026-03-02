@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, Repo, TasksByProject, AgentSession } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -64,4 +64,7 @@ export const api = {
   listRepos: () => request<Repo[]>('/repos'),
   startTask: (id: string) => request<AgentSession>(`/tasks/${id}/start`, { method: 'POST' }),
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),
+  listEvents: (id: string, limit = 500) => request<ACPEvent[]>(`/tasks/${id}/events?limit=${limit}`),
+  getChatHistory: (id: string, limit = 500) => request<ChatMessage[]>(`/tasks/${id}/chat?limit=${limit}`),
+  listSessions: (limit = 100) => request<AgentSession[]>(`/sessions?limit=${limit}`),
 };

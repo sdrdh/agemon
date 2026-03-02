@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { spawnAgent, stopAgent, getRunningSession } from '../lib/acp.ts';
+import { gitManager } from '../lib/git.ts';
 import type { CreateTaskBody, UpdateTaskBody, AgentType, Task } from '@agemon/shared';
 import { AGENT_TYPES, SSH_REPO_REGEX } from '@agemon/shared';
 
@@ -132,11 +133,22 @@ tasksRoutes.get('/tasks/:id/events', (c) => {
   return c.json(events);
 });
 
-tasksRoutes.post('/tasks/:id/start', (c) => {
+tasksRoutes.post('/tasks/:id/start', async (c) => {
   const task = requireTask(c.req.param('id'));
   if (task.status !== 'todo') {
     sendError(400, 'Task must be in todo status to start');
   }
+
+  // Create worktrees for each attached repo
+  for (const repo of task.repos) {
+    try {
+      await gitManager.createWorktree(task.id, repo.url);
+    } catch (err) {
+      await gitManager.deleteTaskWorktrees(task.id).catch(() => {});
+      sendError(500, `Failed to create worktree for ${repo.name}: ${(err as Error).message}`);
+    }
+  }
+
   try {
     const session = spawnAgent(task.id, task.agent);
     return c.json(session, 202);
@@ -157,6 +169,21 @@ tasksRoutes.post('/tasks/:id/stop', (c) => {
   } catch (err) {
     sendError(500, (err as Error).message);
   }
+});
+
+tasksRoutes.get('/tasks/:id/chat', (c) => {
+  const task = requireTask(c.req.param('id'));
+  const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
+  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 5000 ? 500 : limitParam;
+  const messages = db.listChatHistory(task.id, limit);
+  return c.json(messages);
+});
+
+tasksRoutes.get('/sessions', (c) => {
+  const limitParam = parseInt(c.req.query('limit') ?? '100', 10);
+  const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 1000 ? 100 : limitParam;
+  const sessions = db.listAllSessions(limit);
+  return c.json(sessions);
 });
 
 tasksRoutes.get('/repos', (c) => {

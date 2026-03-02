@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 3
+-- Version: 4
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS acp_events (
   id         TEXT PRIMARY KEY,
   task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
-  type       TEXT NOT NULL CHECK (type IN ('thought', 'action', 'await_input', 'result')),
+  type       TEXT NOT NULL CHECK (type IN ('thought', 'action', 'await_input', 'result', 'prompt')),
   content    TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );

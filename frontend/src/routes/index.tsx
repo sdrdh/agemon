@@ -1,29 +1,19 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TaskCard } from '@/components/custom/task-card';
-import { api } from '@/lib/api';
-import type { TasksByProject } from '@agemon/shared';
+import { tasksByProjectQuery } from '@/lib/query';
 
 export default function ProjectListView() {
-  const [data, setData] = useState<TasksByProject | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { data, isLoading, error } = useQuery(tasksByProjectQuery());
 
-  useEffect(() => {
-    api.listTasksByProject()
-      .then(setData)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load tasks'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div>
-        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Agemon</h1>
+        <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
+          <h1 className="text-lg font-semibold">Projects</h1>
           <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
             <Plus className="h-5 w-5" />
           </Button>
@@ -40,7 +30,7 @@ export default function ProjectListView() {
   if (error) {
     return (
       <div className="p-4 text-center">
-        <p className="text-destructive">{error}</p>
+        <p className="text-destructive">{error instanceof Error ? error.message : 'Failed to load tasks'}</p>
         <Button variant="link" onClick={() => window.location.reload()}>Retry</Button>
       </div>
     );
@@ -51,8 +41,8 @@ export default function ProjectListView() {
 
   return (
     <div className="pb-20">
-      <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Agemon</h1>
+      <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Projects</h1>
         <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
           <Plus className="h-5 w-5" />
         </Button>

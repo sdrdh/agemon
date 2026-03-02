@@ -2,7 +2,7 @@
 
 **Project:** Agemon - Mobile-First AI Agent Orchestration Platform  
 **Timeline:** 8 weeks to MVP  
-**Last Updated:** February 2026
+**Last Updated:** March 2026
 
 ---
 
@@ -134,21 +134,28 @@ agemon/
 **Estimated Time:** 8 hours
 
 **Deliverables:**
-- [ ] Setup Fastify with TypeScript
-- [ ] Configure CORS for frontend
-- [ ] Implement authentication middleware (AGEMON_KEY)
-- [ ] Create error handling middleware
-- [ ] Setup request logging
-- [ ] Create API route structure
+- [x] ~~Setup Fastify with TypeScript~~ (using Hono instead)
+- [x] Configure CORS for frontend
+- [x] Implement authentication middleware (AGEMON_KEY Bearer token)
+- [x] Create error handling middleware
+- [x] Setup request logging
+- [x] Create API route structure
 
-**API Routes to Implement:**
+**API Routes Implemented:**
 ```
 GET    /api/health          - Health check
 GET    /api/tasks           - List all tasks
+GET    /api/tasks/by-project - Tasks grouped by repo
 POST   /api/tasks           - Create new task
 GET    /api/tasks/:id       - Get task details
 PATCH  /api/tasks/:id       - Update task
 DELETE /api/tasks/:id       - Delete task
+GET    /api/tasks/:id/events - ACP events
+GET    /api/tasks/:id/chat  - Chat history
+GET    /api/repos           - All registered repos
+GET    /api/sessions        - All agent sessions
+POST   /api/tasks/:id/start - Spawn agent
+POST   /api/tasks/:id/stop  - Stop agent
 ```
 
 **Acceptance Criteria:**
@@ -169,12 +176,12 @@ DELETE /api/tasks/:id       - Delete task
 **Estimated Time:** 6 hours
 
 **Deliverables:**
-- [ ] Install `@fastify/websocket`
-- [ ] Setup WebSocket server
-- [ ] Implement connection handling
-- [ ] Create broadcast helper function
-- [ ] Define event types (TypeScript)
-- [ ] Test multi-client broadcasting
+- [x] ~~Install `@fastify/websocket`~~ (using Hono/Bun WebSocket instead)
+- [x] Setup WebSocket server
+- [x] Implement connection handling
+- [x] Create broadcast helper function
+- [x] Define event types (TypeScript)
+- [x] Test multi-client broadcasting
 
 **Event Types:**
 ```typescript
@@ -253,13 +260,13 @@ bunx shadcn-ui@latest add button card badge dialog input select toast tabs sheet
 **Estimated Time:** 10 hours
 
 **Deliverables:**
-- [ ] Create `Kanban` component
-- [ ] Create `Column` component (To-Do, Working, Awaiting Input, Done)
-- [ ] Create `TaskCard` component
-- [ ] Implement task filtering by status
-- [ ] Setup WebSocket for real-time updates
-- [ ] Add empty state messaging
-- [ ] Mobile responsive layout
+- [x] Create `Kanban` component (visual-only columns, no drag-and-drop)
+- [x] Create `Column` component (To-Do, Working, Awaiting Input, Done)
+- [x] Create `TaskCard` component
+- [x] Implement task filtering by status
+- [x] Setup WebSocket for real-time updates
+- [x] Add empty state messaging
+- [x] Mobile responsive layout (horizontal scroll on mobile)
 
 **Features:**
 - Vertical scroll on mobile
@@ -286,12 +293,12 @@ bunx shadcn-ui@latest add button card badge dialog input select toast tabs sheet
 **Estimated Time:** 8 hours
 
 **Deliverables:**
-- [ ] Create "Add Task" button (floating on mobile)
-- [ ] Create task creation modal
-- [ ] Implement form with validation
-- [ ] Multi-select for repositories
-- [ ] Agent selection dropdown
-- [ ] Submit and update Kanban
+- [x] Create "Add Task" button (full-page form instead of floating button)
+- [x] Create task creation form
+- [x] Implement form with validation
+- [x] Multi-select for repositories (RepoSelector component)
+- [x] Agent selection dropdown (AgentSelector component)
+- [x] Submit and update task list
 
 **Form Fields:**
 - Title (required)
@@ -318,19 +325,26 @@ bunx shadcn-ui@latest add button card badge dialog input select toast tabs sheet
 **Estimated Time:** 8 hours
 
 **Deliverables:**
-- [ ] Create task detail route (`/task/:id`)
-- [ ] Display task metadata (title, repos, status)
-- [ ] Show ACP event stream (thought history)
-- [ ] Add "Start Agent" button (for To-Do tasks)
-- [ ] Add "Stop Agent" button (for Working tasks)
-- [ ] Mobile-optimized layout
+- [x] Create task detail route (`/tasks/$id`)
+- [x] Display task metadata (title, status badge in header)
+- [x] Show chat-style interface with streaming message accumulation
+- [x] Add "Start Agent" button (for To-Do tasks)
+- [x] Add "Stop Agent" button (for Working tasks)
+- [x] Mobile-optimized layout
+- [x] Collapsible activity groups (thoughts + tool calls grouped and collapsed by default)
+- [x] Live agent activity indicator (Thinking, Reading file.ts, Running command, etc.)
+- [x] Multi-turn prompt support (send follow-up messages to running agent)
+- [x] Chat history persistence and REST endpoint (`GET /tasks/:id/chat`)
 
 **Features:**
-- Swipe-back gesture on mobile
-- Fixed header with task title
-- Scrollable event stream
-- Auto-scroll to latest event
-- Timestamp for each event
+- Sticky header with back button, title, status badge, stop button
+- Scrollable chat area with auto-scroll on new messages
+- Sticky bottom input bar (contextual: Start Agent / Send message / disabled)
+- Streaming message chunks accumulate into single bubbles via stable messageId
+- Agent thoughts and tool calls collapsed into "N thoughts, M tool calls" groups
+- Agent message responses shown as full chat bubbles
+- User messages right-aligned, agent left-aligned, system centered
+- Pulsing activity indicator showing current agent action
 
 **Acceptance Criteria:**
 - Route works with deep linking
@@ -354,12 +368,12 @@ bunx shadcn-ui@latest add button card badge dialog input select toast tabs sheet
 **Estimated Time:** 12 hours
 
 **Deliverables:**
-- [ ] Install `simple-git` dependency
-- [ ] Create `GitWorktreeManager` class
-- [ ] Implement worktree creation
-- [ ] Implement worktree deletion
-- [ ] Branch naming convention logic
-- [ ] Path resolution utilities
+- [x] Install `simple-git` dependency
+- [x] Create `GitWorktreeManager` class
+- [x] Implement worktree creation (bare repo cache + per-task worktrees)
+- [x] Implement worktree deletion (per-task and per-repo cleanup)
+- [x] Branch naming convention logic (`agemon/{taskId}-{org}-{repo}`)
+- [x] Path resolution utilities (`getWorktreePath`, `getBranchName`)
 
 **Core Functions:**
 ```typescript
@@ -468,12 +482,14 @@ class GitHubClient {
 - [x] ~~Install `@agentclientprotocol/sdk`~~ (using direct binary spawning instead)
 - [x] ~~Create `ACPAgentManager` class~~ (implemented as `lib/acp.ts` functions)
 - [x] Implement session-aware agent spawning (creates `agent_sessions` row on spawn)
-- [x] Capture `external_session_id` from CLI stdout for `--resume` support
+- [x] Capture `external_session_id` from `session/new` response for `--resume` support
 - [x] Handle session initialization and state transitions
-- [ ] **Pipe stdin to agent process** (`stdin: 'pipe'`)
-- [ ] **Implement JSON-RPC 2.0 handshake** (initialize → setSessionInfo → promptTurn)
-- [ ] Send prompts to agent via JSON-RPC `acp/promptTurn`
+- [x] **Pipe stdin to agent process** (`stdin: 'pipe'`)
+- [x] **Implement JSON-RPC 2.0 handshake** (`initialize` → `session/new` → `session/prompt`)
+- [x] Send prompts to agent via JSON-RPC `session/prompt`
 - [x] Update session `pid` and `state` throughout lifecycle
+- [x] Auto-approve `requestPermission` requests for headless operation
+- [x] Use task worktree cwd for agent working directory
 
 **Agent Support (see `docs/acp-agents.md`):**
 - Claude Code (via `claude-agent-acp`) — needs `claude /login`, most complex
@@ -508,11 +524,11 @@ class ACPAgentManager {
 **Estimated Time:** 3 hours
 
 **Deliverables:**
-- [ ] On server boot: query `agent_sessions` where `state IN ('running', 'starting')`
-- [ ] Mark all found sessions as `interrupted`
+- [x] On server boot: query `agent_sessions` where `state IN ('running', 'starting')`
+- [x] Mark all found sessions as `interrupted`
 - [ ] Re-spawn each with `--resume <external_session_id>` (if `external_session_id` is set)
 - [ ] Insert new `agent_sessions` row for each re-spawned process (linking same task)
-- [ ] Broadcast `session_state_changed` for interrupted sessions
+- [x] Broadcast `session_state_changed` for interrupted sessions (via frontend WS reconnect + query invalidation)
 - [ ] Broadcast `session_started` for re-spawned sessions
 
 **Acceptance Criteria:**
@@ -536,18 +552,19 @@ class ACPAgentManager {
 > See `docs/acp-agents.md` for protocol details.
 
 **Deliverables:**
-- [ ] Implement JSON-RPC 2.0 message parser (handle requests, responses, notifications)
-- [ ] Map ACP protocol events to our internal event types
-- [ ] Store events in `acp_events` table
-- [ ] Broadcast events via WebSocket
-- [ ] Render thought stream in UI
-- [ ] Handle different event types
+- [x] Implement JSON-RPC 2.0 message parser (handle requests, responses, notifications)
+- [x] Map ACP `session/update` notifications to internal event types
+- [x] Store events in `acp_events` table (with streaming chunk accumulation — one DB row per complete message)
+- [x] Broadcast events via WebSocket with stable `messageId` for chunk merging
+- [x] Render streaming chat in UI with live message accumulation
+- [x] Handle different event types
 
-**Event Types to Handle:**
-- `thought` - Agent reasoning (from streaming prompt turn responses)
-- `action` - Commands executed
-- `await_input` - Blocking questions
-- `result` - Operation results (from prompt turn completion)
+**Event Types Handled:**
+- `agent_message_chunk` → `action` — Agent response text (streaming, accumulated into single messages)
+- `agent_thought_chunk` → `thought` — Agent reasoning (streaming, accumulated)
+- `tool_call` → `action` — Tool invocations with title and status
+- `tool_call_update` → `action` — Tool completion/failure updates
+- `__raw__` → `thought` — Non-JSON-RPC output from agent process
 
 **Acceptance Criteria:**
 - JSON-RPC 2.0 messages parsed correctly (requests, responses, notifications)
@@ -568,12 +585,12 @@ class ACPAgentManager {
 **Estimated Time:** 10 hours
 
 **Deliverables:**
-- [ ] Detect `await_input` events
-- [ ] Move task to "awaiting_input" status
-- [ ] Store question in database
-- [ ] Render input form in UI (mobile-optimized)
-- [ ] Send user response back to agent
-- [ ] Resume agent execution
+- [x] Detect `await_input` events
+- [x] Move task to "awaiting_input" status
+- [x] Store question in database
+- [x] Render input form in UI (amber-styled input request bubble)
+- [x] Send user response back to agent (`send_input` WS event)
+- [x] Resume agent execution (task returns to `working`)
 
 **UI Components:**
 - Question display
@@ -1429,5 +1446,5 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 
 ---
 
-**Last Updated:** February 2026  
-**Status:** Ready for development
+**Last Updated:** March 2026
+**Status:** Core infrastructure, ACP integration, chat UI, nav bar, kanban, and sessions implemented. Terminal PTY, diff viewer, and GitHub PR flow remaining.

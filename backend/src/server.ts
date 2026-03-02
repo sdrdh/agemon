@@ -5,7 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
-import { runMigrations } from './db/client.ts';
+import { runMigrations, db } from './db/client.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -82,7 +82,7 @@ app.get('/api/health', (c) =>
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input']);
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -129,6 +129,48 @@ export function broadcast(event: ServerEvent) {
     if (client.readyState === WS_OPEN) client.send(payload);
   }
 }
+
+// ─── Client Event Handlers ───────────────────────────────────────────────────
+eventBus.on('ws:client_event', async (ev: ClientEvent) => {
+  if (ev.type === 'send_input') {
+    const input = db.answerInput(ev.inputId, ev.response);
+    if (!input) {
+      console.warn(`[ws] send_input: unknown inputId ${ev.inputId}`);
+      return;
+    }
+
+    // Relay the response to the running agent process
+    const { sendInputToAgent } = await import('./lib/acp.ts');
+    if (input.session_id) {
+      const sent = sendInputToAgent(input.session_id, ev.inputId, ev.response);
+      if (!sent) {
+        console.warn(`[ws] send_input: could not relay to agent session ${input.session_id}`);
+      }
+    }
+
+    const pending = db.listPendingInputs(ev.taskId);
+    if (pending.length === 0) {
+      db.updateTask(ev.taskId, { status: 'working' });
+      const task = db.getTask(ev.taskId);
+      if (task) broadcast({ type: 'task_updated', task });
+    }
+    console.info(`[ws] send_input answered for task=${ev.taskId} input=${ev.inputId}`);
+  }
+
+  else if (ev.type === 'send_message') {
+    const { getRunningSession, sendPromptTurn } = await import('./lib/acp.ts');
+    const session = getRunningSession(ev.taskId);
+    if (!session) {
+      console.warn(`[ws] send_message: no running session for task=${ev.taskId}`);
+      return;
+    }
+    try {
+      await sendPromptTurn(session.id, ev.content);
+    } catch (err) {
+      console.error(`[ws] send_message error for task=${ev.taskId}:`, (err as Error).message);
+    }
+  }
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 try {

@@ -40,7 +40,7 @@ export interface ACPEvent {
   id: string;
   task_id: string;
   session_id: string;
-  type: 'thought' | 'action' | 'await_input' | 'result';
+  type: 'thought' | 'action' | 'await_input' | 'result' | 'prompt';
   content: string;
   created_at: string;
 }
@@ -63,19 +63,28 @@ export interface Diff {
   created_at: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'agent' | 'user' | 'system';
+  content: string;
+  eventType: 'thought' | 'action' | 'input_request' | 'input_response' | 'prompt' | 'status';
+  timestamp: string;
+}
+
 // ─── WebSocket Event Types ────────────────────────────────────────────────────
 
 export type ServerEvent =
   | { type: 'task_updated'; task: Task }
-  | { type: 'agent_thought'; taskId: string; content: string }
+  | { type: 'agent_thought'; taskId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
   | { type: 'awaiting_input'; taskId: string; question: string; inputId: string }
   | { type: 'terminal_output'; sessionId: string; data: string }
   | { type: 'session_started'; taskId: string; session: AgentSession }
-  | { type: 'session_state_changed'; sessionId: string; state: AgentSessionState };
+  | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
-  | { type: 'terminal_input'; sessionId: string; data: string };
+  | { type: 'terminal_input'; sessionId: string; data: string }
+  | { type: 'send_message'; taskId: string; content: string };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 

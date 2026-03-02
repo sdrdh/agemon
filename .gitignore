@@ -10,3 +10,4 @@ bun.lockb
 *.d.ts
 .env.local
 **/.env.local
+.reference_repos/
