@@ -5,7 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
-import { runMigrations } from './db/client.ts';
+import { runMigrations, db } from './db/client.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -129,6 +129,24 @@ export function broadcast(event: ServerEvent) {
     if (client.readyState === WS_OPEN) client.send(payload);
   }
 }
+
+// ─── Client Event Handlers ───────────────────────────────────────────────────
+eventBus.on('ws:client_event', (ev: ClientEvent) => {
+  if (ev.type === 'send_input') {
+    const input = db.answerInput(ev.inputId, ev.response);
+    if (!input) {
+      console.warn(`[ws] send_input: unknown inputId ${ev.inputId}`);
+      return;
+    }
+    const pending = db.listPendingInputs(ev.taskId);
+    if (pending.length === 0) {
+      db.updateTask(ev.taskId, { status: 'working' });
+      const task = db.getTask(ev.taskId);
+      if (task) broadcast({ type: 'task_updated', task });
+    }
+    console.info(`[ws] send_input answered for task=${ev.taskId} input=${ev.inputId}`);
+  }
+});
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 try {
