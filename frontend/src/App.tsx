@@ -6,9 +6,12 @@ import {
   RouterProvider,
   Outlet,
 } from '@tanstack/react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Button } from './components/ui/button';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
+import { queryClient } from './lib/query';
+import { WsProvider } from './components/custom/ws-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
 const TaskCreatePage = lazy(() => import('./routes/tasks.new'));
@@ -119,19 +122,23 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<SuspenseFallback />}>
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="absolute top-2 right-2 z-50 min-h-[44px] min-w-[44px] text-xs text-muted-foreground"
-          >
-            Logout
-          </Button>
-          <RouterProvider router={router} />
-        </div>
-      </Suspense>
+      <QueryClientProvider client={queryClient}>
+        <WsProvider>
+          <Suspense fallback={<SuspenseFallback />}>
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="absolute top-2 right-2 z-50 min-h-[44px] min-w-[44px] text-xs text-muted-foreground"
+              >
+                Logout
+              </Button>
+              <RouterProvider router={router} />
+            </div>
+          </Suspense>
+        </WsProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }
