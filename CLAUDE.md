@@ -25,7 +25,7 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 | Terminal | xterm.js | Lazy-loaded, ~800KB |
 | Styling | Tailwind CSS | |
 | Git | simple-git (deferred) | Worktree management — not yet installed, add when Task 3.1 begins |
-| Agent protocol | ACP SDK | `@agentclientprotocol/sdk` |
+| Agent protocol | ACP (JSON-RPC 2.0) | Bidirectional stdio — see `docs/acp-agents.md` |
 | GitHub API | Octokit | PR creation |
 | Website/Docs | Astro 4.x | Static site for product page + docs |
 

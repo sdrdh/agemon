@@ -456,23 +456,29 @@ class GitHubClient {
 
 ### Task 4.1: ACP Client Setup
 
-**Priority:** P0
+**Priority:** P0 — **HIGH PRIORITY: requires protocol rewrite**
 **Estimated Time:** 10 hours
 
-**Deliverables:**
-- [ ] Install `@agentclientprotocol/sdk`
-- [ ] Create `ACPAgentManager` class
-- [ ] Implement session-aware agent spawning (creates `agent_sessions` row on spawn)
-- [ ] Capture `external_session_id` from CLI stdout for `--resume` support
-- [ ] Handle session initialization and state transitions
-- [ ] Send prompts to agent
-- [ ] Update session `pid` and `state` throughout lifecycle
+> **CRITICAL FINDING:** Current `acp.ts` spawns agents as simple JSONL-on-stdout processes.
+> Real ACP agents use **JSON-RPC 2.0 over stdin/stdout** (bidirectional).
+> The agent process exits immediately because stdin is not piped.
+> See `docs/acp-agents.md` for full details on each agent's requirements.
 
-**Agent Support:**
-- Claude Code (via `claude-code-acp`)
-- OpenCode
-- Aider (via wrapper/adapter)
-- Gemini CLI
+**Deliverables:**
+- [x] ~~Install `@agentclientprotocol/sdk`~~ (using direct binary spawning instead)
+- [x] ~~Create `ACPAgentManager` class~~ (implemented as `lib/acp.ts` functions)
+- [x] Implement session-aware agent spawning (creates `agent_sessions` row on spawn)
+- [x] Capture `external_session_id` from CLI stdout for `--resume` support
+- [x] Handle session initialization and state transitions
+- [ ] **Pipe stdin to agent process** (`stdin: 'pipe'`)
+- [ ] **Implement JSON-RPC 2.0 handshake** (initialize → setSessionInfo → promptTurn)
+- [ ] Send prompts to agent via JSON-RPC `acp/promptTurn`
+- [x] Update session `pid` and `state` throughout lifecycle
+
+**Agent Support (see `docs/acp-agents.md`):**
+- Claude Code (via `claude-agent-acp`) — needs `claude /login`, most complex
+- OpenCode (`opencode acp`) — env var auth, simplest to integrate first
+- Gemini CLI (`gemini --experimental-acp`) — Google auth, experimental
 
 **Functions:**
 ```typescript
@@ -484,11 +490,12 @@ class ACPAgentManager {
 ```
 
 **Acceptance Criteria:**
-- Agent process spawns and creates an `agent_sessions` row with `state: 'starting'`
+- Agent process spawns with `stdin: 'pipe'` and creates an `agent_sessions` row with `state: 'starting'`
+- JSON-RPC `initialize` handshake completes successfully
 - `external_session_id` captured from CLI output and written to session row
 - Session moves to `running` after ACP handshake
 - Session moves to `stopped` or `crashed` on exit
-- Clean shutdown on stop command
+- Clean shutdown via JSON-RPC `shutdown` request + `exit` notification
 - Error handling for agent crashes (state → `crashed`)
 
 **Dependencies:** Task 1.5, Task 3.1
@@ -520,24 +527,31 @@ class ACPAgentManager {
 
 ### Task 4.3: ACP Event Stream Parser
 
-**Priority:** P0  
+**Priority:** P0 — **HIGH PRIORITY: requires JSON-RPC 2.0 implementation**
 **Estimated Time:** 10 hours
 
+> **NOTE:** Current `readStdout()` in `acp.ts` reads JSONL lines and looks for `type` fields.
+> Real ACP uses JSON-RPC 2.0 — responses have `jsonrpc`, `id`, `method`, `result` fields.
+> Agent thoughts/actions come as JSON-RPC notifications or streaming response parts.
+> See `docs/acp-agents.md` for protocol details.
+
 **Deliverables:**
-- [ ] Parse ACP JSON-RPC events from agent stdout
+- [ ] Implement JSON-RPC 2.0 message parser (handle requests, responses, notifications)
+- [ ] Map ACP protocol events to our internal event types
 - [ ] Store events in `acp_events` table
 - [ ] Broadcast events via WebSocket
 - [ ] Render thought stream in UI
 - [ ] Handle different event types
 
 **Event Types to Handle:**
-- `thought` - Agent reasoning
+- `thought` - Agent reasoning (from streaming prompt turn responses)
 - `action` - Commands executed
 - `await_input` - Blocking questions
-- `result` - Operation results
+- `result` - Operation results (from prompt turn completion)
 
 **Acceptance Criteria:**
-- All event types parsed correctly
+- JSON-RPC 2.0 messages parsed correctly (requests, responses, notifications)
+- ACP protocol events mapped to internal types
 - Events stored with proper timestamps
 - Events broadcast to connected clients
 - UI displays thought stream in real-time
