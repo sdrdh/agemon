@@ -1,61 +1,64 @@
 import { useEffect, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { onServerEvent, onConnectionChange } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
-import { taskKeys } from '@/lib/query';
+import { queryClient, taskKeys } from '@/lib/query';
 import type { ServerEvent } from '@agemon/shared';
 
+/**
+ * Subscribes to WebSocket events once on mount and bridges them to
+ * React Query cache + Zustand store. Uses module-level queryClient
+ * and Zustand getState() to avoid React render dependencies.
+ */
 export function WsProvider({ children }: { children: ReactNode }) {
-  const qc = useQueryClient();
-  const setConnected = useWsStore((s) => s.setConnected);
-  const appendThought = useWsStore((s) => s.appendThought);
-  const addPendingInput = useWsStore((s) => s.addPendingInput);
-
   useEffect(() => {
+    const store = useWsStore.getState;
+
     const unsubEvent = onServerEvent((event: ServerEvent) => {
       switch (event.type) {
         case 'task_updated': {
           const task = event.task;
-          qc.setQueryData(taskKeys.detail(task.id), task);
-          qc.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.setQueryData(taskKeys.detail(task.id), task);
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
         case 'agent_thought': {
-          appendThought(event.taskId, event.content);
-          qc.invalidateQueries({ queryKey: taskKeys.events(event.taskId) });
+          store().appendThought(event.taskId, event.content);
+          queryClient.invalidateQueries({ queryKey: taskKeys.events(event.taskId) });
           break;
         }
         case 'awaiting_input': {
-          addPendingInput({
+          store().addPendingInput({
             inputId: event.inputId,
             taskId: event.taskId,
             question: event.question,
             receivedAt: Date.now(),
           });
-          qc.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          qc.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
         case 'session_started': {
-          qc.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          qc.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
         case 'session_state_changed': {
-          qc.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          qc.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
           break;
         }
       }
     });
 
-    const unsubConn = onConnectionChange(setConnected);
+    const unsubConn = onConnectionChange((connected) => {
+      store().setConnected(connected);
+    });
 
     return () => {
       unsubEvent();
       unsubConn();
     };
-  }, [qc, setConnected, appendThought, addPendingInput]);
+  }, []);
 
   return <>{children}</>;
 }
