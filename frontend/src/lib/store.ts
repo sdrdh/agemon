@@ -48,8 +48,7 @@ export const useWsStore = create<WsState>((set) => ({
 
   clearChatMessages: (taskId) =>
     set((state) => {
-      const { [taskId]: _, ...rest } = state.chatMessages;
-      void _;
+      const { [taskId]: _removed, ...rest } = state.chatMessages;
       return { chatMessages: rest };
     }),
 

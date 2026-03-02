@@ -149,6 +149,7 @@ export default function TaskDetailView() {
   const qc = useQueryClient();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
+  const [turnInFlight, setTurnInFlight] = useState(false);
 
   const taskId = id ?? '';
 
@@ -174,6 +175,22 @@ export default function TaskDetailView() {
       setChatMessages(taskId, chatHistory);
     }
   }, [chatHistory, taskId, setChatMessages]);
+
+  // ── Clear turn-in-flight when agent responds or task status changes ──
+  useEffect(() => {
+    if (!turnInFlight) return;
+    // If the last message is from the agent or system, the turn resolved
+    const last = chatMessages[chatMessages.length - 1];
+    if (last && last.role !== 'user') {
+      setTurnInFlight(false);
+    }
+  }, [chatMessages, turnInFlight]);
+
+  // Clear turn-in-flight when task stops running
+  const taskStatus = task?.status;
+  useEffect(() => {
+    if (taskStatus === 'done' || taskStatus === 'todo') setTurnInFlight(false);
+  }, [taskStatus]);
 
   // ── Auto-scroll on new messages ───────────────────────────────────────
   useEffect(() => {
@@ -231,6 +248,7 @@ export default function TaskDetailView() {
     };
     appendChatMessage(taskId, optimisticMsg);
     setInputText('');
+    setTurnInFlight(true);
   }, [inputText, pendingInputs, taskId, removePendingInput, appendChatMessage]);
 
   // ── Derived state ─────────────────────────────────────────────────────
@@ -241,14 +259,15 @@ export default function TaskDetailView() {
   const actionLoading = startMutation.isPending || stopMutation.isPending;
 
   // Determine input bar state
-  const inputDisabled = isDone || isTodo;
+  const inputDisabled = isDone || isTodo || turnInFlight;
   const inputPlaceholder = useMemo(() => {
     if (isTodo) return 'Start agent to begin...';
     if (isDone) return 'Task completed';
+    if (turnInFlight) return 'Agent is working...';
     if (isAwaiting && pendingInputs.length > 0) return pendingInputs[0].question;
     if (isRunning) return 'Send a message...';
     return 'Send a message...';
-  }, [isTodo, isDone, isAwaiting, isRunning, pendingInputs]);
+  }, [isTodo, isDone, isAwaiting, isRunning, pendingInputs, turnInFlight]);
 
   // ── Loading state ─────────────────────────────────────────────────────
   if (isLoading) {

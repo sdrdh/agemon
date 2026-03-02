@@ -29,7 +29,6 @@ export function WsProvider({ children }: { children: ReactNode }) {
             eventType: event.eventType ?? 'thought',
             timestamp: new Date().toISOString(),
           });
-          queryClient.invalidateQueries({ queryKey: taskKeys.events(event.taskId) });
           break;
         }
         case 'awaiting_input': {
@@ -63,11 +62,17 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'session_state_changed': {
-          if (event.state === 'stopped' || event.state === 'crashed') {
+          const stateMessages: Record<string, string> = {
+            stopped: 'Agent stopped',
+            crashed: 'Agent crashed',
+            interrupted: 'Agent session interrupted (server restart)',
+          };
+          const msg = stateMessages[event.state];
+          if (msg) {
             store().appendChatMessage(event.taskId, {
               id: crypto.randomUUID(),
               role: 'system',
-              content: event.state === 'stopped' ? 'Agent stopped' : 'Agent crashed',
+              content: msg,
               eventType: 'status',
               timestamp: new Date().toISOString(),
             });
