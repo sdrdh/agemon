@@ -201,6 +201,30 @@ export const db = {
     ).all(taskId);
   },
 
+  /** Batch-fetch repos for multiple tasks in 2 queries (avoids N+1). */
+  _buildRepoMap(taskIds: string[]): Map<string, Repo[]> {
+    const map = new Map<string, Repo[]>();
+    if (taskIds.length === 0) return map;
+
+    const database = getDb();
+    interface TaskRepoLink { task_id: string; repo_id: number; url: string; name: string; created_at: string }
+    const placeholders = taskIds.map(() => '?').join(',');
+    const links = database.query<TaskRepoLink, string[]>(
+      `SELECT tr.task_id, r.id as repo_id, r.url, r.name, r.created_at
+       FROM task_repos tr
+       JOIN repos r ON r.id = tr.repo_id
+       WHERE tr.task_id IN (${placeholders})
+       ORDER BY r.name`
+    ).all(...taskIds);
+
+    for (const link of links) {
+      let repos = map.get(link.task_id);
+      if (!repos) { repos = []; map.set(link.task_id, repos); }
+      repos.push({ id: link.repo_id, url: link.url, name: link.name, created_at: link.created_at });
+    }
+    return map;
+  },
+
   setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
     const database = getDb();
     const repos: Repo[] = [];
@@ -223,9 +247,10 @@ export const db = {
   listTasks(): Task[] {
     const database = getDb();
     const rows = database.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all();
+    const repoMap = this._buildRepoMap(rows.map(r => r.id));
     return rows.map(row => ({
       ...parseTask(row),
-      repos: this.getTaskRepos(row.id),
+      repos: repoMap.get(row.id) ?? [],
     }));
   },
 
@@ -304,15 +329,10 @@ export const db = {
       ORDER BY t.created_at DESC
     `).all();
 
-    // Cache repos per task to avoid N+1
-    const taskIds = new Set<string>();
-    for (const row of taskRepoRows) taskIds.add(row.id);
-    for (const row of ungroupedRows) taskIds.add(row.id);
-
-    const repoCache = new Map<string, Repo[]>();
-    for (const taskId of taskIds) {
-      repoCache.set(taskId, this.getTaskRepos(taskId));
-    }
+    const allTaskIds = new Set<string>();
+    for (const row of taskRepoRows) allTaskIds.add(row.id);
+    for (const row of ungroupedRows) allTaskIds.add(row.id);
+    const repoCache = this._buildRepoMap([...allTaskIds]);
 
     const projects: Record<string, Task[]> = {};
     const seenPerProject = new Map<string, Set<string>>();

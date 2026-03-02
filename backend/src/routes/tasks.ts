@@ -27,6 +27,15 @@ function validateTaskFields(fields: { title?: string; description?: string | nul
     sendError(400, 'description must be 10000 characters or fewer');
 }
 
+function validateRepoUrls(repos: unknown): asserts repos is string[] {
+  if (!Array.isArray(repos)) sendError(400, 'repos must be an array');
+  if (repos.length > 20) sendError(400, 'repos must contain 20 or fewer entries');
+  if (!repos.every(r => typeof r === 'string' && isValidSshRepoUrl(r)))
+    sendError(400, 'each repo must be a valid SSH URL (git@host:org/repo.git)');
+  if (!repos.every(r => r.length <= 500))
+    sendError(400, 'each repo URL must be 500 characters or fewer');
+}
+
 function requireTask(id: string): Task {
   const task = db.getTask(id);
   if (!task) sendError(404, 'Task not found');
@@ -54,18 +63,7 @@ tasksRoutes.post('/tasks', async (c) => {
   }
 
   const repoUrls = repos ?? [];
-  if (!Array.isArray(repoUrls)) {
-    sendError(400, 'repos must be an array');
-  }
-  if (repoUrls.length > 20) {
-    sendError(400, 'repos must contain 20 or fewer entries');
-  }
-  if (!repoUrls.every(r => typeof r === 'string' && isValidSshRepoUrl(r))) {
-    sendError(400, 'each repo must be a valid SSH URL (git@host:org/repo.git)');
-  }
-  if (!repoUrls.every(r => r.length <= 500)) {
-    sendError(400, 'each repo URL must be 500 characters or fewer');
-  }
+  validateRepoUrls(repoUrls);
 
   const agentType = agent ?? 'claude-code';
   validateTaskFields({ title, description, agent: agentType });
@@ -107,18 +105,7 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
   validateTaskFields({ title, description, agent });
 
   if (repos !== undefined) {
-    if (!Array.isArray(repos)) {
-      sendError(400, 'repos must be an array');
-    }
-    if (repos.length > 20) {
-      sendError(400, 'repos must contain 20 or fewer entries');
-    }
-    if (!repos.every(r => typeof r === 'string' && isValidSshRepoUrl(r))) {
-      sendError(400, 'each repo must be a valid SSH URL (git@host:org/repo.git)');
-    }
-    if (!repos.every(r => r.length <= 500)) {
-      sendError(400, 'each repo URL must be 500 characters or fewer');
-    }
+    validateRepoUrls(repos);
   }
 
   const updated = db.updateTask(task.id, { title, description, agent, repos });

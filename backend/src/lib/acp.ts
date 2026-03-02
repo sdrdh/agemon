@@ -76,25 +76,12 @@ async function readStdout(
         try {
           const event = JSON.parse(line);
 
-          // If we haven't transitioned to running yet, do it now
-          if (!hasExternalId && event.session_id) {
-            db.updateSessionState(sessionId, 'running', {
-              external_session_id: event.session_id,
-            });
-            hasExternalId = true;
-            broadcast({
-              type: 'session_started',
-              taskId,
-              session: db.getSession(sessionId)!,
-            });
-            db.updateTask(taskId, { status: 'working' });
-            const task = db.getTask(taskId);
-            if (task) broadcast({ type: 'task_updated', task });
-            continue;
-          }
-
+          // Transition to running on first event from agent
           if (!hasExternalId) {
-            db.updateSessionState(sessionId, 'running');
+            const extra: { external_session_id?: string } = {};
+            if (event.session_id) extra.external_session_id = event.session_id;
+
+            db.updateSessionState(sessionId, 'running', extra);
             hasExternalId = true;
             broadcast({
               type: 'session_started',
@@ -104,6 +91,8 @@ async function readStdout(
             db.updateTask(taskId, { status: 'working' });
             const task = db.getTask(taskId);
             if (task) broadcast({ type: 'task_updated', task });
+
+            if (event.session_id) continue;
           }
 
           // Process known event types

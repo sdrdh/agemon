@@ -72,7 +72,7 @@ export default function ProjectListView() {
           <section key={name}>
             <h2 className="text-sm font-medium text-muted-foreground mb-2">{name}</h2>
             <div className="space-y-2">
-              {data!.projects[name].map(task => (
+              {(data?.projects[name] ?? []).map(task => (
                 <TaskCard
                   key={`${name}-${task.id}`}
                   task={task}
@@ -87,7 +87,7 @@ export default function ProjectListView() {
           <section>
             <h2 className="text-sm font-medium text-muted-foreground mb-2">No repository</h2>
             <div className="space-y-2">
-              {data!.ungrouped.map(task => (
+              {(data?.ungrouped ?? []).map(task => (
                 <TaskCard
                   key={task.id}
                   task={task}
