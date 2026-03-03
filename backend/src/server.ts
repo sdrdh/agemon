@@ -82,7 +82,7 @@ app.get('/api/health', (c) =>
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message']);
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -165,6 +165,15 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
       console.error(`[ws] send_message error for session=${ev.sessionId}:`, (err as Error).message);
     }
   }
+
+  else if (ev.type === 'approval_response') {
+    const { resolveApproval } = await import('./lib/acp.ts');
+    const resolved = resolveApproval(ev.approvalId, ev.decision);
+    if (!resolved) {
+      console.warn(`[ws] approval_response: could not resolve approvalId ${ev.approvalId}`);
+    }
+    console.info(`[ws] approval resolved: ${ev.approvalId} → ${ev.decision}`);
+  }
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -177,6 +186,12 @@ try {
 
 const { tasksRoutes } = await import('./routes/tasks.ts');
 app.route('/api', tasksRoutes);
+
+// ─── Approval endpoints ──────────────────────────────────────────────────────
+app.get('/api/tasks/:id/approvals', (c) => {
+  const approvals = db.listPendingApprovals(c.req.param('id'));
+  return c.json(approvals);
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 Bun.serve({ fetch: app.fetch, websocket, port: PORT, hostname: HOST });

@@ -14,7 +14,7 @@
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentSession, AgentSessionState, AgentType } from '@agemon/shared';
+import type { AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
@@ -38,6 +38,14 @@ const sessions = new Map<string, RunningSession>();
 const userStopped = new Set<string>(); // Track sessions stopped by user
 const KILL_TIMEOUT_MS = 5_000;
 const SHUTDOWN_REQUEST_TIMEOUT_MS = 3_000;
+
+// ─── Pending Approval Resolver Registry ─────────────────────────────────────
+
+const pendingApprovalResolvers = new Map<string, {
+  resolve: (response: Record<string, unknown>) => void;
+  sessionId: string;
+  taskId: string;
+}>();
 
 // ─── Task Status Derivation ─────────────────────────────────────────────────
 
@@ -346,6 +354,13 @@ async function handleExit(
   const state: AgentSessionState = exitCode === 0 ? 'stopped' : 'crashed';
 
   transport.close();
+
+  // Deny all pending approvals for this session
+  const pendingApprovals = db.listPendingApprovalsBySession(sessionId);
+  for (const approval of pendingApprovals) {
+    resolveApproval(approval.id, 'deny');
+  }
+
   db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
   sessions.delete(sessionId);
   userStopped.delete(sessionId);
@@ -395,19 +410,55 @@ function spawnProcess(
   });
 
   // Register incoming request handler (for agent -> client requests)
-  transport.onRequest((method, params) => {
-    if (method === 'requestPermission') {
+  transport.onRequest(async (method, params) => {
+    if (method === 'requestPermission' || method === 'session/request_permission') {
       const reqParams = params as Record<string, unknown> | undefined;
-      const options = (reqParams?.options ?? []) as Array<{ kind: string; optionId: string }>;
-      const allowOption = options.find((o) => o.kind === 'allow_once' || o.kind === 'allow_always');
-      if (allowOption) {
-        console.info(`[acp] auto-approved permission for session ${sessionId}`);
-        return { outcome: { outcome: 'selected', optionId: allowOption.optionId } };
+      const options = (reqParams?.options ?? []) as Array<{ kind: string; optionId: string; label?: string; name?: string }>;
+
+      // Extract tool context from the request
+      const toolCall = reqParams?.toolCall as Record<string, unknown> | undefined;
+      const toolName = extractToolName(toolCall);
+      const toolTitle = (toolCall?.title as string) ?? toolName ?? 'Unknown tool';
+      const context = extractToolContext(toolCall);
+
+      // Check "Always Allow" rules first
+      const rule = db.findApprovalRule(toolName, taskId, sessionId);
+      if (rule) {
+        const allowOption = options.find(o => o.kind === 'allow_once' || o.kind === 'allow_always');
+        if (allowOption) {
+          console.info(`[acp] auto-approved (rule) ${toolName} for session ${sessionId}`);
+          return { outcome: { outcome: 'selected', optionId: allowOption.optionId } };
+        }
       }
-      if (options.length > 0) {
-        return { outcome: { outcome: 'selected', optionId: options[0].optionId } };
-      }
-      return { outcome: { outcome: 'cancelled' } };
+
+      // Map ACP options to our ApprovalOption format
+      const mappedOptions: ApprovalOption[] = options.map(o => ({
+        kind: o.kind,
+        optionId: o.optionId,
+        label: o.label ?? o.name ?? o.kind.replace(/_/g, ' '),
+      }));
+
+      // Create pending approval
+      const approvalId = randomUUID();
+      const approval: PendingApproval = {
+        id: approvalId,
+        taskId,
+        sessionId,
+        toolName,
+        toolTitle,
+        context,
+        options: mappedOptions,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+
+      db.insertPendingApproval(approval);
+      broadcast({ type: 'approval_requested', approval });
+
+      // Block until user responds (Promise resolves in resolveApproval())
+      return new Promise<Record<string, unknown>>((resolve) => {
+        pendingApprovalResolvers.set(approvalId, { resolve, sessionId, taskId });
+      });
     }
 
     console.info(`[acp] incoming request from agent: ${method}`, params);
@@ -427,6 +478,87 @@ function spawnProcess(
   });
 
   return rs;
+}
+
+// ─── Tool Approval Helpers ───────────────────────────────────────────────
+
+function extractToolName(toolCall: Record<string, unknown> | undefined): string {
+  if (!toolCall) return 'unknown';
+  // ACP sends `kind` as the tool type (e.g. "fetch", "bash", "edit")
+  if (toolCall.kind && typeof toolCall.kind === 'string') return toolCall.kind;
+  const meta = toolCall._meta as Record<string, unknown> | undefined;
+  if (meta?.toolName) return meta.toolName as string;
+  const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
+  if (rawInput?.tool) return rawInput.tool as string;
+  const title = toolCall.title as string | undefined;
+  if (title) return title.split(/[\s:]/)[0];
+  return 'unknown';
+}
+
+function extractToolContext(toolCall: Record<string, unknown> | undefined): Record<string, string> {
+  if (!toolCall) return {};
+  const ctx: Record<string, string> = {};
+  const input = toolCall.rawInput as Record<string, unknown> | undefined;
+  if (input?.file_path) ctx.filePath = String(input.file_path);
+  if (input?.command) ctx.command = String(input.command);
+  if (input?.pattern) ctx.pattern = String(input.pattern);
+  if (input?.path) ctx.path = String(input.path);
+  if (input?.url) ctx.url = String(input.url);
+  if (input?.content) ctx.preview = String(input.content).slice(0, 200);
+  if (input?.old_string) ctx.oldString = String(input.old_string).slice(0, 200);
+  if (input?.new_string) ctx.newString = String(input.new_string).slice(0, 200);
+  if (toolCall.title) ctx.title = String(toolCall.title);
+  return ctx;
+}
+
+/**
+ * Resolve a pending tool approval. Called from the WebSocket handler
+ * when the user clicks Allow Once / Always Allow / Deny.
+ */
+export function resolveApproval(
+  approvalId: string,
+  decision: ApprovalDecision
+): boolean {
+  const pending = pendingApprovalResolvers.get(approvalId);
+  if (!pending) return false;
+
+  const approval = db.getPendingApproval(approvalId);
+  if (!approval || approval.status !== 'pending') return false;
+
+  // Find the matching ACP option
+  const options = approval.options as ApprovalOption[];
+  let selectedOption: ApprovalOption | undefined;
+
+  if (decision === 'allow_once' || decision === 'allow_always') {
+    selectedOption = options.find(o => o.kind === 'allow_once' || o.kind === 'allow_always');
+  } else {
+    selectedOption = options.find(o => o.kind === 'deny' || o.kind === 'reject_once' || o.kind === 'reject_always');
+  }
+
+  // Update DB
+  db.resolvePendingApproval(approvalId, decision);
+
+  // Create "Always Allow" rule if requested
+  if (decision === 'allow_always' && approval.toolName) {
+    db.insertApprovalRule({
+      id: randomUUID(),
+      taskId: approval.taskId,
+      sessionId: null, // Apply to all sessions in this task
+      toolName: approval.toolName,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  // Resolve the blocked Promise → unblocks the JSON-RPC response to agent
+  if (selectedOption) {
+    pending.resolve({ outcome: { outcome: 'selected', optionId: selectedOption.optionId } });
+  } else {
+    pending.resolve({ outcome: { outcome: 'cancelled' } });
+  }
+
+  pendingApprovalResolvers.delete(approvalId);
+  broadcast({ type: 'approval_resolved', approvalId, decision });
+  return true;
 }
 
 // ─── Exported API ────────────────────────────────────────────────────────────

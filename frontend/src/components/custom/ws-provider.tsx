@@ -133,6 +133,29 @@ export function WsProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
           break;
         }
+        case 'approval_requested': {
+          store().addPendingApproval(event.approval);
+          // Insert a chat message marker so the approval renders inline in the timeline
+          store().appendChatMessage(event.approval.sessionId, {
+            id: `approval-${event.approval.id}`,
+            role: 'system',
+            content: event.approval.id, // approval ID as content — looked up from store
+            eventType: 'approval_request',
+            timestamp: event.approval.createdAt,
+          });
+          store().setAgentActivity(event.approval.sessionId, `Waiting for approval: ${event.approval.toolName}`);
+          store().markUnread(event.approval.sessionId);
+          break;
+        }
+        case 'approval_resolved': {
+          store().resolvePendingApproval(event.approvalId, event.decision);
+          // Find the approval to clear activity on the right session
+          const resolved = store().pendingApprovals.find(a => a.id === event.approvalId);
+          if (resolved) {
+            store().setAgentActivity(resolved.sessionId, null);
+          }
+          break;
+        }
       }
     });
 

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
@@ -24,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /**
  * Extract a display name from a repo URL.
@@ -209,6 +209,9 @@ export function runMigrations() {
           db.run('ALTER TABLE agent_sessions ADD COLUMN name TEXT DEFAULT NULL');
         }
       }
+
+      // ── v7 migration: pending_approvals + approval_rules tables ──
+      // (Tables are created by schema.sql via CREATE TABLE IF NOT EXISTS — no extra DDL needed here)
 
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
@@ -693,5 +696,150 @@ export const db = {
     return database.query<AgentSession, [number]>(
       'SELECT * FROM agent_sessions ORDER BY started_at DESC LIMIT ?'
     ).all(limit).map(parseSession);
+  },
+
+  // ── Pending Approvals ──
+
+  insertPendingApproval(approval: PendingApproval): void {
+    const database = getDb();
+    database.run(
+      'INSERT INTO pending_approvals (id, task_id, session_id, tool_name, tool_title, context, options, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [approval.id, approval.taskId, approval.sessionId, approval.toolName, approval.toolTitle, JSON.stringify(approval.context), JSON.stringify(approval.options), approval.status, approval.createdAt]
+    );
+  },
+
+  resolvePendingApproval(id: string, decision: ApprovalDecision): void {
+    const database = getDb();
+    database.run(
+      "UPDATE pending_approvals SET status = 'resolved', decision = ? WHERE id = ?",
+      [decision, id]
+    );
+  },
+
+  getPendingApproval(id: string): PendingApproval | null {
+    const database = getDb();
+    interface RawApproval {
+      id: string;
+      task_id: string;
+      session_id: string;
+      tool_name: string;
+      tool_title: string;
+      context: string;
+      options: string;
+      status: string;
+      decision: string | null;
+      created_at: string;
+    }
+    const row = database.query<RawApproval, [string]>(
+      'SELECT * FROM pending_approvals WHERE id = ?'
+    ).get(id);
+    if (!row) return null;
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      toolName: row.tool_name,
+      toolTitle: row.tool_title,
+      context: JSON.parse(row.context),
+      options: JSON.parse(row.options),
+      status: row.status as 'pending' | 'resolved',
+      decision: row.decision as ApprovalDecision | undefined,
+      createdAt: row.created_at,
+    };
+  },
+
+  listPendingApprovals(taskId: string): PendingApproval[] {
+    const database = getDb();
+    interface RawApproval {
+      id: string;
+      task_id: string;
+      session_id: string;
+      tool_name: string;
+      tool_title: string;
+      context: string;
+      options: string;
+      status: string;
+      decision: string | null;
+      created_at: string;
+    }
+    const rows = database.query<RawApproval, [string]>(
+      "SELECT * FROM pending_approvals WHERE task_id = ? AND status = 'pending' ORDER BY created_at ASC"
+    ).all(taskId);
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      toolName: row.tool_name,
+      toolTitle: row.tool_title,
+      context: JSON.parse(row.context),
+      options: JSON.parse(row.options),
+      status: row.status as 'pending' | 'resolved',
+      decision: row.decision as ApprovalDecision | undefined,
+      createdAt: row.created_at,
+    }));
+  },
+
+  listPendingApprovalsBySession(sessionId: string): PendingApproval[] {
+    const database = getDb();
+    interface RawApproval {
+      id: string;
+      task_id: string;
+      session_id: string;
+      tool_name: string;
+      tool_title: string;
+      context: string;
+      options: string;
+      status: string;
+      decision: string | null;
+      created_at: string;
+    }
+    const rows = database.query<RawApproval, [string]>(
+      "SELECT * FROM pending_approvals WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC"
+    ).all(sessionId);
+    return rows.map(row => ({
+      id: row.id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      toolName: row.tool_name,
+      toolTitle: row.tool_title,
+      context: JSON.parse(row.context),
+      options: JSON.parse(row.options),
+      status: row.status as 'pending' | 'resolved',
+      decision: row.decision as ApprovalDecision | undefined,
+      createdAt: row.created_at,
+    }));
+  },
+
+  // ── Approval Rules ──
+
+  insertApprovalRule(rule: ApprovalRule): void {
+    const database = getDb();
+    database.run(
+      'INSERT INTO approval_rules (id, task_id, session_id, tool_name, created_at) VALUES (?, ?, ?, ?, ?)',
+      [rule.id, rule.taskId, rule.sessionId, rule.toolName, rule.createdAt]
+    );
+  },
+
+  findApprovalRule(toolName: string, taskId: string, sessionId: string | null): ApprovalRule | null {
+    const database = getDb();
+    interface RawRule {
+      id: string;
+      task_id: string | null;
+      session_id: string | null;
+      tool_name: string;
+      created_at: string;
+    }
+    // Match: exact task + any session, or global (null task)
+    const row = database.query<RawRule, [string, string]>(
+      "SELECT * FROM approval_rules WHERE tool_name = ? AND (task_id = ? OR task_id IS NULL) ORDER BY task_id DESC LIMIT 1"
+    ).get(toolName, taskId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      toolName: row.tool_name,
+      createdAt: row.created_at,
+    };
   },
 };

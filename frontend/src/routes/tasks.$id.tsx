@@ -1,10 +1,11 @@
 import { useRef, useEffect, useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Send, ChevronRight, ChevronDown, Check, X, Loader2, RotateCcw, CheckCircle2, Info, GitFork, Clock, Bot, Archive } from 'lucide-react';
+import { ArrowLeft, Plus, Send, ChevronRight, ChevronDown, Check, X, Loader2, RotateCcw, CheckCircle2, Info, GitFork, Clock, Bot, Archive, Brain, Wrench, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/custom/status-badge';
+import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { sendClientEvent } from '@/lib/ws';
@@ -12,7 +13,8 @@ import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, session
 import { useWsStore } from '@/lib/store';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage, AgentSession, AgentSessionState, Task } from '@agemon/shared';
+import { ApprovalCard } from '@/components/custom/approval-card';
+import type { ChatMessage, AgentSession, AgentSessionState, Task, ApprovalDecision, PendingApproval } from '@agemon/shared';
 
 // Stable empty array reference to prevent re-renders
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -92,6 +94,7 @@ interface ToolCallEntry {
   id: string;
   label: string;
   status: 'pending' | 'completed' | 'failed';
+  kind: 'tool' | 'skill';
 }
 
 function shortenToolLabel(label: string): string {
@@ -115,7 +118,9 @@ function parseActivityMessages(messages: ChatMessage[]) {
   for (const msg of messages) {
     const newMatch = msg.content.match(/^\[tool:([^\]]+)\]\s+(.+?)(?:\s*\((?:pending|in_progress|completed|failed)\))?\s*$/);
     if (newMatch) {
-      const entry: ToolCallEntry = { id: newMatch[1], label: newMatch[2].trim(), status: 'pending' };
+      const rawLabel = newMatch[2].trim();
+      const toolName = rawLabel.split(' ')[0];
+      const entry: ToolCallEntry = { id: newMatch[1], label: rawLabel, status: 'pending', kind: toolName === 'Skill' ? 'skill' : 'tool' };
       toolCalls.push(entry);
       toolCallMap.set(newMatch[1], entry);
       continue;
@@ -124,7 +129,9 @@ function parseActivityMessages(messages: ChatMessage[]) {
     const oldMatch = msg.content.match(/^\[tool\]\s+(.+?)(?:\s*\((?:pending|in_progress|completed|failed)\))?\s*$/);
     if (oldMatch) {
       const fakeId = `unnamed-${unnamedIdx++}`;
-      toolCalls.push({ id: fakeId, label: oldMatch[1].trim(), status: 'pending' });
+      const rawLabel = oldMatch[1].trim();
+      const toolName = rawLabel.split(' ')[0];
+      toolCalls.push({ id: fakeId, label: rawLabel, status: 'pending', kind: toolName === 'Skill' ? 'skill' : 'tool' });
       continue;
     }
 
@@ -149,18 +156,24 @@ function parseActivityMessages(messages: ChatMessage[]) {
 
 // ─── ActivityGroup component ──────────────────────────────────────────────
 
-function ActivityGroup({ messages }: { messages: ChatMessage[] }) {
+function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const { toolCalls, thoughts } = useMemo(() => parseActivityMessages(messages), [messages]);
+  const { toolCalls, thoughts } = useMemo(() => {
+    const result = parseActivityMessages(messages);
+    // If this group is not the last item in the chat, all tools must have completed
+    if (!isLast) {
+      for (const tc of result.toolCalls) {
+        if (tc.status === 'pending') tc.status = 'completed';
+      }
+    }
+    return result;
+  }, [messages, isLast]);
 
+  const toolCount = toolCalls.filter((tc) => tc.kind === 'tool').length;
+  const skillCount = toolCalls.filter((tc) => tc.kind === 'skill').length;
   const completedCount = toolCalls.filter((tc) => tc.status === 'completed').length;
   const failedCount = toolCalls.filter((tc) => tc.status === 'failed').length;
   const pendingCount = toolCalls.filter((tc) => tc.status === 'pending').length;
-
-  const parts: string[] = [];
-  if (toolCalls.length > 0) parts.push(`${toolCalls.length} tool call${toolCalls.length !== 1 ? 's' : ''}`);
-  if (thoughts.length > 0) parts.push(`${thoughts.length} thought${thoughts.length !== 1 ? 's' : ''}`);
-  const label = parts.join(', ');
 
   let statusSuffix = '';
   if (toolCalls.length > 0 && pendingCount === 0) {
@@ -189,19 +202,44 @@ function ActivityGroup({ messages }: { messages: ChatMessage[] }) {
         }
       }}
     >
-      <div className="flex items-center gap-1 text-sm text-muted-foreground min-h-[44px]">
+      {/* Collapsed summary with activity-type icons */}
+      <div className="flex items-center gap-1.5 text-sm text-muted-foreground min-h-[44px]">
         {expanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-        <span>
-          {label}
+        <div className="flex items-center gap-2 flex-wrap">
+          {toolCount > 0 && (
+            <span className="flex items-center gap-1">
+              <Wrench className="h-3 w-3 shrink-0" />
+              <span>{toolCount} tool{toolCount !== 1 ? 's' : ''}</span>
+            </span>
+          )}
+          {skillCount > 0 && (
+            <span className="flex items-center gap-1 text-amber-500">
+              <Zap className="h-3 w-3 shrink-0" />
+              <span>{skillCount} skill{skillCount !== 1 ? 's' : ''}</span>
+            </span>
+          )}
+          {thoughts.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Brain className="h-3 w-3 shrink-0" />
+              <span>{thoughts.length} thought{thoughts.length !== 1 ? 's' : ''}</span>
+            </span>
+          )}
           {statusSuffix && (
             <span className={failedCount > 0 ? 'text-red-400' : 'text-emerald-500'}>{statusSuffix}</span>
           )}
-        </span>
+        </div>
       </div>
+
+      {/* Expanded detail view */}
       {expanded && (
         <div className="space-y-0.5 pb-2" onClick={(e) => e.stopPropagation()}>
           {toolCalls.map((tc) => (
             <div key={tc.id} className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground">
+              {tc.kind === 'skill' ? (
+                <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              ) : (
+                <Wrench className="h-3.5 w-3.5 shrink-0 opacity-50" />
+              )}
               {tc.status === 'completed' && <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
               {tc.status === 'failed' && <X className="h-3.5 w-3.5 text-red-500 shrink-0" />}
               {tc.status === 'pending' && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
@@ -211,8 +249,9 @@ function ActivityGroup({ messages }: { messages: ChatMessage[] }) {
           {thoughts.length > 0 && (
             <div className="mt-1.5 space-y-1 border-t border-muted/50 pt-1.5">
               {thoughts.map((m) => (
-                <div key={m.id} className="text-xs text-muted-foreground/70 whitespace-pre-wrap break-words pl-5">
-                  {m.content}
+                <div key={m.id} className="flex items-start gap-1.5 text-xs text-muted-foreground/70 break-words">
+                  <Brain className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-50" />
+                  <span className="whitespace-pre-wrap">{m.content}</span>
                 </div>
               ))}
             </div>
@@ -225,8 +264,21 @@ function ActivityGroup({ messages }: { messages: ChatMessage[] }) {
 
 // ─── ChatBubble component ──────────────────────────────────────────────────
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
+  message: ChatMessage;
+  approvalLookup?: Map<string, PendingApproval>;
+  onApprovalDecision?: (approvalId: string, decision: ApprovalDecision) => void;
+}) {
   const { role, content, eventType } = message;
+
+  // Render inline approval card for approval_request markers
+  if (eventType === 'approval_request' && approvalLookup && onApprovalDecision) {
+    const approval = approvalLookup.get(content);
+    if (approval) {
+      return <ApprovalCard approval={approval} onDecision={onApprovalDecision} />;
+    }
+    return null;
+  }
 
   if (role === 'system') {
     return (
@@ -397,7 +449,10 @@ function TaskInfoDrawer({
               <div className="flex items-center gap-2 text-sm">
                 <Bot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span className="text-muted-foreground">Agent</span>
-                <span className="ml-auto font-mono text-xs">{task.agent}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  <AgentIcon agentType={task.agent} className={`h-3.5 w-3.5 ${AGENT_COLORS[task.agent] ?? ''}`} />
+                  <span className="text-xs">{agentDisplayName(task.agent)}</span>
+                </span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -506,8 +561,11 @@ function SessionListPanel({
                     : 'hover:bg-accent/50 border-l-2 border-l-transparent'
                 }`}
               >
-                {/* State dot */}
-                <span className={`inline-block h-2.5 w-2.5 rounded-full ${dotColor} shrink-0`} />
+                {/* Agent icon with state dot overlay */}
+                <span className="relative shrink-0">
+                  <AgentIcon agentType={session.agent_type} className={`h-5 w-5 ${AGENT_COLORS[session.agent_type] ?? 'text-muted-foreground'}`} />
+                  <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ${dotColor} ring-1 ring-background`} />
+                </span>
 
                 {/* Label + state */}
                 <div className="flex-1 min-w-0">
@@ -624,6 +682,8 @@ function SessionChatPanel({
   groupedItems,
   agentActivity,
   pendingInputs,
+  pendingApprovals,
+  onApprovalDecision,
   inputText,
   setInputText,
   handleSend,
@@ -641,6 +701,8 @@ function SessionChatPanel({
   groupedItems: ChatItem[];
   agentActivity: string | null;
   pendingInputs: { inputId: string; question: string }[];
+  pendingApprovals: PendingApproval[];
+  onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   inputText: string;
   setInputText: (text: string) => void;
   handleSend: () => void;
@@ -657,6 +719,13 @@ function SessionChatPanel({
   const sessionStopped = isSessionTerminal(session.state);
   const sessionReady = session.state === 'ready';
   const canType = sessionRunning && !turnInFlight && !isDone;
+
+  // Build approval lookup map for inline rendering
+  const approvalLookup = useMemo(() => {
+    const map = new Map<string, PendingApproval>();
+    for (const a of pendingApprovals) map.set(a.id, a);
+    return map;
+  }, [pendingApprovals]);
 
   const inputPlaceholder = useMemo(() => {
     if (isDone) return 'Task completed';
@@ -708,16 +777,23 @@ function SessionChatPanel({
           </div>
         )}
 
-        {/* Chat messages */}
-        {groupedItems.map((item) => {
+        {/* Chat messages (approvals render inline via approval_request markers) */}
+        {groupedItems.map((item, idx) => {
           if (item.kind === 'activity-group') {
-            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} />;
+            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} />;
           }
-          return <ChatBubble key={item.message.id} message={item.message} />;
+          return (
+            <ChatBubble
+              key={item.message.id}
+              message={item.message}
+              approvalLookup={approvalLookup}
+              onApprovalDecision={onApprovalDecision}
+            />
+          );
         })}
 
         {/* Agent activity indicator */}
-        {agentActivity && sessionRunning && (
+        {agentActivity && sessionRunning && !agentActivity.startsWith('Waiting for approval') && (
           <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
@@ -797,7 +873,7 @@ export default function TaskDetailView() {
     return sessions.map((s) => {
       counts[s.agent_type] = (counts[s.agent_type] ?? 0) + 1;
       if (s.name) return s.name;
-      const shortName = s.agent_type === 'claude-code' ? 'Claude' : s.agent_type;
+      const shortName = agentDisplayName(s.agent_type);
       return `${shortName} ${counts[s.agent_type]}`;
     });
   }, [sessions]);
@@ -857,6 +933,31 @@ export default function TaskDetailView() {
       : [],
     [allPendingInputs, selectedSessionId],
   );
+
+  // ── Approval state ──────────────────────────────────────────────────
+  const allPendingApprovals = useWsStore((s) => s.pendingApprovals);
+  const setPendingApprovals = useWsStore((s) => s.setPendingApprovals);
+  const sessionApprovals = useMemo(
+    () => selectedSessionId
+      ? allPendingApprovals.filter((a) => a.sessionId === selectedSessionId)
+      : [],
+    [allPendingApprovals, selectedSessionId],
+  );
+
+  // Hydrate pending approvals on task load (for reconnect)
+  useEffect(() => {
+    if (!taskId) return;
+    fetch(`/api/tasks/${taskId}/approvals`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('agemon_key') ?? ''}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((approvals: PendingApproval[]) => {
+        if (approvals.length > 0) {
+          setPendingApprovals(approvals);
+        }
+      })
+      .catch(() => { /* ignore — approvals will arrive via WS */ });
+  }, [taskId, setPendingApprovals]);
 
   // ── Clear unread for the active session ─────────────────────────────
   useEffect(() => {
@@ -979,6 +1080,11 @@ export default function TaskDetailView() {
     setTurnInFlight(true);
   }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage]);
 
+  // ── Approval decision handler ────────────────────────────────────────
+  const handleApprovalDecision = useCallback((approvalId: string, decision: ApprovalDecision) => {
+    sendClientEvent({ type: 'approval_response', approvalId, decision });
+  }, []);
+
   // ── Session selection handler (for mobile navigation) ──────────────────
   const handleSelectSession = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
@@ -1079,6 +1185,8 @@ export default function TaskDetailView() {
             groupedItems={groupedItems}
             agentActivity={agentActivity}
             pendingInputs={pendingInputs}
+            pendingApprovals={sessionApprovals}
+            onApprovalDecision={handleApprovalDecision}
             inputText={inputText}
             setInputText={setInputText}
             handleSend={handleSend}

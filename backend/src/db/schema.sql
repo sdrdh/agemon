@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 6
+-- Version: 7
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -87,3 +87,32 @@ CREATE TABLE IF NOT EXISTS task_repos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_repos_repo ON task_repos(repo_id);
+
+-- Pending tool call approvals
+CREATE TABLE IF NOT EXISTS pending_approvals (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  session_id  TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+  tool_name   TEXT NOT NULL,
+  tool_title  TEXT NOT NULL,
+  context     TEXT NOT NULL DEFAULT '{}',
+  options     TEXT NOT NULL DEFAULT '[]',
+  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'resolved')),
+  decision    TEXT CHECK (decision IS NULL OR decision IN ('allow_once', 'allow_always', 'deny')),
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_approvals_task ON pending_approvals(task_id);
+CREATE INDEX IF NOT EXISTS idx_pending_approvals_session ON pending_approvals(session_id);
+CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals(status);
+
+-- Persistent "Always Allow" rules
+CREATE TABLE IF NOT EXISTS approval_rules (
+  id          TEXT PRIMARY KEY,
+  task_id     TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+  session_id  TEXT REFERENCES agent_sessions(id) ON DELETE CASCADE,
+  tool_name   TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_rules_tool ON approval_rules(tool_name);

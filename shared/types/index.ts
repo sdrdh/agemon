@@ -56,6 +56,36 @@ export interface AwaitingInput {
   created_at: string;
 }
 
+// ─── Tool Approval Types ──────────────────────────────────────────────────
+export type ApprovalDecision = 'allow_once' | 'allow_always' | 'deny';
+
+export interface ApprovalOption {
+  kind: string;      // e.g. 'allow_once', 'allow_always', 'deny'
+  optionId: string;  // ACP option ID to send back
+  label: string;     // Human-readable label
+}
+
+export interface PendingApproval {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  toolName: string;          // e.g. "Edit", "Bash", "Write"
+  toolTitle: string;         // Full title from ACP (e.g. "Edit frontend/src/App.tsx")
+  context: Record<string, string>; // Key-value metadata (cwd, args, path, etc.)
+  options: ApprovalOption[];
+  status: 'pending' | 'resolved';
+  decision?: ApprovalDecision;
+  createdAt: string;
+}
+
+export interface ApprovalRule {
+  id: string;
+  taskId: string | null;     // null = global rule
+  sessionId: string | null;
+  toolName: string;           // Tool name pattern to match
+  createdAt: string;
+}
+
 export interface Diff {
   id: string;
   task_id: string;
@@ -68,7 +98,7 @@ export interface ChatMessage {
   id: string;
   role: 'agent' | 'user' | 'system';
   content: string;
-  eventType: 'thought' | 'action' | 'input_request' | 'input_response' | 'prompt' | 'status';
+  eventType: 'thought' | 'action' | 'input_request' | 'input_response' | 'prompt' | 'status' | 'approval_request' | 'approval_resolved';
   timestamp: string;
 }
 
@@ -81,12 +111,15 @@ export type ServerEvent =
   | { type: 'terminal_output'; sessionId: string; data: string }
   | { type: 'session_started'; taskId: string; session: AgentSession }
   | { type: 'session_ready'; taskId: string; session: AgentSession }
-  | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState };
+  | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState }
+  | { type: 'approval_requested'; approval: PendingApproval }
+  | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
   | { type: 'terminal_input'; sessionId: string; data: string }
-  | { type: 'send_message'; sessionId: string; content: string };
+  | { type: 'send_message'; sessionId: string; content: string }
+  | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 

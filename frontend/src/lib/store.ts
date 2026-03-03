@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatMessage } from '@agemon/shared';
+import type { ChatMessage, PendingApproval, ApprovalDecision } from '@agemon/shared';
 
 interface PendingInput {
   inputId: string;
@@ -14,6 +14,8 @@ interface WsState {
   /** Chat messages keyed by sessionId */
   chatMessages: Record<string, ChatMessage[]>;
   pendingInputs: PendingInput[];
+  /** Pending tool call approvals */
+  pendingApprovals: PendingApproval[];
   /** Agent activity indicator keyed by sessionId */
   agentActivity: Record<string, string | null>;
   /** Sessions with unread activity (not currently viewed) */
@@ -24,6 +26,9 @@ interface WsState {
   clearChatMessages: (sessionId: string) => void;
   addPendingInput: (input: PendingInput) => void;
   removePendingInput: (inputId: string) => void;
+  addPendingApproval: (approval: PendingApproval) => void;
+  resolvePendingApproval: (approvalId: string, decision: ApprovalDecision) => void;
+  setPendingApprovals: (approvals: PendingApproval[]) => void;
   setAgentActivity: (sessionId: string, activity: string | null) => void;
   markUnread: (sessionId: string) => void;
   clearUnread: (sessionId: string) => void;
@@ -35,6 +40,7 @@ export const useWsStore = create<WsState>((set) => ({
   connected: false,
   chatMessages: {},
   pendingInputs: [],
+  pendingApprovals: [],
   agentActivity: {},
   unreadSessions: {},
 
@@ -77,6 +83,21 @@ export const useWsStore = create<WsState>((set) => ({
     set((state) => ({
       pendingInputs: state.pendingInputs.filter((p) => p.inputId !== inputId),
     })),
+
+  addPendingApproval: (approval) =>
+    set((state) => ({
+      pendingApprovals: [...state.pendingApprovals, approval],
+    })),
+
+  resolvePendingApproval: (approvalId, decision) =>
+    set((state) => ({
+      pendingApprovals: state.pendingApprovals.map((a) =>
+        a.id === approvalId ? { ...a, status: 'resolved' as const, decision } : a
+      ),
+    })),
+
+  setPendingApprovals: (approvals) =>
+    set({ pendingApprovals: approvals }),
 
   setAgentActivity: (sessionId, activity) =>
     set((state) => ({
