@@ -788,6 +788,35 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.15: Agent Authentication & Configuration Settings
+
+**Priority:** P1
+**Status:** Todo
+
+> Design doc: `docs/plans/2026-03-04-agent-auth-settings-design.md`
+
+**Deliverables:**
+- [ ] `GET /api/agents/status` — auto-detect installed binaries (`Bun.which()`), check auth status (env var presence or login health-check), return per-agent status
+- [ ] `POST /api/agents/config` — save API keys + default agent to `.env` file, hot-reload `process.env`
+- [ ] `POST /api/agents/:type/login` — proxy login flow for Claude Code (`claude /login`) and Gemini (`gemini login`): spawn command, parse stdout, stream prompts/URLs to frontend via WebSocket `agent_login` events
+- [ ] Frontend: Settings → Agents section with agent list cards (icon, name, detection badge, auth badge, configure button)
+- [ ] Frontend: Inline agent config panel — API key input (masked, show/hide toggle) for env-var agents, "Login" button for login agents, install docs link for undetected agents
+- [ ] Frontend: Proxy login guided card flow (tappable auth URL, prompt input, success confirmation) — inline, no modal
+- [ ] Frontend: Default agent dropdown in Settings → Agents (stored in `.env` as `DEFAULT_AGENT`)
+- [ ] Task creation form reads default agent from settings instead of hardcoding `claude-code`
+- [ ] API keys masked before sending to frontend (`sk-...xxxx`), never exposed in full
+
+**Key Considerations:**
+- No DB schema changes — all config persists in `.env` file
+- Env vars set before server start still work as fallback (UI-set values override)
+- Proxy login is scoped to Claude Code and Gemini only; OpenCode/Aider use API key inputs
+- Auth status for login agents uses lightweight health-check (e.g. `claude --version`)
+- Mobile-first: full-width cards, 44px touch targets, inline flows
+
+**Dependencies:** Task 1.3 (REST routes), Task 1.4 (WebSocket)
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
