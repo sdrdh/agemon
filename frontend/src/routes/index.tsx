@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TaskCard } from '@/components/custom/task-card';
 import { tasksByProjectQuery } from '@/lib/query';
+import { friendlyError } from '@/lib/errors';
 
 export default function ProjectListView() {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ export default function ProjectListView() {
   if (error) {
     return (
       <div className="p-4 text-center">
-        <p className="text-destructive">{error instanceof Error ? error.message : 'Failed to load tasks'}</p>
+        <p className="text-destructive">{friendlyError(error, 'Failed to load tasks')}</p>
         <Button variant="link" onClick={() => window.location.reload()}>Retry</Button>
       </div>
     );

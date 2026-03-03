@@ -1,3 +1,6 @@
+@import 'highlight.js/styles/github.css' (prefers-color-scheme: light);
+@import 'highlight.js/styles/github-dark.css' (prefers-color-scheme: dark);
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -47,6 +50,163 @@
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
   }
+
+  /* ── Cyber Indigo ─────────────────────────────────────────────────────── */
+  [data-theme="cyber-indigo"] {
+    --background: 226 47% 97%;
+    --foreground: 226 47% 10%;
+    --card: 226 47% 97%;
+    --card-foreground: 226 47% 10%;
+    --popover: 226 47% 97%;
+    --popover-foreground: 226 47% 10%;
+    --primary: 234 89% 74%;
+    --primary-foreground: 226 47% 97%;
+    --secondary: 226 20% 92%;
+    --secondary-foreground: 226 47% 10%;
+    --muted: 226 20% 92%;
+    --muted-foreground: 226 10% 45%;
+    --accent: 226 20% 92%;
+    --accent-foreground: 226 47% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 226 20% 88%;
+    --input: 226 20% 88%;
+    --ring: 234 89% 74%;
+  }
+  [data-theme="cyber-indigo"].dark {
+    --background: 222 47% 11%;
+    --foreground: 213 31% 91%;
+    --card: 222 47% 13%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 47% 13%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 234 89% 74%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 222 30% 18%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 222 30% 18%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 222 30% 18%;
+    --accent-foreground: 213 31% 91%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 30% 20%;
+    --input: 222 30% 20%;
+    --ring: 234 89% 74%;
+  }
+
+  /* ── Terminal Green (dark only) ──────────────────────────────────────── */
+  [data-theme="terminal-green"] {
+    --background: 240 10% 3.9%;
+    --foreground: 160 60% 85%;
+    --card: 240 10% 5%;
+    --card-foreground: 160 60% 85%;
+    --popover: 240 10% 5%;
+    --popover-foreground: 160 60% 85%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 240 10% 3.9%;
+    --secondary: 160 15% 12%;
+    --secondary-foreground: 160 60% 85%;
+    --muted: 160 10% 12%;
+    --muted-foreground: 160 20% 50%;
+    --accent: 160 15% 12%;
+    --accent-foreground: 160 60% 85%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 160 10% 15%;
+    --input: 160 10% 15%;
+    --ring: 160 84% 39%;
+  }
+
+  /* ── Graphite Line Indigo ────────────────────────────────────────────── */
+  [data-theme="graphite-line-indigo"] {
+    --background: 240 20% 97%;
+    --foreground: 240 20% 10%;
+    --card: 240 20% 97%;
+    --card-foreground: 240 20% 10%;
+    --popover: 240 20% 97%;
+    --popover-foreground: 240 20% 10%;
+    --primary: 244 76% 53%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 15% 92%;
+    --secondary-foreground: 240 20% 10%;
+    --muted: 240 15% 92%;
+    --muted-foreground: 240 8% 45%;
+    --accent: 240 15% 92%;
+    --accent-foreground: 240 20% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 15% 88%;
+    --input: 240 15% 88%;
+    --ring: 244 76% 53%;
+  }
+  [data-theme="graphite-line-indigo"].dark {
+    --background: 240 33% 3%;
+    --foreground: 220 15% 85%;
+    --card: 240 25% 5%;
+    --card-foreground: 220 15% 85%;
+    --popover: 240 25% 5%;
+    --popover-foreground: 220 15% 85%;
+    --primary: 244 76% 53%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 15% 12%;
+    --secondary-foreground: 220 15% 85%;
+    --muted: 240 15% 12%;
+    --muted-foreground: 240 8% 50%;
+    --accent: 240 15% 12%;
+    --accent-foreground: 220 15% 85%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 15% 15%;
+    --input: 240 15% 15%;
+    --ring: 244 76% 53%;
+  }
+
+  /* ── Dracula (dark only) ─────────────────────────────────────────────── */
+  [data-theme="dracula"] {
+    --background: 231 15% 18%;
+    --foreground: 60 30% 96%;
+    --card: 232 14% 21%;
+    --card-foreground: 60 30% 96%;
+    --popover: 232 14% 21%;
+    --popover-foreground: 60 30% 96%;
+    --primary: 191 97% 77%;
+    --primary-foreground: 231 15% 18%;
+    --secondary: 232 14% 25%;
+    --secondary-foreground: 60 30% 96%;
+    --muted: 232 14% 25%;
+    --muted-foreground: 225 14% 58%;
+    --accent: 265 89% 78%;
+    --accent-foreground: 60 30% 96%;
+    --destructive: 0 100% 67%;
+    --destructive-foreground: 60 30% 96%;
+    --border: 232 14% 28%;
+    --input: 232 14% 28%;
+    --ring: 191 97% 77%;
+  }
+
+  /* ── One Dark Pro (dark only) ────────────────────────────────────────── */
+  [data-theme="one-dark-pro"] {
+    --background: 220 13% 18%;
+    --foreground: 219 14% 76%;
+    --card: 220 13% 20%;
+    --card-foreground: 219 14% 76%;
+    --popover: 220 13% 20%;
+    --popover-foreground: 219 14% 76%;
+    --primary: 207 82% 66%;
+    --primary-foreground: 220 13% 18%;
+    --secondary: 220 13% 24%;
+    --secondary-foreground: 219 14% 76%;
+    --muted: 220 13% 24%;
+    --muted-foreground: 219 10% 50%;
+    --accent: 286 60% 67%;
+    --accent-foreground: 219 14% 76%;
+    --destructive: 355 65% 65%;
+    --destructive-foreground: 219 14% 76%;
+    --border: 220 13% 26%;
+    --input: 220 13% 26%;
+    --ring: 207 82% 66%;
+  }
 }
 
 @layer base {
@@ -66,10 +226,10 @@
 /* Markdown code blocks inside chat bubbles */
 @layer components {
   .prose pre {
-    @apply bg-zinc-900 text-zinc-100 rounded-md p-3 overflow-x-auto text-xs leading-relaxed;
+    @apply bg-card rounded-md p-3 overflow-x-auto text-xs leading-relaxed;
   }
   .prose :not(pre) > code {
-    @apply bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded px-1.5 py-0.5 text-xs font-mono;
+    @apply bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 text-xs font-mono;
     font-weight: normal;
   }
   .prose :not(pre) > code::before,

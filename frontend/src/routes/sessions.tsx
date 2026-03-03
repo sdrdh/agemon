@@ -5,6 +5,7 @@ import { sessionsListQuery, tasksListQuery } from '@/lib/query';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
+import { friendlyError } from '@/lib/errors';
 import type { AgentSession, AgentSessionState, Task } from '@agemon/shared';
 
 const STATE_STYLES: Record<AgentSessionState, { label: string; className: string }> = {
@@ -162,7 +163,7 @@ export default function SessionsPage() {
     return (
       <div className="p-4 text-center">
         <p className="text-destructive">
-          {sessionsError instanceof Error ? sessionsError.message : 'Failed to load sessions'}
+          {friendlyError(sessionsError, 'Failed to load sessions')}
         </p>
       </div>
     );

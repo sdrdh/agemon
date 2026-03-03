@@ -8,6 +8,19 @@
     <title>Agemon</title>
   </head>
   <body>
+    <script>
+      // Flash prevention: apply theme + dark class before React hydrates
+      (function() {
+        try {
+          var t = localStorage.getItem('agemon_theme') || 'monochrome-stealth';
+          var m = localStorage.getItem('agemon_color_mode') || 'dark';
+          var darkOnly = ['terminal-green', 'dracula', 'one-dark-pro'];
+          var isDark = darkOnly.indexOf(t) >= 0 || m === 'dark' || (m === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (t !== 'monochrome-stealth') document.documentElement.setAttribute('data-theme', t);
+          if (isDark) document.documentElement.classList.add('dark');
+        } catch(e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

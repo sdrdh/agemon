@@ -9,6 +9,7 @@ import { RepoSelector } from '@/components/custom/repo-selector';
 import { AgentSelector } from '@/components/custom/agent-selector';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
+import { friendlyError } from '@/lib/errors';
 import type { AgentType } from '@agemon/shared';
 
 export default function TaskCreateForm() {
@@ -34,7 +35,7 @@ export default function TaskCreateForm() {
       });
       navigate({ to: '/tasks/$id', params: { id: task.id } });
     } catch (err) {
-      showToast({ title: 'Failed to create task', description: (err as Error).message, variant: 'destructive' });
+      showToast({ title: 'Failed to create task', description: friendlyError(err, 'An unexpected error occurred'), variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }

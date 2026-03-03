@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { tasksListQuery } from '@/lib/query';
 import { TaskCard } from '@/components/custom/task-card';
+import { friendlyError } from '@/lib/errors';
 import type { Task, TaskStatus } from '@agemon/shared';
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -52,7 +53,7 @@ export default function KanbanPage() {
     return (
       <div className="p-4 text-center">
         <p className="text-destructive">
-          {error instanceof Error ? error.message : 'Failed to load tasks'}
+          {friendlyError(error, 'Failed to load tasks')}
         </p>
       </div>
     );
@@ -85,7 +86,7 @@ export default function KanbanPage() {
       <div className="space-y-2 lg:hidden">
         {COLUMNS.map((col) => {
           const columnTasks = grouped[col.status];
-          const isCollapsed = collapsed[col.status] ?? false;
+          const isCollapsed = collapsed[col.status] ?? (columnTasks.length === 0);
 
           return (
             <div key={col.status}>
