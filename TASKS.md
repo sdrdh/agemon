@@ -665,42 +665,58 @@ class ACPAgentManager {
 ### Task 4.8: Component Splitting (Future)
 
 **Priority:** P2
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Extract `TaskInfoDrawer`, `SessionListPanel`, `SessionChatPanel` from `tasks.$id.tsx` into `src/components/custom/task-detail/`
-- [ ] Reduce `tasks.$id.tsx` to layout composition only
+- [x] Extract `TaskInfoDrawer`, `SessionListPanel`, `SessionChatPanel` from `tasks.$id.tsx` into `src/components/custom/`
+- [x] Reduce `tasks.$id.tsx` to layout composition only
 
 > Prompt: see `docs/future-prompts.md` → Prompt 3
 
 ### Task 4.9: Native Chat App Bottom Navigation (Future)
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Replace top `NavBar` with `BottomNav` fixed to bottom (icons + labels)
-- [ ] Hide `BottomNav` on task detail pages
-- [ ] Minimal branding header on non-detail pages
-- [ ] Safe area handling for iOS home indicator on input bar
+- [x] Replace top `NavBar` with `BottomNav` fixed to bottom (icons + labels)
+- [x] Hide `BottomNav` on task detail pages
+- [x] Minimal branding header on non-detail pages
+- [x] Safe area handling for iOS home indicator on input bar
 
 > Prompt: see `docs/future-prompts.md` → Prompt 1
 
 ### Task 4.10: Activity-Specific Icons in Chat (Future)
 
 **Priority:** P2
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Distinct icons for thoughts (Brain), tool calls (Wrench), and skills (Zap)
-- [ ] Update `parseActivityMessages` to categorize skills separately
-- [ ] Render activity-type icons alongside status icons in `ActivityGroup`
+- [x] Distinct icons for thoughts (Brain), tool calls (Wrench), and skills (Zap)
+- [x] Update `parseActivityMessages` to categorize skills separately
+- [x] Render activity-type icons alongside status icons in `ActivityGroup`
 
 > Prompt: see `docs/future-prompts.md` → Prompt 2
 
 ---
 
-### Task 4.11: Rich Tool Call Details in Chat
+### Task 4.11: Multi-Theme System & Settings Page
+
+**Priority:** P2
+**Status:** Done
+
+**Deliverables:**
+- [x] Theme engine with 6 themes: Monochrome Stealth (default), Cyber Indigo, Terminal Green, Graphite Line Indigo, Dracula, One Dark Pro
+- [x] Light/dark/system color mode support; dark-only enforcement for terminal/dracula/one-dark themes
+- [x] CSS variable system (`data-theme` attribute + `.dark` class) with per-theme overrides in `index.css`
+- [x] `ThemeProvider` context + `useTheme()` hook (`lib/theme-provider.tsx`, `lib/theme.ts`)
+- [x] Persistent theme/mode storage via localStorage
+- [x] Settings page (`/settings`) with visual theme grid (swatch cards) and color mode toggle
+- [x] System `prefers-color-scheme` listener for auto dark mode
+
+---
+
+### Task 4.12: Rich Tool Call Details in Chat
 
 **Priority:** P2
 **Status:** Todo
@@ -719,6 +735,56 @@ class ACPAgentManager {
 - Builds on existing `parseActivityMessages` and `ActivityGroup` components
 
 **Dependencies:** None (existing tool call flow works, this enhances it)
+
+---
+
+### Task 4.13: Conversational Task Description Refinement
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Allow creating tasks with minimal info (just a title) and fleshing out the description later via chat with an agent
+- [ ] Agent-assisted description enrichment — chat back and forth to clarify intent, add context, capture constraints, and build a rich description
+- [ ] Persist the refined description back to the task so it serves as useful recall context, not a vague one-liner
+- [ ] UX for transitioning between "quick capture" and "refine with agent" modes on a task
+
+**Key Considerations:**
+- Current task creation is a one-shot form — no way to iteratively build up the description after the fact
+- The chat interface already exists per-task; this would use a similar conversational flow but focused on the task definition itself rather than agent work
+- The goal is capturing enough context that you remember exactly what the todo is about weeks later
+- Think of it like rubber-ducking the task idea with an AI before committing to it
+
+**Dependencies:** None
+
+---
+
+### Task 4.14: ProjectGroup Configuration
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] First-class `ProjectGroup` entity replacing implicit repo-name grouping from `GET /api/tasks/by-project`
+- [ ] DB schema: `project_groups` table (id, name, preserved_patterns, shell_setup, created_at, updated_at)
+- [ ] DB schema: `project_group_repos` table (project_group_id, repo_id, setup_script, run_script, teardown_script) — per-repo script overrides since worktree folder names may differ from repo names
+- [ ] Tasks belong to a ProjectGroup (add `project_group_id` FK to `tasks` table, nullable for backward compat)
+- [ ] Tasks created under a ProjectGroup inherit its config and per-repo scripts
+- [ ] REST endpoints: CRUD for ProjectGroups (`/api/project-groups`), attach/detach repos with script overrides
+- [ ] Replace `GET /api/tasks/by-project` with `GET /api/project-groups` listing groups + their tasks
+- [ ] Frontend: ProjectGroup management UI (create, edit name, configure preserved patterns & shell setup)
+- [ ] Frontend: Per-repo script configuration within a ProjectGroup (setup, run, teardown scripts)
+- [ ] Frontend: Task creation allows selecting a ProjectGroup (inherits repos + config)
+
+**Key Considerations:**
+- Named "ProjectGroup" to avoid confusion with GitHub Projects
+- Inspired by emdash's per-repo "Project config" (preserved patterns, shell setup, setup/run/teardown scripts), but elevated to a multi-repo grouping level
+- `preserved_patterns` = glob patterns for files the agent should not modify (e.g., `*.lock`, `migrations/**`)
+- `shell_setup` = script run once when initializing a new agent session in this group (e.g., `nvm use 18 && export NODE_ENV=dev`)
+- Per-repo scripts handle the fact that each repo may need different setup/run/teardown commands and worktree paths
+- Migrating existing implicit grouping: existing tasks grouped by repo name can be auto-migrated to ProjectGroups on first access or via a one-time migration script
+
+**Dependencies:** Task 1.3 (DB schema), Task 2.1 (REST routes)
 
 ---
 
