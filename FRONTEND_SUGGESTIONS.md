@@ -50,6 +50,7 @@ Given that Agemon is an "AI agent orchestration platform," its theme should conv
 
 ### Palette 1: "Cyber Indigo" (Modern & Tech-Forward)
 This leans into a high-tech "AI" vibe without being overwhelmingly bright.
+*   **Examples in the wild:** Linear (when using the Indigo/Violet theme), Stripe dashboard, Supabase (dark mode accents).
 *   **Primary (Light Mode):** Indigo-600 (`#4f46e5`) — Trustworthy, slightly energetic.
 *   **Primary (Dark Mode):** Indigo-400 (`#818cf8`) — Glows well against dark backgrounds.
 *   **Background (Dark):** Slate-900 (`#0f172a`) — Softer than pure black (`#000`), easier on the eyes for terminal-heavy apps.
@@ -59,6 +60,7 @@ This leans into a high-tech "AI" vibe without being overwhelmingly bright.
 
 ### Palette 2: "Terminal Green" (Hacker / CLI Nostalgia)
 A nod to classic terminal interfaces, very fitting for a headless, developer-centric agent tool.
+*   **Examples in the wild:** Oh My Zsh (default themes), iTerm2 (default colors), classic Matrix terminals, HTB (Hack The Box).
 *   **Primary:** Emerald-500 (`#10b981`) or a slightly neon green.
 *   **Background (Dark):** Zinc-950 (`#09090b`) or pure black.
 *   **Muted Elements:** Zinc-500 (`#71717a`)
@@ -68,6 +70,7 @@ A nod to classic terminal interfaces, very fitting for a headless, developer-cen
 
 ### Palette 3: "Monochrome Stealth" (Minimalist & Focused)
 Focuses entirely on the content (the agent's thought stream and output) rather than the UI. Similar to Vercel's stark aesthetic.
+*   **Examples in the wild:** Vercel (dashboard & docs), Next.js documentation, shadcn/ui (default theme), GitHub (in high-contrast or standard dark modes).
 *   **Primary:** Pure Black (`#000`) for light mode, Pure White (`#fff`) for dark mode.
 *   **Background:** True White (`#ffffff`) for light mode, Zinc-950 (`#09090b`) for dark.
 *   **Borders:** Very subtle grays (e.g., Zinc-200 / Zinc-800).
