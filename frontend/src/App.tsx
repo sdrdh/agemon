@@ -6,9 +6,10 @@ import {
   RouterProvider,
   Outlet,
   Link,
+  useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Button } from './components/ui/button';
+import { Home, KanbanSquare, TerminalSquare, LogOut } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
@@ -27,48 +28,45 @@ interface RouterContext {
   onLogout: () => void;
 }
 
-// ─── Nav Bar ─────────────────────────────────────────────────────────────────
+// ─── Bottom Nav ──────────────────────────────────────────────────────────────
 
-const NAV_LINKS = [
-  { to: '/' as const, label: 'Tasks' },
-  { to: '/kanban' as const, label: 'Kanban' },
-  { to: '/sessions' as const, label: 'Sessions' },
-];
+const NAV_ITEMS = [
+  { to: '/' as const, label: 'Tasks', icon: Home, exact: true },
+  { to: '/kanban' as const, label: 'Kanban', icon: KanbanSquare, exact: false },
+  { to: '/sessions' as const, label: 'Sessions', icon: TerminalSquare, exact: false },
+] as const;
 
-function NavBar({ onLogout }: { onLogout: () => void }) {
+function BottomNav({ onLogout }: { onLogout: () => void }) {
+  const matches = useMatches();
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  if (isTaskDetail) return null;
+
   return (
-    <nav className="sticky top-0 z-50 bg-background border-b">
-      <div className="flex items-center h-12 px-4 gap-1">
-        <Link
-          to="/"
-          className="text-base font-bold mr-4 min-h-[44px] flex items-center px-1"
-        >
-          Agemon
-        </Link>
-        <div className="flex items-center gap-1 overflow-x-auto flex-1">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              activeOptions={{ exact: link.to === '/' }}
-              className="text-sm text-muted-foreground min-h-[44px] min-w-[44px] flex items-center px-3 rounded-md transition-colors hover:text-foreground hover:bg-accent/50 whitespace-nowrap"
-              activeProps={{
-                className:
-                  'text-sm text-foreground font-medium min-h-[44px] min-w-[44px] flex items-center px-3 rounded-md bg-accent whitespace-nowrap',
-              }}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center justify-around h-14">
+        {NAV_ITEMS.map(({ to, label, icon: Icon, exact }) => (
+          <Link
+            key={to}
+            to={to}
+            activeOptions={{ exact }}
+            className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors"
+            activeProps={{
+              className:
+                'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors',
+            }}
+          >
+            <Icon className="h-5 w-5" />
+            <span className="text-[10px] leading-tight">{label}</span>
+          </Link>
+        ))}
+        <button
+          type="button"
           onClick={onLogout}
-          className="ml-auto min-h-[44px] min-w-[44px] text-xs text-muted-foreground flex-shrink-0"
+          className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors hover:text-foreground"
         >
-          Logout
-        </Button>
+          <LogOut className="h-5 w-5" />
+          <span className="text-[10px] leading-tight">Logout</span>
+        </button>
       </div>
     </nav>
   );
@@ -78,10 +76,24 @@ function NavBar({ onLogout }: { onLogout: () => void }) {
 
 function RootLayout() {
   const { onLogout } = rootRoute.useRouteContext();
+  const matches = useMatches();
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <NavBar onLogout={onLogout} />
-      <Outlet />
+      {!isTaskDetail && (
+        <header className="sticky top-0 z-40 bg-background border-b">
+          <div className="flex items-center h-11 px-4">
+            <Link to="/" className="text-base font-bold">
+              Agemon
+            </Link>
+          </div>
+        </header>
+      )}
+      <main className={isTaskDetail ? '' : 'pb-16'}>
+        <Outlet />
+      </main>
+      <BottomNav onLogout={onLogout} />
     </div>
   );
 }

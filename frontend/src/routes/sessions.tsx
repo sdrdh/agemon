@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { sessionsListQuery } from '@/lib/query';
+import { sessionsListQuery, tasksListQuery } from '@/lib/query';
 import { Badge } from '@/components/ui/badge';
-import type { AgentSession, AgentSessionState } from '@agemon/shared';
+import { StatusBadge } from '@/components/custom/status-badge';
+import type { AgentSession, AgentSessionState, Task } from '@agemon/shared';
 
 const STATE_STYLES: Record<AgentSessionState, { label: string; className: string }> = {
   starting: {
@@ -31,12 +33,17 @@ const STATE_STYLES: Record<AgentSessionState, { label: string; className: string
   },
 };
 
+// Groups in display order: active states first, then terminal
+const STATE_GROUPS: { label: string; states: AgentSessionState[] }[] = [
+  { label: 'Active', states: ['running', 'ready', 'starting'] },
+  { label: 'Stopped', states: ['stopped', 'interrupted', 'crashed'] },
+];
+
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
   if (endedAt) {
     const end = new Date(endedAt).getTime();
-    const diffMs = end - start;
-    return formatMs(diffMs);
+    return formatMs(end - start);
   }
   return 'running';
 }
@@ -54,8 +61,7 @@ function formatMs(ms: number): string {
 }
 
 function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
+  return new Date(isoString).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -65,14 +71,18 @@ function formatTime(isoString: string): string {
 
 function SessionStateBadge({ state }: { state: AgentSessionState }) {
   const style = STATE_STYLES[state];
-  return (
-    <Badge className={style.className}>
-      {style.label}
-    </Badge>
-  );
+  return <Badge className={style.className}>{style.label}</Badge>;
 }
 
-function SessionRow({ session, onClick }: { session: AgentSession; onClick: () => void }) {
+function SessionRow({
+  session,
+  task,
+  onClick,
+}: {
+  session: AgentSession;
+  task: Task | undefined;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -81,15 +91,21 @@ function SessionRow({ session, onClick }: { session: AgentSession; onClick: () =
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
+          {/* Task title + task status */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">
-              Task {session.task_id.slice(0, 8)}
+              {task?.title ?? `Task ${session.task_id.slice(0, 8)}`}
             </span>
-            <SessionStateBadge state={session.state} />
+            {task && <StatusBadge status={task.status} />}
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-            <span>{session.agent_type}</span>
-            <span>{formatTime(session.started_at)}</span>
+          {/* Session name + agent type + session badge + timestamp */}
+          <div className="flex items-center gap-2 mt-1">
+            {session.name && (
+              <span className="text-xs font-medium text-foreground/70 truncate max-w-[120px]">{session.name}</span>
+            )}
+            <span className="text-xs text-muted-foreground">{session.agent_type}</span>
+            <SessionStateBadge state={session.state} />
+            <span className="text-xs text-muted-foreground">{formatTime(session.started_at)}</span>
           </div>
         </div>
         <div className="text-xs text-muted-foreground whitespace-nowrap">
@@ -102,9 +118,33 @@ function SessionRow({ session, onClick }: { session: AgentSession; onClick: () =
 
 export default function SessionsPage() {
   const navigate = useNavigate();
-  const { data: sessions, isLoading, error } = useQuery(sessionsListQuery());
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery(sessionsListQuery());
+  const { data: tasks } = useQuery(tasksListQuery());
 
-  if (isLoading) {
+  // Build task lookup by ID
+  const taskMap = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const t of tasks ?? []) map.set(t.id, t);
+    return map;
+  }, [tasks]);
+
+  // Group sessions by state group
+  const grouped = useMemo(() => {
+    if (!sessions) return [];
+    const stateToGroup = new Map<AgentSessionState, number>();
+    STATE_GROUPS.forEach((g, i) => g.states.forEach((s) => stateToGroup.set(s, i)));
+
+    const buckets: AgentSession[][] = STATE_GROUPS.map(() => []);
+    for (const s of sessions) {
+      const idx = stateToGroup.get(s.state) ?? 1;
+      buckets[idx].push(s);
+    }
+    return STATE_GROUPS.map((g, i) => ({ label: g.label, sessions: buckets[i] })).filter(
+      (g) => g.sessions.length > 0,
+    );
+  }, [sessions]);
+
+  if (sessionsLoading) {
     return (
       <div className="p-4 space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
@@ -114,11 +154,11 @@ export default function SessionsPage() {
     );
   }
 
-  if (error) {
+  if (sessionsError) {
     return (
       <div className="p-4 text-center">
         <p className="text-destructive">
-          {error instanceof Error ? error.message : 'Failed to load sessions'}
+          {sessionsError instanceof Error ? sessionsError.message : 'Failed to load sessions'}
         </p>
       </div>
     );
@@ -143,17 +183,32 @@ export default function SessionsPage() {
           </span>
         </div>
       </div>
-      <div className="divide-y">
-        {sessions.map((session) => (
-          <SessionRow
-            key={session.id}
-            session={session}
-            onClick={() =>
-              navigate({ to: '/tasks/$id', params: { id: session.task_id } })
-            }
-          />
-        ))}
-      </div>
+      {grouped.map((group) => (
+        <div key={group.label}>
+          <div className="px-4 py-2 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {group.label}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {group.sessions.length}
+              </span>
+            </div>
+          </div>
+          <div className="divide-y">
+            {group.sessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                task={taskMap.get(session.task_id)}
+                onClick={() =>
+                  navigate({ to: '/tasks/$id', params: { id: session.task_id } })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

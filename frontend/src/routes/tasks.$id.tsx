@@ -731,7 +731,7 @@ function SessionChatPanel({
       </div>
 
       {/* Sticky input bar */}
-      <div className="border-t px-4 py-3 bg-background">
+      <div className="border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-background">
         {/* Stopped/crashed session -> resume button */}
         {sessionStopped && !isDone ? (
           <Button
@@ -998,7 +998,7 @@ export default function TaskDetailView() {
   // ── Loading state ─────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="flex flex-col h-[calc(100dvh-3rem)]">
+      <div className="flex flex-col h-dvh">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
           <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
             <ArrowLeft className="h-5 w-5" />
@@ -1015,7 +1015,7 @@ export default function TaskDetailView() {
 
   if (error || !task) {
     return (
-      <div className="flex flex-col h-[calc(100dvh-3rem)]">
+      <div className="flex flex-col h-dvh">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
           <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
             <ArrowLeft className="h-5 w-5" />
@@ -1034,7 +1034,7 @@ export default function TaskDetailView() {
   const showChatPanel = selectedSessionId && activeSession;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3rem)]">
+    <div className="flex flex-col h-dvh">
       {/* ── Sticky header (hidden on mobile when viewing a session chat) ── */}
       {(isDesktop || !selectedSessionId) && (
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
