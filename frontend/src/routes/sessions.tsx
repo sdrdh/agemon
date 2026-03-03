@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { sessionsListQuery, tasksListQuery } from '@/lib/query';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
+import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import type { AgentSession, AgentSessionState, Task } from '@agemon/shared';
 
 const STATE_STYLES: Record<AgentSessionState, { label: string; className: string }> = {
@@ -103,7 +104,10 @@ function SessionRow({
             {session.name && (
               <span className="text-xs font-medium text-foreground/70 truncate max-w-[120px]">{session.name}</span>
             )}
-            <span className="text-xs text-muted-foreground">{session.agent_type}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <AgentIcon agentType={session.agent_type} className={`h-3.5 w-3.5 ${AGENT_COLORS[session.agent_type] ?? ''}`} />
+              {agentDisplayName(session.agent_type)}
+            </span>
             <SessionStateBadge state={session.state} />
             <span className="text-xs text-muted-foreground">{formatTime(session.started_at)}</span>
           </div>

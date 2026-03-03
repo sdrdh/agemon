@@ -21,14 +21,13 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           <CardTitle className="text-base leading-snug">{task.title}</CardTitle>
           <StatusBadge status={task.status} />
         </div>
-        <CardDescription className="flex items-center gap-2 mt-1">
-          <span>{task.agent}</span>
-          {task.repos.length > 1 && (
+        {task.repos.length > 1 && (
+          <CardDescription className="flex items-center gap-2 mt-1">
             <span className="text-xs bg-muted px-1.5 py-0.5 rounded">
               {task.repos.length} repos
             </span>
-          )}
-        </CardDescription>
+          </CardDescription>
+        )}
       </CardHeader>
     </Card>
   );

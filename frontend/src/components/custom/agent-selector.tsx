@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { AgentIcon, AGENT_COLORS, agentDisplayName } from './agent-icons';
 
 interface AgentSelectorProps {
   value: AgentType;
@@ -25,7 +26,10 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         <SelectContent>
           {AGENT_TYPES.map(agent => (
             <SelectItem key={agent} value={agent} className="min-h-[44px]">
-              {agent}
+              <span className="flex items-center gap-2">
+                <AgentIcon agentType={agent} className={`h-4 w-4 ${AGENT_COLORS[agent] ?? 'text-muted-foreground'}`} />
+                {agentDisplayName(agent)}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
