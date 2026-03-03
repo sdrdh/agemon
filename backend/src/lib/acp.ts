@@ -51,18 +51,28 @@ function deriveTaskStatus(taskId: string): void {
 
   const taskSessions = db.listSessions(taskId);
 
-  const hasRunning = taskSessions.some(s => s.state === 'running');
+  const runningSessions = taskSessions.filter(s => s.state === 'running');
+  const hasRunning = runningSessions.length > 0;
   const hasReady = taskSessions.some(s => s.state === 'ready' || s.state === 'starting');
   const hasPendingInput = db.listPendingInputs(taskId).length > 0;
 
+  // Check if any running session is actively processing a turn
+  const anyTurnInFlight = runningSessions.some(s => {
+    const rs = sessions.get(s.id);
+    return rs?.turnInFlight === true;
+  });
+
   let newStatus = task.status;
-  if (hasRunning) {
+  if (hasRunning && anyTurnInFlight) {
     newStatus = 'working';
+  } else if (hasRunning && !anyTurnInFlight) {
+    // All running sessions idle — agent waiting for user's next message
+    newStatus = 'awaiting_input';
   } else if (hasPendingInput) {
     newStatus = 'awaiting_input';
   } else if (hasReady) {
-    // Sessions exist but none running yet — still todo
-    newStatus = 'todo';
+    // Sessions ready but none running — waiting for user's first prompt
+    newStatus = 'awaiting_input';
   } else {
     // All sessions stopped/crashed — back to todo (user must mark done explicitly)
     newStatus = 'todo';
@@ -134,6 +144,9 @@ async function runAcpHandshake(
 
     const session = db.getSession(sessionId)!;
     broadcast({ type: 'session_ready', taskId, session });
+
+    // Re-derive task status now that session is ready (→ awaiting_input)
+    deriveTaskStatus(taskId);
 
     console.info(`[acp] session ${sessionId} ready (ACP handshake done, supportsLoad=${supportsLoadSession})`);
   } catch (err) {
@@ -472,6 +485,7 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   entry.turnInFlight = true;
 
   const sessionRecord = db.getSession(sessionId);
+  if (sessionRecord) deriveTaskStatus(sessionRecord.task_id);
   if (!sessionRecord) {
     entry.turnInFlight = false;
     throw new Error(`Session ${sessionId} not found in database`);
@@ -524,6 +538,7 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   } finally {
     flushCurrentMessage(sessionId, taskId);
     entry.turnInFlight = false;
+    deriveTaskStatus(taskId);
   }
 }
 
@@ -627,6 +642,9 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     db.updateSessionState(sessionId, 'ready', extra);
     const session = db.getSession(sessionId)!;
     broadcast({ type: 'session_ready', taskId, session });
+
+    // Re-derive task status now that session is ready (→ awaiting_input)
+    deriveTaskStatus(taskId);
 
     return session;
   } catch (err) {
