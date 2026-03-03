@@ -700,6 +700,28 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.11: Rich Tool Call Details in Chat
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Store full tool call metadata (tool name, arguments, input params) in ACP events — not just the flattened content string
+- [ ] Parse and surface tool-specific details: command for Bash, file path for Read/Edit/Write, pattern for Grep/Glob, query for WebSearch
+- [ ] Render tool calls collapsed by default in activity groups (current behavior)
+- [ ] On tap/expand, show full tool call details inline — tool type, all arguments, and output/result
+- [ ] Mobile-friendly expandable detail view (consider bottom sheet or inline accordion)
+
+**Key Considerations:**
+- Currently all tool call data is flattened to a string like `[tool:ID] Title (status)` — rich metadata is lost at the backend before it reaches the frontend
+- Backend `acp.ts` receives full `toolCall` objects from the ACP agent but only extracts `toolCallId`, `title`, and `status`
+- May need a structured JSON column or separate fields in `acp_events` to preserve the full tool call payload
+- Builds on existing `parseActivityMessages` and `ActivityGroup` components
+
+**Dependencies:** None (existing tool call flow works, this enhances it)
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
@@ -1328,6 +1350,15 @@ website/
 - Browser extension
 - CI/CD integration
 - Webhook support
+
+**exe.dev Integration & Dev Server Previews**
+- exe.dev auto-proxies ports 3000-9999 via HTTPS at `https://{vmname}.exe.xyz:{PORT}/`
+- Add generic `env` JSON column on tasks table — arbitrary key-value env vars passed to agent processes
+- Build MCP server into Agemon backend (Streamable HTTP transport) so agents can request resources
+- Port allocation as an MCP tool — agents/users request N ports on demand, Agemon tracks and assigns from available range
+- `PREVIEW_HOST` env var (e.g. `myvm.exe.xyz`) used to generate preview URLs for allocated ports
+- Task env vars automatically injected into agent process environment on spawn
+- Frontend: preview URL buttons in task detail view, env var editor for tasks
 
 ---
 
