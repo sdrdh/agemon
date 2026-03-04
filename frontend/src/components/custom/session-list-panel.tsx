@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Plus, RotateCcw, CheckCircle2, Archive } from 'lucide-react';
+import { AGENT_TYPES } from '@agemon/shared';
+import type { AgentType, AgentSession } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
-import { AgentIcon, AGENT_COLORS } from '@/components/custom/agent-icons';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { SESSION_STATE_DOT, SESSION_STATE_LABEL, isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
-import type { AgentSession } from '@agemon/shared';
 
 export function SessionListPanel({
   sessions,
@@ -23,7 +26,7 @@ export function SessionListPanel({
   sessions: AgentSession[];
   activeSessionId: string | null;
   onSelect: (id: string) => void;
-  onNew: () => void;
+  onNew: (agentType: AgentType) => void;
   onStop: (id: string) => void;
   onResume: (id: string) => void;
   onMarkDone: () => void;
@@ -35,6 +38,8 @@ export function SessionListPanel({
   pendingInputSessionIds: Set<string>;
   sessionLabels: string[];
 }) {
+  const [selectedAgent, setSelectedAgent] = useState<AgentType>('claude-code');
+
   return (
     <div className="flex flex-col w-full lg:w-[280px] lg:min-w-[280px] lg:border-r overflow-y-auto bg-background">
       <div className="flex-1 overflow-y-auto">
@@ -44,10 +49,26 @@ export function SessionListPanel({
               {isDone ? 'This task is done.' : 'No sessions yet. Start one to begin working.'}
             </p>
             {!isDone && (
-              <Button onClick={onNew} disabled={actionLoading} className="gap-2">
-                <Plus className="h-4 w-4" />
-                {actionLoading ? 'Starting...' : 'Start a session'}
-              </Button>
+              <div className="flex gap-2 w-full max-w-[240px]">
+                <Select value={selectedAgent} onValueChange={v => setSelectedAgent(v as AgentType)}>
+                  <SelectTrigger className="h-11 flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENT_TYPES.map(agent => (
+                      <SelectItem key={agent} value={agent} className="min-h-[44px]">
+                        <span className="flex items-center gap-2">
+                          <AgentIcon agentType={agent} className={`h-4 w-4 ${AGENT_COLORS[agent] ?? 'text-muted-foreground'}`} />
+                          {agentDisplayName(agent)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={() => onNew(selectedAgent)} disabled={actionLoading} className="h-11 px-3 shrink-0">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -161,15 +182,31 @@ export function SessionListPanel({
       {sessions.length > 0 && (
         <div className="border-t px-4 py-3 space-y-2 bg-background">
           {!isDone && (
-            <Button
-              variant="outline"
-              className="w-full gap-2 min-h-[44px]"
-              onClick={onNew}
-              disabled={newDisabled}
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </Button>
+            <div className="flex gap-2">
+              <Select value={selectedAgent} onValueChange={v => setSelectedAgent(v as AgentType)}>
+                <SelectTrigger className="h-11 flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENT_TYPES.map(agent => (
+                    <SelectItem key={agent} value={agent} className="min-h-[44px]">
+                      <span className="flex items-center gap-2">
+                        <AgentIcon agentType={agent} className={`h-4 w-4 ${AGENT_COLORS[agent] ?? 'text-muted-foreground'}`} />
+                        {agentDisplayName(agent)}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                className="h-11 px-3 shrink-0"
+                onClick={() => onNew(selectedAgent)}
+                disabled={newDisabled}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           )}
           {!isDone && !hasActiveSessions && sessions.length > 0 && (
             <Button

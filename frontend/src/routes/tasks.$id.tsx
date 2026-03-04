@@ -16,7 +16,7 @@ import { sendClientEvent } from '@/lib/ws';
 import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, sessionKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 import { friendlyError } from '@/lib/errors';
-import type { ChatMessage, ApprovalDecision, PendingApproval } from '@agemon/shared';
+import type { ChatMessage, ApprovalDecision, PendingApproval, AgentType } from '@agemon/shared';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -163,7 +163,7 @@ export default function TaskDetailView() {
 
   // ── Mutations ─────────────────────────────────────────────────────────
   const createSessionMutation = useMutation({
-    mutationFn: () => api.createSession(taskId),
+    mutationFn: (agentType: AgentType) => api.createSession(taskId, { agentType }),
     onSuccess: (session) => {
       setSelectedSessionId(session.id);
       if (sessions.length === 0 && task?.description) {
@@ -316,7 +316,7 @@ export default function TaskDetailView() {
             sessions={sessions}
             activeSessionId={selectedSessionId}
             onSelect={handleSelectSession}
-            onNew={() => createSessionMutation.mutate()}
+            onNew={(agentType) => createSessionMutation.mutate(agentType)}
             onStop={(sid) => stopMutation.mutate(sid)}
             onResume={(sid) => resumeMutation.mutate(sid)}
             onMarkDone={() => markDoneMutation.mutate()}

@@ -6,18 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RepoSelector } from '@/components/custom/repo-selector';
-import { AgentSelector } from '@/components/custom/agent-selector';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { friendlyError } from '@/lib/errors';
-import type { AgentType } from '@agemon/shared';
 
 export default function TaskCreateForm() {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [repos, setRepos] = useState<string[]>([]);
-  const [agent, setAgent] = useState<AgentType>('claude-code');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -31,7 +28,6 @@ export default function TaskCreateForm() {
         title: trimmedTitle,
         description: description.trim() || undefined,
         repos: repos.length > 0 ? repos : undefined,
-        agent,
       });
       navigate({ to: '/tasks/$id', params: { id: task.id } });
     } catch (err) {
@@ -77,8 +73,6 @@ export default function TaskCreateForm() {
         </div>
 
         <RepoSelector selected={repos} onChange={setRepos} />
-
-        <AgentSelector value={agent} onChange={setAgent} />
 
         <Button type="submit" className="w-full" disabled={!title.trim() || submitting}>
           {submitting ? 'Creating...' : 'Create Task'}
