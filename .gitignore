@@ -12,3 +12,7 @@ bun.lockb
 **/.env.local
 .reference_repos/
 .worktrees/
+
+# Claude Code — track skills, ignore personal/temp files
+.claude/settings.local.json
+.claude/worktrees/
