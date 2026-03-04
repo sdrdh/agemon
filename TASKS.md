@@ -486,6 +486,60 @@ class GitHubClient {
 
 ---
 
+### Task 3.4: Generate Task-Level CLAUDE.md and Symlink Skills for Agent Context
+
+**Priority:** P1
+**Estimated Time:** 4 hours
+
+**Deliverables:**
+- [ ] Generate a `CLAUDE.md` at the task folder (`.agemon/tasks/{task-id}/CLAUDE.md`) when an agent session starts
+- [ ] Include task context: title, description, status, attached repos
+- [ ] Include worktree context: branch name convention, repo paths within the task folder
+- [ ] Include behavioral guidelines: commit to worktree branch, don't modify main, don't push without approval
+- [ ] Symlink each repo's `.claude/skills/*` into `.agemon/tasks/{task-id}/.claude/skills/` (flat, first-repo-wins on collision, log warning on skip)
+- [ ] Regenerate CLAUDE.md and re-symlink skills on session resume
+- [ ] Regenerate CLAUDE.md and re-symlink skills when repos are attached/detached from a task
+- [ ] Skip generation when no worktree exists (fallback cwd mode)
+
+**Key Considerations:**
+- Agent cwd is the task folder (`.agemon/tasks/{task-id}/`), so our CLAUDE.md loads as the project-level context
+- Repo CLAUDE.md files won't auto-load (Claude Code walks up, not down) — reference their paths in our generated file so the agent can read them
+- Flat skill symlinks keep Claude's skill matching working naturally (no namespace prefixes)
+- Hook into `spawnAndHandshake` and `resumeSession` in `backend/src/lib/acp.ts`, right after `agentCwd` is resolved
+- Keep generated CLAUDE.md concise — agents have context limits
+- Repo attach/detach route (`routes/tasks.ts`) should trigger regeneration for all active sessions of that task
+
+**Affected Areas:** backend (`lib/acp.ts`, `routes/tasks.ts`, new template utility)
+
+**Dependencies:** Task 3.1 (Git Worktree Manager)
+
+---
+
+### Task 3.5: Session Context Usage Tracking & Display
+
+**Priority:** P1
+**Estimated Time:** 6 hours
+
+**Deliverables:**
+- [ ] Capture `usage_update` notifications from ACP agents (currently ignored at `lib/acp.ts:375`)
+- [ ] Normalize token fields (inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens)
+- [ ] Store cumulative usage on the `agent_sessions` table (add columns or JSON field)
+- [ ] Broadcast usage updates to frontend via WebSocket event (`session_usage_update`)
+- [ ] Add shared types for session usage data
+- [ ] Display context usage in session UI (token counts, context window % bar)
+
+**Key Considerations:**
+- ACP agents already emit `usage_update` — protocol support is mature across claude-agent-acp, openclaw, acpx
+- Distinguish between accumulated usage (sum of all API calls) and last-call usage (true context window at end) — last-call is more useful for showing context % utilization
+- Keep DB writes efficient — usage updates can be frequent; consider batching or only storing latest snapshot per session
+- Frontend display should be lightweight — a small context bar or token count in the session header, not a full dashboard
+
+**Affected Areas:** backend (`lib/acp.ts`, `db/schema.sql`, `db/client.ts`), shared types, frontend (session UI)
+
+**Dependencies:** Task 4.1 (ACP Client Setup)
+
+---
+
 ## Phase 4: ACP Integration (Week 4-5)
 
 **Goal:** Spawn agents, parse events, handle "Awaiting Input" state
@@ -810,7 +864,7 @@ class ACPAgentManager {
 
 ---
 
-### Task 4.15: Agent Authentication & Configuration Settings
+### Task 4.15: Settings Page Restructure & Agent Configuration
 
 **Priority:** P1
 **Status:** Todo
@@ -818,24 +872,25 @@ class ACPAgentManager {
 > Design doc: `docs/plans/2026-03-04-agent-auth-settings-design.md`
 
 **Deliverables:**
+- [ ] Restructure settings into sections: Appearance, Agents, Updates, About
+- [ ] Move existing theme/color mode UI under Settings → Appearance
 - [ ] `GET /api/agents/status` — auto-detect installed binaries (`Bun.which()`), check auth status (env var presence or login health-check), return per-agent status
-- [ ] `POST /api/agents/config` — save API keys + default agent to `.env` file, hot-reload `process.env`
-- [ ] `POST /api/agents/:type/login` — proxy login flow for Claude Code (`claude /login`) and Gemini (`gemini login`): spawn command, parse stdout, stream prompts/URLs to frontend via WebSocket `agent_login` events
-- [ ] Frontend: Settings → Agents section with agent list cards (icon, name, detection badge, auth badge, configure button)
-- [ ] Frontend: Inline agent config panel — API key input (masked, show/hide toggle) for env-var agents, "Login" button for login agents, install docs link for undetected agents
-- [ ] Frontend: Proxy login guided card flow (tappable auth URL, prompt input, success confirmation) — inline, no modal
-- [ ] Frontend: Default agent dropdown in Settings → Agents (stored in `.env` as `DEFAULT_AGENT`)
-- [ ] Task creation form reads default agent from settings instead of hardcoding `claude-code`
-- [ ] API keys masked before sending to frontend (`sk-...xxxx`), never exposed in full
+- [ ] Frontend: Settings → Agents section with agent list cards showing detection badge, auth status badge, and setup instructions
+- [ ] Setup instructions per agent: terminal commands to install and authenticate (e.g. "Run `claude /login` in your terminal", "Set `ANTHROPIC_API_KEY` in `.env`"), with note to restart/update Agemon after
+- [ ] Default agent/model/mode preferences stored in DB (`settings` table), applied to new sessions
+- [ ] Frontend: Default agent dropdown + default model/mode selectors in Settings → Agents
+- [ ] Session creation inherits global defaults, user can override per-session
+- [ ] Settings → Updates section placeholder (wired up in Task 7.6)
+- [ ] Settings → About section with version info and links
 
 **Key Considerations:**
-- No DB schema changes — all config persists in `.env` file
-- Env vars set before server start still work as fallback (UI-set values override)
-- Proxy login is scoped to Claude Code and Gemini only; OpenCode/Aider use API key inputs
-- Auth status for login agents uses lightweight health-check (e.g. `claude --version`)
-- Mobile-first: full-width cards, 44px touch targets, inline flows
+- No proxy login flows or API key inputs in UI — users configure agents in their terminal, then restart Agemon to pick up changes
+- Task 7.6 (self-update) handles restart to detect newly installed/authenticated agents
+- Global defaults (default agent, model, mode) stored in SQLite `settings` table, not `.env` — `.env` is for secrets and server config only
+- Auth detection is read-only: just check if the agent is usable, don't try to fix it from the UI
+- Mobile-first: full-width cards, 44px touch targets
 
-**Dependencies:** Task 1.3 (REST routes), Task 1.4 (WebSocket)
+**Dependencies:** Task 1.3 (REST routes), Task 4.11 (existing settings page)
 
 ---
 
@@ -1226,6 +1281,35 @@ docker run -p 3000:3000 agemon/agemon
 **Affected Areas:** backend (new `lib/supervisor.ts`), scripts (service install helpers), docs
 
 **Dependencies:** Task 7.2 (single binary packaging)
+
+---
+
+### Task 7.6: Self-Update via Process Supervisor
+
+**Priority:** P2
+**Estimated Time:** 6 hours
+
+**Deliverables:**
+- [ ] Backend endpoint to check for updates (compare local git hash / version against remote)
+- [ ] Expose current version (git hash + build date) via API for settings UI
+- [ ] "Check for updates" button in settings UI — shows available update with changelog/diff summary
+- [ ] "Update now" action that waits for safe state before exiting (all sessions in `awaiting_input` or terminal state)
+- [ ] Broadcast `server_restarting` WebSocket event before exit so frontend can show "Updating..." overlay
+- [ ] Frontend detects WebSocket reconnection after restart and reloads page to pick up new assets
+- [ ] Wrapper script template for systemd/launchd ExecStart that does `git pull && bun install && exec bun run src/server.ts`
+- [ ] Option to force-update immediately (skip waiting for safe state, with confirmation)
+
+**Key Considerations:**
+- Agemon doesn't restart itself — it gracefully exits and lets the OS supervisor (systemd/launchd) handle pull + rebuild + restart
+- Frontend is served by the backend in production (Task 7.4), so process restart refreshes both
+- Safe-state check: poll active sessions until none are in `running` state — only `awaiting_input`, `stopped`, `crashed`, or `ready` are safe
+- If sessions never reach safe state, offer a timeout + force option after N minutes
+- Version check can be `git ls-remote` against origin or a GitHub releases API call
+- Builds on Task 7.5's graceful shutdown and supervisor infrastructure
+
+**Affected Areas:** backend (new update route, shutdown logic), frontend (settings UI, reconnect overlay), scripts (wrapper template)
+
+**Dependencies:** Task 7.4 (Production Single-Port Serving), Task 7.5 (Process Supervision)
 
 ---
 
