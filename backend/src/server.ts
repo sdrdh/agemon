@@ -82,7 +82,7 @@ app.get('/api/health', (c) =>
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response']);
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response', 'set_config_option']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -173,6 +173,16 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
       console.warn(`[ws] approval_response: could not resolve approvalId ${ev.approvalId}`);
     }
     console.info(`[ws] approval resolved: ${ev.approvalId} → ${ev.decision}`);
+  }
+
+  else if (ev.type === 'set_config_option') {
+    const { setSessionConfigOption } = await import('./lib/acp.ts');
+    try {
+      await setSessionConfigOption(ev.sessionId, ev.configId, ev.value);
+      console.info(`[ws] set_config_option: ${ev.configId}=${ev.value} on session=${ev.sessionId}`);
+    } catch (err) {
+      console.error(`[ws] set_config_option error for session=${ev.sessionId}:`, (err as Error).message);
+    }
   }
 });
 

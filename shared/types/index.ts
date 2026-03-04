@@ -94,6 +94,16 @@ export interface Diff {
   created_at: string;
 }
 
+// ─── Session Config Options ─────────────────────────────────────────────────
+
+export interface SessionConfigOption {
+  id: string;           // e.g. 'model', 'mode'
+  type: 'select';       // Only select supported for now
+  label: string;        // Human-readable label
+  value: string;        // Current value
+  options: { value: string; label: string }[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'agent' | 'user' | 'system';
@@ -113,13 +123,15 @@ export type ServerEvent =
   | { type: 'session_ready'; taskId: string; session: AgentSession }
   | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState }
   | { type: 'approval_requested'; approval: PendingApproval }
-  | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision };
+  | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
+  | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
   | { type: 'terminal_input'; sessionId: string; data: string }
   | { type: 'send_message'; sessionId: string; content: string }
-  | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision };
+  | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision }
+  | { type: 'set_config_option'; sessionId: string; configId: string; value: string };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 

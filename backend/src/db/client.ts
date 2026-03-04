@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
@@ -24,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 /**
  * Extract a display name from a repo URL.
@@ -212,6 +212,17 @@ export function runMigrations() {
 
       // ── v7 migration: pending_approvals + approval_rules tables ──
       // (Tables are created by schema.sql via CREATE TABLE IF NOT EXISTS — no extra DDL needed here)
+
+      // ── v8 migration: add config_options column to agent_sessions ──
+      if (current < 8) {
+        const cols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        const hasCol = cols.some(c => c.name === 'config_options');
+        if (!hasCol) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN config_options TEXT DEFAULT NULL');
+        }
+      }
 
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
@@ -537,6 +548,20 @@ export const db = {
   updateSessionName(id: string, name: string): void {
     const db = getDb();
     db.run('UPDATE agent_sessions SET name = ? WHERE id = ?', [name, id]);
+  },
+
+  updateSessionConfigOptions(id: string, options: SessionConfigOption[]): void {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET config_options = ? WHERE id = ?', [JSON.stringify(options), id]);
+  },
+
+  getSessionConfigOptions(id: string): SessionConfigOption[] | null {
+    const db = getDb();
+    const row = db.query<{ config_options: string | null }, [string]>(
+      'SELECT config_options FROM agent_sessions WHERE id = ?'
+    ).get(id);
+    if (!row?.config_options) return null;
+    try { return JSON.parse(row.config_options); } catch { return null; }
   },
 
   // ── ACP Events ──

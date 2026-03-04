@@ -156,6 +156,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
           }
           break;
         }
+        case 'config_options_updated': {
+          store().setConfigOptions(event.sessionId, event.configOptions);
+          break;
+        }
       }
     });
 

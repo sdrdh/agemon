@@ -4,11 +4,33 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
+import { ConfigOptionPicker } from '@/components/custom/config-option-picker';
 import { SESSION_STATE_DOT, isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
+import { useWsStore } from '@/lib/store';
+import { sendClientEvent } from '@/lib/ws';
+import { api } from '@/lib/api';
 import type { ChatItem } from '@/lib/chat-utils';
 import type { AgentSession, PendingApproval, ApprovalDecision } from '@agemon/shared';
 
 const NEAR_BOTTOM_THRESHOLD = 150;
+
+/** Input border/bg color per mode */
+const MODE_INPUT_STYLES: Record<string, string> = {
+  default: '',
+  plan: 'border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/20',
+  acceptEdits: 'border-blue-400/60 bg-blue-50/30 dark:bg-blue-950/20',
+  dontAsk: 'border-orange-400/60 bg-orange-50/30 dark:bg-orange-950/20',
+  bypassPermissions: 'border-red-400/60 bg-red-50/30 dark:bg-red-950/20',
+};
+
+/** Badge color per mode */
+const MODE_BADGE_STYLES: Record<string, string> = {
+  default: 'bg-muted text-muted-foreground hover:bg-muted/80',
+  plan: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
+  acceptEdits: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
+  dontAsk: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/60',
+  bypassPermissions: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60',
+};
 
 export function SessionChatPanel({
   session,
@@ -53,6 +75,38 @@ export function SessionChatPanel({
   const sessionStopped = isSessionTerminal(session.state);
   const sessionReady = session.state === 'ready';
   const canType = sessionRunning && !turnInFlight && !isDone;
+
+  // ── Config options ──────────────────────────────────────────────────────
+  const configOptions = useWsStore((s) => s.configOptions[session.id]);
+  const setConfigOptions = useWsStore((s) => s.setConfigOptions);
+  const modelOption = configOptions?.find(o => o.id === 'model' && o.type === 'select' && o.options.length > 0) ?? null;
+  const modeOption = configOptions?.find(o => o.id === 'mode' && o.type === 'select' && o.options.length > 0) ?? null;
+  const currentMode = modeOption?.value ?? 'default';
+
+  // Fetch config options on mount if not already in store (page refresh case)
+  useEffect(() => {
+    if (!configOptions && sessionRunning) {
+      api.getSessionConfig(session.id).then((opts) => {
+        if (opts && opts.length > 0) setConfigOptions(session.id, opts);
+      }).catch(() => {});
+    }
+  }, [session.id, sessionRunning, configOptions, setConfigOptions]);
+
+  const handleConfigChange = useCallback((configId: string, value: string) => {
+    sendClientEvent({ type: 'set_config_option', sessionId: session.id, configId, value });
+    // Optimistically update store
+    if (configOptions) {
+      const updated = configOptions.map(o => o.id === configId ? { ...o, value } : o);
+      setConfigOptions(session.id, updated);
+    }
+  }, [session.id, configOptions, setConfigOptions]);
+
+  const cycleMode = useCallback(() => {
+    if (!modeOption) return;
+    const idx = modeOption.options.findIndex(o => o.value === modeOption.value);
+    const next = modeOption.options[(idx + 1) % modeOption.options.length];
+    handleConfigChange('mode', next.value);
+  }, [modeOption, handleConfigChange]);
 
   // ── Sticky scroll ─────────────────────────────────────────────────────
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -190,29 +244,52 @@ export function SessionChatPanel({
             {actionLoading ? 'Resuming...' : 'Resume Session'}
           </Button>
         ) : (
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-          >
-            <Input
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={inputPlaceholder}
-              disabled={!canType && !sessionReady}
-              className="flex-1 min-h-[44px]"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={(!canType && !sessionReady) || !inputText.trim()}
-              className="min-h-[44px] min-w-[44px]"
+          <>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
             >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+              <Input
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={inputPlaceholder}
+                disabled={!canType && !sessionReady}
+                className={`flex-1 min-h-[44px] transition-colors ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                disabled={(!canType && !sessionReady) || !inputText.trim()}
+                className="min-h-[44px] min-w-[44px]"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+            {(modeOption || modelOption) && (
+              <div className="flex items-center gap-2 mt-2">
+                {modeOption && (
+                  <button
+                    type="button"
+                    onClick={cycleMode}
+                    disabled={!sessionRunning}
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors min-h-[28px] disabled:opacity-50 ${MODE_BADGE_STYLES[currentMode] ?? 'bg-muted text-muted-foreground'}`}
+                  >
+                    {modeOption.options.find(o => o.value === currentMode)?.label ?? currentMode}
+                  </button>
+                )}
+                {modelOption && (
+                  <ConfigOptionPicker
+                    option={modelOption}
+                    onValueChange={handleConfigChange}
+                    disabled={!sessionRunning}
+                  />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

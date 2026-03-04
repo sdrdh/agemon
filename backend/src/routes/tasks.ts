@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { db, generateTaskId } from '../db/client.ts';
 import { broadcast } from '../server.ts';
-import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession } from '../lib/acp.ts';
+import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions } from '../lib/acp.ts';
 import { gitManager } from '../lib/git.ts';
 import type { CreateTaskBody, UpdateTaskBody, CreateSessionBody, AgentType, Task, TaskStatus } from '@agemon/shared';
 import { AGENT_TYPES, SSH_REPO_REGEX } from '@agemon/shared';
@@ -251,6 +251,44 @@ tasksRoutes.post('/sessions/:id/resume', async (c) => {
   } catch (err) {
     sendError(400, (err as Error).message);
   }
+});
+
+/**
+ * POST /sessions/:id/config — set a config option on a running session.
+ */
+tasksRoutes.post('/sessions/:id/config', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+
+  let body: { configId: string; value: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    sendError(400, 'Request body must be valid JSON');
+  }
+
+  if (!body.configId || typeof body.configId !== 'string') sendError(400, 'configId is required');
+  if (!body.value || typeof body.value !== 'string') sendError(400, 'value is required');
+
+  try {
+    await setSessionConfigOption(sessionId, body.configId, body.value);
+    return c.json({ message: 'Config option set', sessionId, configId: body.configId, value: body.value });
+  } catch (err) {
+    sendError(400, (err as Error).message);
+  }
+});
+
+/**
+ * GET /sessions/:id/config — get config options for a session.
+ */
+tasksRoutes.get('/sessions/:id/config', (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+
+  const configOptions = getSessionConfigOptions(sessionId);
+  return c.json(configOptions);
 });
 
 // ── Legacy endpoints (backward compat) ──────────────────────────────────────

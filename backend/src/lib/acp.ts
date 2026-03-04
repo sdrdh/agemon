@@ -14,10 +14,17 @@
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval } from '@agemon/shared';
+import type { AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
+
+// ─── Config Option Parsing ───────────────────────────────────────────────────
+
+/** Dispatch to the agent-specific config option parser. */
+function parseConfigOptions(agentType: AgentType, result: Record<string, unknown>): SessionConfigOption[] {
+  return AGENT_CONFIGS[agentType].parseConfigOptions(result);
+}
 
 // ─── Running Session State ───────────────────────────────────────────────────
 
@@ -26,12 +33,15 @@ interface RunningSession {
   transport: JsonRpcTransport;
   sessionId: string;
   taskId: string;
+  agentType: AgentType;
   acpSessionId: string | null;
   turnInFlight: boolean;
   /** Stable ID for the current streaming message (accumulates chunks). */
   currentMessageId: string | null;
   currentMessageText: string;
   currentMessageType: 'thought' | 'action';
+  /** Config options advertised by the agent (model, mode, etc.) */
+  configOptions: SessionConfigOption[];
 }
 
 const sessions = new Map<string, RunningSession>();
@@ -142,6 +152,18 @@ async function runAcpHandshake(
     const rs = sessions.get(sessionId);
     if (rs && acpSessionId) {
       rs.acpSessionId = acpSessionId;
+    }
+
+    // Extract config options from session/new response
+    const resultObj = sessionResult as Record<string, unknown> | undefined;
+    if (rs && resultObj) {
+      const configOptions = parseConfigOptions(rs.agentType,resultObj);
+      if (configOptions.length > 0) {
+        rs.configOptions = configOptions;
+        db.updateSessionConfigOptions(sessionId, configOptions);
+        broadcast({ type: 'config_options_updated', sessionId, taskId, configOptions });
+        console.info(`[acp] session ${sessionId} config options: ${configOptions.map(o => o.id).join(', ')}`);
+      }
     }
 
     // Transition to ready (not running — waiting for first prompt)
@@ -335,6 +357,20 @@ function handleSessionUpdate(
       break;
     }
 
+    case 'config_options_update': {
+      if (!rs) break;
+
+      // Reuse the same parser — notification wraps configOptions the same way as session/new
+      const parsed = parseConfigOptions(rs.agentType,update as Record<string, unknown>);
+      if (parsed.length === 0) break;
+
+      rs.configOptions = parsed;
+      db.updateSessionConfigOptions(sessionId, rs.configOptions);
+      broadcast({ type: 'config_options_updated', sessionId, taskId, configOptions: rs.configOptions });
+      console.info(`[acp] session ${sessionId} config options updated: ${parsed.map(o => o.id).join(', ')}`);
+      break;
+    }
+
     default: {
       // Other update types (usage_update, available_commands_update, etc.) — ignore silently
       break;
@@ -466,8 +502,9 @@ function spawnProcess(
   });
 
   const rs: RunningSession = {
-    proc, transport, sessionId, taskId, acpSessionId: null, turnInFlight: false,
+    proc, transport, sessionId, taskId, agentType, acpSessionId: null, turnInFlight: false,
     currentMessageId: null, currentMessageText: '', currentMessageType: 'action',
+    configOptions: [],
   };
 
   sessions.set(sessionId, rs);
@@ -725,6 +762,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     const supportsLoadSession = !!capabilities?.loadSession;
 
     let acpSessionId: string | null = null;
+    let sessionResultObj: Record<string, unknown> | null = null;
 
     // 2. Try session/load if supported and we have a stored external ID
     if (supportsLoadSession && storedExternalId) {
@@ -735,6 +773,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
           mcpServers: [],
         });
 
+        sessionResultObj = loadResult as Record<string, unknown> | null;
         acpSessionId = loadResult &&
           typeof loadResult === 'object' &&
           'sessionId' in (loadResult as Record<string, unknown>)
@@ -755,6 +794,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
         mcpServers: [],
       });
 
+      sessionResultObj = sessionResult as Record<string, unknown> | null;
       acpSessionId = sessionResult &&
         typeof sessionResult === 'object' &&
         'sessionId' in (sessionResult as Record<string, unknown>)
@@ -766,6 +806,17 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
 
     if (rs && acpSessionId) {
       rs.acpSessionId = acpSessionId;
+    }
+
+    // Extract config options from session response
+    if (rs && sessionResultObj) {
+      const configOptions = parseConfigOptions(rs.agentType,sessionResultObj);
+      if (configOptions.length > 0) {
+        rs.configOptions = configOptions;
+        db.updateSessionConfigOptions(sessionId, configOptions);
+        broadcast({ type: 'config_options_updated', sessionId, taskId, configOptions });
+        console.info(`[acp] session ${sessionId} config options: ${configOptions.map(o => o.id).join(', ')}`);
+      }
     }
 
     const extra: { external_session_id?: string } = {};
@@ -784,6 +835,35 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     // Don't change state here — handleExit will handle it when the process dies
     throw err;
   }
+}
+
+/**
+ * Set a config option on a running ACP session (e.g. change model).
+ * Sends session/set_config_option to the agent process.
+ */
+export async function setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+  const entry = sessions.get(sessionId);
+  if (!entry || entry.transport.isClosed) {
+    throw new Error(`No active session found with id ${sessionId}`);
+  }
+  if (!entry.acpSessionId) {
+    throw new Error(`No ACP session ID for session ${sessionId}`);
+  }
+
+  await entry.transport.request('session/set_config_option', {
+    sessionId: entry.acpSessionId,
+    configOptionId: configId,
+    value,
+  });
+}
+
+/**
+ * Get config options for a running session (from memory) or from DB for stopped sessions.
+ */
+export function getSessionConfigOptions(sessionId: string): SessionConfigOption[] {
+  const entry = sessions.get(sessionId);
+  if (entry) return entry.configOptions;
+  return db.getSessionConfigOptions(sessionId) ?? [];
 }
 
 /**

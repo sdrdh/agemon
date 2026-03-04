@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -76,6 +76,15 @@ export const api = {
   stopSession: (sessionId: string) =>
     request<{ message: string; sessionId: string }>(`/sessions/${sessionId}/stop`, { method: 'POST' }),
   listAllSessions: (limit = 100) => request<AgentSession[]>(`/sessions?limit=${limit}`),
+
+  // Config options
+  getSessionConfig: (sessionId: string) =>
+    request<SessionConfigOption[]>(`/sessions/${sessionId}/config`),
+  setSessionConfig: (sessionId: string, configId: string, value: string) =>
+    request<{ message: string }>(`/sessions/${sessionId}/config`, {
+      method: 'POST',
+      body: JSON.stringify({ configId, value }),
+    }),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

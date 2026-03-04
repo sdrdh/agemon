@@ -6,12 +6,81 @@
  * Agemon variables before passing env to subprocesses.
  */
 
-import type { AgentType } from '@agemon/shared';
+import type { AgentType, SessionConfigOption } from '@agemon/shared';
+
+/** Strategy for parsing config options from a session/new response. */
+export type ConfigOptionParser = (result: Record<string, unknown>) => SessionConfigOption[];
 
 export interface AgentConfig {
   command: string[];
   passEnvVars: string[];
   label: string;
+  parseConfigOptions: ConfigOptionParser;
+}
+
+// ─── Per-Agent Config Option Parsers ────────────────────────────────────────
+
+/**
+ * Claude agent: uses unified `configOptions` array in session/new response.
+ * Each entry: { id, name, type: 'select', currentValue, options: [{ value, name }] }
+ */
+function parseClaudeConfigOptions(result: Record<string, unknown>): SessionConfigOption[] {
+  const raw = result.configOptions as Array<{
+    id?: string; name?: string; type?: string; currentValue?: string;
+    options?: Array<{ value: string; name?: string }>;
+  }> | undefined;
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter(o => o.id && o.type === 'select' && Array.isArray(o.options))
+    .map(o => ({
+      id: o.id!,
+      type: 'select' as const,
+      label: o.name ?? o.id!,
+      value: o.currentValue ?? '',
+      options: (o.options ?? []).map(v => ({ value: v.value, label: v.name ?? v.value })),
+    }));
+}
+
+/**
+ * OpenCode: uses separate `models` and `modes` top-level fields.
+ * models: { currentModelId, availableModels: [{ modelId, name }] }
+ * modes:  { currentModeId, availableModes: [{ id, name }] }
+ */
+function parseOpenCodeConfigOptions(result: Record<string, unknown>): SessionConfigOption[] {
+  const options: SessionConfigOption[] = [];
+
+  const models = result.models as {
+    currentModelId?: string;
+    availableModels?: Array<{ modelId: string; name?: string }>;
+  } | undefined;
+  if (models?.availableModels?.length) {
+    options.push({
+      id: 'model', type: 'select', label: 'Model',
+      value: models.currentModelId ?? '',
+      options: models.availableModels.map(m => ({ value: m.modelId, label: m.name ?? m.modelId })),
+    });
+  }
+
+  const modes = result.modes as {
+    currentModeId?: string;
+    availableModes?: Array<{ id: string; name?: string }>;
+  } | undefined;
+  if (modes?.availableModes?.length) {
+    options.push({
+      id: 'mode', type: 'select', label: 'Mode',
+      value: modes.currentModeId ?? '',
+      options: modes.availableModes.map(m => ({ value: m.id, label: m.name ?? m.id })),
+    });
+  }
+
+  return options;
+}
+
+/** No-op parser for agents that don't advertise config options yet. */
+function parseNoConfigOptions(_result: Record<string, unknown>): SessionConfigOption[] {
+  return [];
 }
 
 export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
@@ -19,21 +88,25 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     command: ['claude-agent-acp', '--agent', 'claude-code'],
     passEnvVars: [],
     label: 'Claude Code (via claude-agent-acp)',
+    parseConfigOptions: parseClaudeConfigOptions,
   },
   'opencode': {
     command: ['opencode', 'acp'],
     passEnvVars: ['OPENCODE_API_KEY'],
     label: 'OpenCode',
+    parseConfigOptions: parseOpenCodeConfigOptions,
   },
   'aider': {
     command: ['aider', '--acp'],
     passEnvVars: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'],
     label: 'Aider',
+    parseConfigOptions: parseNoConfigOptions,
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
+    parseConfigOptions: parseNoConfigOptions,
   },
 };
 
