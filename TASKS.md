@@ -208,6 +208,28 @@ type ClientEvent =
 
 ---
 
+### Task 1.6: Supervised Dev Server
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Replace shell `&` in root `dev` script with `concurrently` (or `bun run --parallel`)
+- [ ] Prefixed, color-coded output per process (`[API]` / `[WEB]`)
+- [ ] Kill-others-on-fail — if backend crashes, frontend dies too (and vice versa)
+- [ ] Clean signal forwarding (Ctrl+C kills both processes)
+
+**Key Considerations:**
+- `concurrently` is the standard (~39M weekly downloads), adds one devDependency
+- Alternative: `bun run --parallel --filter '*' dev --if-present` — zero deps but no kill-others-on-fail
+- Current shell `&` + `wait` orphans processes on crash and interleaves output
+
+**Affected Areas:** root package.json (dev script)
+
+**Dependencies:** None
+
+---
+
 ## Phase 2: Frontend Foundation (Week 2-3)
 
 **Goal:** Mobile-optimized Kanban board with real-time updates
@@ -817,6 +839,32 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.16: Dynamic Slash Command Menu in Chat
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Capture `available_commands_update` from ACP session updates and broadcast to frontend via WebSocket
+- [ ] Store available commands per session in frontend state (Zustand)
+- [ ] Show autocomplete dropdown when user types `/` in chat input, filtered by typing
+- [ ] Display command name and description in dropdown items
+- [ ] Selecting a command inserts `/<command>` into the input (sent as regular message)
+- [ ] Commands refresh automatically when agent sends updated command list (e.g. after session mode change)
+
+**Key Considerations:**
+- Commands are agent-provided (dynamic) — no hardcoded command lists. Each agent type (claude-code, opencode, aider, gemini) advertises its own set
+- ACP payload shape: `{ sessionUpdate: "available_commands_update", availableCommands: [{ name, description, input?: { hint } }] }`
+- Transport is simple: commands are sent as regular `/command` text via existing `send_message` — no new backend dispatch needed
+- New shared type `AgentCommand` and new `ServerEvent` variant `available_commands` needed in `shared/types/`
+- Mobile-first: dropdown must work well with virtual keyboard visible, 44px touch targets
+
+**Affected Areas:** backend (acp.ts update handler), frontend (chat input component, Zustand store), shared (new types)
+
+**Dependencies:** None (builds on existing chat + ACP infrastructure)
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
@@ -1129,6 +1177,55 @@ docker run -p 3000:3000 agemon/agemon
 - Install process takes < 1 minute
 
 **Dependencies:** Task 7.2
+
+---
+
+### Task 7.4: Production Single-Port Serving
+
+**Priority:** P0
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Backend serves built frontend assets via `hono/bun` `serveStatic` in production mode
+- [ ] SPA fallback route — all non-API paths serve `index.html`
+- [ ] Conditional setup: static serving only when `NODE_ENV=production` (dev mode uses Vite proxy as-is)
+- [ ] `bun run build && bun run start` runs the full app on a single port
+
+**Key Considerations:**
+- Vite proxy already handles single-port in dev (`:5173` → `:3000`); this is production-only
+- Static files served from `../frontend/dist` relative to backend
+- Asset paths must align with Vite's build output (`/assets/*` for fingerprinted files)
+- Keep CORS middleware dev-only since same-origin in production
+
+**Affected Areas:** backend (server.ts), root package.json (start script)
+
+**Dependencies:** Task 7.1 (production build)
+
+---
+
+### Task 7.5: OS-Native Process Supervision & Graceful Restart
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] systemd user service unit file with `Restart=always` for Linux deployment
+- [ ] launchd LaunchAgent plist with `KeepAlive=true` for macOS deployment
+- [ ] Graceful shutdown handler — drain WebSocket connections, flush pending DB writes, stop ACP sessions before exit
+- [ ] SIGUSR1-based graceful restart — defer restart until idle, then clean shutdown + let supervisor re-launch
+- [ ] Supervisor auto-detection — check environment markers (launchd: `LAUNCH_JOB_LABEL`, systemd: `INVOCATION_ID`) to choose restart strategy
+- [ ] Install/uninstall commands: `agemon service install` / `agemon service uninstall` to set up platform supervisor config
+
+**Key Considerations:**
+- Follows OpenClaw's pattern: no pm2/forever/supervisord — rely on OS-native supervisors
+- launchd `ThrottleInterval` should be low (1s) for intentional restarts; `launchctl kickstart -k` bypasses throttle
+- Fallback for unsupervised mode: spawn detached child, then exit (self-respawn)
+- Graceful shutdown is critical — ACP agent sessions must be cleanly stopped before exit to avoid orphaned processes
+- Restart sentinel file (optional, future): persist in-flight state so restarted process can recover context
+
+**Affected Areas:** backend (new `lib/supervisor.ts`), scripts (service install helpers), docs
+
+**Dependencies:** Task 7.2 (single binary packaging)
 
 ---
 
