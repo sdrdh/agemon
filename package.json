@@ -8,8 +8,11 @@
     "shared"
   ],
   "scripts": {
-    "dev": "bun run --filter '@agemon/backend' dev & bun run --filter '@agemon/frontend' dev & wait",
+    "dev": "concurrently --kill-others-on-fail --prefix-colors 'cyan,magenta' --names 'API,WEB' 'bun run --filter @agemon/backend dev' 'bun run --filter @agemon/frontend dev'",
     "build": "bun run --filter '*' build",
     "clean": "rm -rf backend/dist frontend/dist node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }
