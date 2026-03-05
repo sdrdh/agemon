@@ -118,8 +118,40 @@ const ALLOWED_SYSTEM_VARS = [
 ];
 
 /**
+ * Common user binary directories that may not be in PATH when the server
+ * is launched from a non-interactive context (systemd, launchd, IDE, etc.).
+ */
+function getExpandedPath(): string {
+  const base = process.env.PATH ?? '';
+  const home = process.env.HOME;
+  if (!home) return base;
+
+  const extraDirs = [
+    `${home}/.local/bin`,
+    `${home}/.bun/bin`,
+    `${home}/go/bin`,
+    `${home}/.cargo/bin`,
+    `${home}/.npm-global/bin`,
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+  ];
+
+  const existing = new Set(base.split(':'));
+  const additions = extraDirs.filter(d => !existing.has(d));
+  return additions.length ? `${base}:${additions.join(':')}` : base;
+}
+
+/** Cached expanded PATH (computed once). */
+let _expandedPath: string | null = null;
+function expandedPath(): string {
+  if (_expandedPath === null) _expandedPath = getExpandedPath();
+  return _expandedPath;
+}
+
+/**
  * Build a safe environment for agent subprocesses.
  * Uses a whitelist approach: only system essentials + agent-specific vars are passed.
+ * PATH is expanded with common user binary directories to handle non-interactive launches.
  */
 export function buildAgentEnv(agentType: AgentType): Record<string, string> {
   const config = AGENT_CONFIGS[agentType];
@@ -130,19 +162,28 @@ export function buildAgentEnv(agentType: AgentType): Record<string, string> {
     if (val !== undefined) env[key] = val;
   }
 
+  // Always use expanded PATH for child processes
+  env.PATH = expandedPath();
+
   return env;
 }
 
 /**
  * Resolve the agent binary path on the system PATH.
+ * Uses the expanded PATH to find binaries in common user directories.
  * Throws a descriptive error if the binary is not found.
  */
 export function resolveAgentBinary(agentType: AgentType): string {
   const config = AGENT_CONFIGS[agentType];
   const binary = config.command[0];
-  const path = Bun.which(binary);
+
+  // Search with expanded PATH so we find binaries in ~/.local/bin, etc.
+  const path = Bun.which(binary, { PATH: expandedPath() });
   if (!path) {
-    throw new Error(`${binary} not found on PATH. Agent type: ${agentType} (${config.label})`);
+    throw new Error(
+      `${binary} not found on PATH. Agent type: ${agentType} (${config.label}). ` +
+      `Searched: ${expandedPath()}`
+    );
   }
   return path;
 }
