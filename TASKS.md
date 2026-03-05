@@ -211,13 +211,13 @@ type ClientEvent =
 ### Task 1.6: Supervised Dev Server
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Replace shell `&` in root `dev` script with `concurrently` (or `bun run --parallel`)
-- [ ] Prefixed, color-coded output per process (`[API]` / `[WEB]`)
-- [ ] Kill-others-on-fail — if backend crashes, frontend dies too (and vice versa)
-- [ ] Clean signal forwarding (Ctrl+C kills both processes)
+- [x] Replace shell `&` in root `dev` script with `concurrently` (or `bun run --parallel`)
+- [x] Prefixed, color-coded output per process (`[API]` / `[WEB]`)
+- [x] Kill-others-on-fail — if backend crashes, frontend dies too (and vice versa)
+- [x] Clean signal forwarding (Ctrl+C kills both processes)
 
 **Key Considerations:**
 - `concurrently` is the standard (~39M weekly downloads), adds one devDependency
@@ -917,6 +917,101 @@ class ACPAgentManager {
 **Affected Areas:** backend (acp.ts update handler), frontend (chat input component, Zustand store), shared (new types)
 
 **Dependencies:** None (builds on existing chat + ACP infrastructure)
+
+### Task 4.17: Cancel Agent Turn (Escape Key Equivalent)
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Implement `cancelTurn(sessionId)` in acp.ts — sends ACP `session/cancel` notification, auto-denies pending approvals, keeps session alive ready for next prompt
+- [ ] Handle `stopReason: "cancelled"` in prompt turn response — flush partial messages, reset `turnInFlight`, re-derive task status to `awaiting_input`
+- [ ] Add WebSocket action `cancel_turn` so frontend can trigger cancellation
+- [ ] Convert send button to stop button while agent turn is in flight (same position, same 44px target, swap icon/action)
+- [ ] Broadcast a `turn_cancelled` event so frontend can show inline cancellation indicator in chat stream
+
+**Key Considerations:**
+- Send → Stop toggle: button stays in the same position, swaps between send icon and stop icon based on `turnInFlight` state. Tap stop = cancel current turn
+- This is lighter than `stopAgent()` — cancel stops the current turn but the session stays alive and ready for the next prompt
+- ACP spec: `session/cancel` is a notification (no response); the agent responds to the original `session/prompt` request with `stopReason: "cancelled"`
+- Client must resolve pending approvals with `cancelled` outcome before sending `session/cancel`
+- Agent may still send `session/update` notifications after cancel — client should accept them
+- New shared type `TurnCancelledEvent` needed in `shared/types/`
+
+**Affected Areas:** backend (acp.ts, ws handler), frontend (chat input button toggle, event handling), shared (new event type)
+
+**Dependencies:** None (builds on existing ACP infrastructure)
+
+---
+
+### Task 4.18: Fix Tool Call Approval Dialog Persistence
+
+**Priority:** P1
+**Estimated Time:** 4 hours
+
+**Deliverables:**
+- [ ] Persist pending approval state so the dialog re-renders when user returns to a session
+- [ ] Auto-select the session with a pending approval when navigating back to a task
+- [ ] Ensure approval cards never silently disappear (fallback UI if lookup fails)
+- [ ] Add a global indicator (e.g., badge on task card or nav) showing tasks with unresolved approvals
+
+**Key Considerations:**
+- Approval state already persists in Zustand store and backend DB — the issue is purely a rendering/routing problem
+- `SessionChatPanel` unmounts when `selectedSessionId` is null, destroying all approval UI
+- `ChatBubble` silently returns `null` when `approvalLookup.get(content)` fails — needs a fallback
+- On route re-entry, `GET /api/tasks/:id/approvals` re-fetches but the session must also be re-selected for the panel to mount
+- Consider auto-scrolling to the pending approval card on re-mount
+
+**Affected Areas:** frontend (routes/tasks.$id.tsx, session-chat-panel, chat-bubble, ws-provider, store)
+
+**Dependencies:** None (existing approval flow works, this fixes a UX regression)
+
+---
+
+### Task 4.19: Token Usage Tracking per Session
+
+**Priority:** P2
+**Estimated Time:** 4 hours
+
+**Deliverables:**
+- [ ] Parse `usage_update` notifications from ACP (currently discarded in `default: break` at acp.ts)
+- [ ] Store cumulative input/output token counts per session in the DB
+- [ ] Broadcast usage updates to frontend via WebSocket
+- [ ] Display token counts (input/output/total) in the session chat header
+
+**Key Considerations:**
+- ACP `session/update` with `usage_update` type already arrives at the backend — just needs handling instead of being silently dropped
+- Raw token counts only — no cost estimation needed
+- Cumulative per session (sum of all turns)
+- Lightweight display: compact token count in session header, no separate page needed
+
+**Affected Areas:** backend (acp.ts, db schema, ws events), frontend (session chat header), shared (new types)
+
+**Dependencies:** None
+
+---
+
+### Task 4.20: Context Window Utilization Monitor
+
+**Priority:** P1
+**Estimated Time:** 4 hours
+
+**Deliverables:**
+- [ ] Derive context window fill percentage from token usage data (used tokens / max context window)
+- [ ] Display a context window % progress bar prominently in the session chat header
+- [ ] Show a warning indicator when context usage exceeds a threshold (e.g., 80%)
+- [ ] Show context % per session tab so users can see utilization for each active session
+
+**Key Considerations:**
+- Context window max varies by agent/model — may need a configurable default or agent-reported value
+- This is the primary usage metric users care about — more prominent than raw token counts
+- If the ACP `usage_update` doesn't include max context size, use known defaults per agent type (e.g., claude-code = 200k)
+- Progress bar should use color coding: green → yellow → red as context fills up
+- Depends on Task 4.19 for the underlying token data pipeline
+
+**Affected Areas:** frontend (session chat header, session tabs), backend (context % calculation), shared (types)
+
+**Dependencies:** Task 4.19 (token usage data pipeline)
 
 ---
 
@@ -1845,4 +1940,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, and sessions page implemented. Terminal PTY, diff viewer, and GitHub PR flow remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, and sessions page implemented. Known bug: tool call approval dialog lost on navigation (Task 4.18). Token usage tracking (Task 4.19) and context window monitoring (Task 4.20) planned. Terminal PTY, diff viewer, and GitHub PR flow remaining.
