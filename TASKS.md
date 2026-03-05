@@ -1277,6 +1277,7 @@ docker run -p 3000:3000 agemon/agemon
 - Fallback for unsupervised mode: spawn detached child, then exit (self-respawn)
 - Graceful shutdown is critical — ACP agent sessions must be cleanly stopped before exit to avoid orphaned processes
 - Restart sentinel file (optional, future): persist in-flight state so restarted process can recover context
+- Wrapper script should capture the user's full interactive PATH at install time and bake it into the service config (e.g., `Environment=PATH=...` in systemd, `EnvironmentVariables` in launchd plist). This covers edge cases like `nvm`/`fnm`/`asdf`/`mise`-managed binaries that live in versioned paths not covered by the in-code PATH expansion in `agents.ts`. Avoid sourcing shell profiles at runtime (slow, side effects) — snapshot PATH once at install.
 
 **Affected Areas:** backend (new `lib/supervisor.ts`), scripts (service install helpers), docs
 
