@@ -1015,6 +1015,65 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.21: MCP Server Configuration for Agent Sessions
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Global MCP server config — servers available to all agent sessions (stored in DB)
+- [ ] Task-level MCP server config — servers scoped to a specific task's sessions
+- [ ] Populate `mcpServers` in ACP `session/new` and `session/load` calls with merged global + task-level configs
+- [ ] API endpoints to manage MCP server configs (CRUD at global and task level)
+- [ ] Frontend UI to add/remove MCP servers at global and task level
+
+**Key Considerations:**
+- ACP already accepts `mcpServers` array in handshake — currently hardcoded to `[]` in three places in `acp.ts`
+- MCP server config shape: name, transport type (stdio/streamable-http), command/URL, env vars, auth headers
+- Merge order: global configs + task-level configs (task overrides global if same name)
+- Common use cases: context7 for docs, Agemon's own `/mcp` endpoint for cross-task orchestration, filesystem tools
+- Consider whether session-level overrides are needed (probably not for v1)
+
+**Affected Areas:** backend (db schema, acp.ts handshake, new API routes), frontend (settings UI, task config UI), shared (new types)
+
+**Dependencies:** Task 4.1 (ACP Client)
+
+### Task 4.22: Markdown Rendering for Task Descriptions
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Render task description as Markdown in the task info drawer
+- [ ] Support GFM (tables, checklists, strikethrough) and syntax-highlighted code blocks
+
+**Key Considerations:**
+- All dependencies already installed and used for chat bubbles (`react-markdown`, `remark-gfm`, `rehype-highlight`, `@tailwindcss/typography`)
+- Same pattern as chat bubble markdown rendering, applied to task description
+
+**Affected Areas:** frontend (task info drawer)
+
+**Dependencies:** None
+
+### Task 4.23: Back Gesture Navigation from Session to Session List
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Swiping left (back gesture) on a session view navigates back to the session list page
+- [ ] Ensure browser/OS back gesture and in-app back button both work consistently
+
+**Key Considerations:**
+- Mobile-first: back gesture is a primary navigation pattern on phones
+- May be a router history issue — verify TanStack Router pushes session list onto the history stack before session detail
+
+**Affected Areas:** frontend (routing, session views)
+
+**Dependencies:** None
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser

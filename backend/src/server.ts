@@ -206,6 +206,19 @@ app.get('/api/tasks/:id/approvals', (c) => {
   return c.json(approvals);
 });
 
+// ─── MCP Server ──────────────────────────────────────────────────────────────
+const { getMcpServer, getMcpTransport } = await import('./lib/mcp/server.ts');
+const mcpTransport = getMcpTransport();
+const mcpServer = getMcpServer();
+
+// app.all is required: MCP Streamable HTTP uses POST for RPC, GET for SSE, DELETE for session teardown
+app.all('/mcp', async (c) => {
+  if (!mcpServer.isConnected()) {
+    await mcpServer.connect(mcpTransport);
+  }
+  return mcpTransport.handleRequest(c);
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 Bun.serve({ fetch: app.fetch, websocket, port: PORT, hostname: HOST });
 console.log(`[agemon] backend listening on http://${HOST}:${PORT}`);
