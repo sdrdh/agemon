@@ -94,6 +94,14 @@ export interface Diff {
   created_at: string;
 }
 
+// ─── Agent Commands (Slash Commands) ────────────────────────────────────────
+
+export interface AgentCommand {
+  name: string;
+  description?: string;
+  input?: { hint: string };
+}
+
 // ─── Session Config Options ─────────────────────────────────────────────────
 
 export interface SessionConfigOption {
@@ -124,7 +132,8 @@ export type ServerEvent =
   | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState }
   | { type: 'approval_requested'; approval: PendingApproval }
   | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
-  | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] };
+  | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] }
+  | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }

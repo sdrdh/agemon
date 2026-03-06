@@ -14,7 +14,7 @@
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption } from '@agemon/shared';
+import type { AgentCommand, AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
@@ -371,8 +371,15 @@ function handleSessionUpdate(
       break;
     }
 
+    case 'available_commands_update': {
+      const commands = (update.availableCommands as AgentCommand[]) ?? [];
+      broadcast({ type: 'available_commands', sessionId, taskId, commands });
+      console.info(`[acp] session ${sessionId} available commands: ${commands.map(c => c.name).join(', ')}`);
+      break;
+    }
+
     default: {
-      // Other update types (usage_update, available_commands_update, etc.) — ignore silently
+      // Other update types (usage_update, etc.) — ignore silently
       break;
     }
   }

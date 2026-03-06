@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
 import { ArrowLeft, Send, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
 import type { ChatItem } from '@/lib/chat-utils';
-import type { AgentSession, PendingApproval, ApprovalDecision } from '@agemon/shared';
+import type { AgentCommand, AgentSession, PendingApproval, ApprovalDecision } from '@agemon/shared';
 
 const NEAR_BOTTOM_THRESHOLD = 150;
 
@@ -107,6 +107,61 @@ export function SessionChatPanel({
     const next = modeOption.options[(idx + 1) % modeOption.options.length];
     handleConfigChange('mode', next.value);
   }, [modeOption, handleConfigChange]);
+
+  // ── Slash command autocomplete ─────────────────────────────────────────
+  const availableCommands = useWsStore((s) => s.availableCommands[session.id]) ?? [];
+  const [selectedCommandIdx, setSelectedCommandIdx] = useState(-1);
+  const hasNavigatedRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filteredCommands = useMemo(() => {
+    if (!inputText.startsWith('/') || availableCommands.length === 0) return [];
+    const query = inputText.slice(1).toLowerCase();
+    // Show all commands when just "/" is typed, otherwise filter by prefix
+    return availableCommands.filter(
+      (cmd) => !query || cmd.name.toLowerCase().startsWith(query)
+    );
+  }, [inputText, availableCommands]);
+
+  const showCommandMenu = filteredCommands.length > 0;
+
+  // Reset selection when filtered list changes
+  useEffect(() => {
+    setSelectedCommandIdx(showCommandMenu ? 0 : -1);
+    hasNavigatedRef.current = false;
+  }, [filteredCommands, showCommandMenu]);
+
+  const selectCommand = useCallback((cmd: AgentCommand) => {
+    setInputText(`/${cmd.name} `);
+    hasNavigatedRef.current = false;
+    inputRef.current?.focus();
+  }, [setInputText]);
+
+  const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (!showCommandMenu) return;
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hasNavigatedRef.current = true;
+      setSelectedCommandIdx((prev) =>
+        prev <= 0 ? filteredCommands.length - 1 : prev - 1
+      );
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hasNavigatedRef.current = true;
+      setSelectedCommandIdx((prev) =>
+        prev >= filteredCommands.length - 1 ? 0 : prev + 1
+      );
+    } else if (e.key === 'Tab' || (e.key === 'Enter' && hasNavigatedRef.current && selectedCommandIdx >= 0)) {
+      e.preventDefault();
+      const cmd = filteredCommands[selectedCommandIdx];
+      if (cmd) selectCommand(cmd);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      // Clear the slash to dismiss
+      setInputText('');
+    }
+  }, [showCommandMenu, filteredCommands, selectedCommandIdx, selectCommand, setInputText]);
 
   // ── Sticky scroll ─────────────────────────────────────────────────────
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -245,29 +300,56 @@ export function SessionChatPanel({
           </Button>
         ) : (
           <>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-            >
-              <Input
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={inputPlaceholder}
-                disabled={!canType && !sessionReady}
-                className={`flex-1 min-h-[44px] transition-colors ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={(!canType && !sessionReady) || !inputText.trim()}
-                className="min-h-[44px] min-w-[44px]"
+            <div className="relative">
+              {showCommandMenu && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 rounded-md border bg-popover text-popover-foreground shadow-md max-h-[240px] overflow-y-auto z-50">
+                  {filteredCommands.map((cmd, idx) => (
+                    <button
+                      key={cmd.name}
+                      type="button"
+                      className={`w-full text-left px-3 py-2.5 min-h-[44px] flex flex-col gap-0.5 transition-colors ${
+                        idx === selectedCommandIdx ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                      }`}
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // prevent input blur
+                        selectCommand(cmd);
+                      }}
+                      onMouseEnter={() => setSelectedCommandIdx(idx)}
+                    >
+                      <span className="text-sm font-medium">/{cmd.name}</span>
+                      {cmd.description && (
+                        <span className="text-xs text-muted-foreground truncate">{cmd.description}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSend();
+                }}
               >
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
+                <Input
+                  ref={inputRef}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder={inputPlaceholder}
+                  disabled={!canType && !sessionReady}
+                  className={`flex-1 min-h-[44px] transition-colors ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={(!canType && !sessionReady) || !inputText.trim()}
+                  className="min-h-[44px] min-w-[44px]"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
             {(modeOption || modelOption) && (
               <div className="flex items-center gap-2 mt-2">
                 {modeOption && (

@@ -160,6 +160,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setConfigOptions(event.sessionId, event.configOptions);
           break;
         }
+        case 'available_commands': {
+          store().setAvailableCommands(event.sessionId, event.commands);
+          break;
+        }
       }
     });
 

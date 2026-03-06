@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption } from '@agemon/shared';
+import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption } from '@agemon/shared';
 
 interface PendingInput {
   inputId: string;
@@ -22,6 +22,8 @@ interface WsState {
   unreadSessions: Record<string, boolean>;
   /** Config options advertised by agents, keyed by sessionId */
   configOptions: Record<string, SessionConfigOption[]>;
+  /** Available slash commands advertised by agents, keyed by sessionId */
+  availableCommands: Record<string, AgentCommand[]>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -35,6 +37,7 @@ interface WsState {
   markUnread: (sessionId: string) => void;
   clearUnread: (sessionId: string) => void;
   setConfigOptions: (sessionId: string, options: SessionConfigOption[]) => void;
+  setAvailableCommands: (sessionId: string, commands: AgentCommand[]) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -48,6 +51,7 @@ export const useWsStore = create<WsState>((set) => ({
   agentActivity: {},
   unreadSessions: {},
   configOptions: {},
+  availableCommands: {},
 
   setConnected: (connected) => set({ connected }),
 
@@ -140,5 +144,10 @@ export const useWsStore = create<WsState>((set) => ({
   setConfigOptions: (sessionId, options) =>
     set((state) => ({
       configOptions: { ...state.configOptions, [sessionId]: options },
+    })),
+
+  setAvailableCommands: (sessionId, commands) =>
+    set((state) => ({
+      availableCommands: { ...state.availableCommands, [sessionId]: commands },
     })),
 }));
