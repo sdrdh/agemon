@@ -301,12 +301,19 @@ function parseSession(row: AgentSession): AgentSession {
 interface RawMcpServer { id: string; name: string; task_id: string | null; config: string; created_at: string }
 
 function mapMcpServer(row: RawMcpServer): McpServerEntry {
+  let config: McpServerConfig;
+  try {
+    config = JSON.parse(row.config);
+  } catch {
+    console.error(`[db] malformed MCP server config for id=${row.id}, skipping`);
+    throw new Error(`Invalid MCP server config for id=${row.id}`);
+  }
   return {
     id: row.id,
     name: row.name,
     scope: row.task_id ? 'task' : 'global',
     taskId: row.task_id,
-    config: JSON.parse(row.config),
+    config,
     createdAt: row.created_at,
   };
 }
@@ -861,14 +868,10 @@ export const db = {
       'INSERT INTO mcp_servers (id, name, task_id, config) VALUES (?, ?, ?, ?)',
       [id, name, taskId, JSON.stringify(config)]
     );
-    return {
-      id,
-      name,
-      scope: taskId ? 'task' : 'global',
-      taskId,
-      config,
-      createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-    };
+    const row = database.query<RawMcpServer, [string]>(
+      'SELECT * FROM mcp_servers WHERE id = ?'
+    ).get(id)!;
+    return mapMcpServer(row);
   },
 
   removeMcpServer(id: string): boolean {

@@ -25,9 +25,11 @@ function validateMcpServerBody(body: unknown): asserts body is CreateMcpServerBo
   } else {
     if (typeof config.command !== 'string' || config.command.length === 0) sendError(400, 'config.command is required for stdio transport');
   }
+}
 
-  // Sync config.name with body.name so they can never diverge
-  config.name = b.name;
+/** Ensure config.name matches body.name so they can never diverge. */
+function normalizeBody(body: CreateMcpServerBody): CreateMcpServerBody {
+  return { ...body, config: { ...body.config, name: body.name } };
 }
 
 export const mcpConfigRoutes = new Hono();
@@ -39,8 +41,9 @@ mcpConfigRoutes.get('/mcp-servers', (c) => {
 });
 
 mcpConfigRoutes.post('/mcp-servers', async (c) => {
-  const body = await c.req.json();
-  validateMcpServerBody(body);
+  const raw = await c.req.json();
+  validateMcpServerBody(raw);
+  const body = normalizeBody(raw);
   const id = generateId();
   try {
     const entry = db.addMcpServer(id, body.name, null, body.config);
@@ -77,8 +80,9 @@ mcpConfigRoutes.post('/tasks/:taskId/mcp-servers', async (c) => {
   const taskId = c.req.param('taskId');
   const task = db.getTask(taskId);
   if (!task) sendError(404, 'Task not found');
-  const body = await c.req.json();
-  validateMcpServerBody(body);
+  const raw = await c.req.json();
+  validateMcpServerBody(raw);
+  const body = normalizeBody(raw);
   const id = generateId();
   try {
     const entry = db.addMcpServer(id, body.name, taskId, body.config);
