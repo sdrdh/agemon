@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 7
+-- Version: 9
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -116,3 +116,17 @@ CREATE TABLE IF NOT EXISTS approval_rules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_approval_rules_tool ON approval_rules(tool_name);
+
+-- MCP server configurations (global + task-scoped)
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL CHECK (length(name) <= 200),
+  task_id    TEXT REFERENCES tasks(id) ON DELETE CASCADE,  -- NULL = global
+  config     TEXT NOT NULL,  -- JSON: McpServerConfig (stdio or http)
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE(name, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_servers_task ON mcp_servers(task_id);
+-- SQLite treats NULLs as distinct in UNIQUE constraints, so add a partial unique index for global servers
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_servers_global_name ON mcp_servers(name) WHERE task_id IS NULL;

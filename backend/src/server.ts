@@ -197,6 +197,9 @@ try {
 const { tasksRoutes } = await import('./routes/tasks.ts');
 app.route('/api', tasksRoutes);
 
+const { mcpConfigRoutes } = await import('./routes/mcp-config.ts');
+app.route('/api', mcpConfigRoutes);
+
 // ─── Approval endpoints ──────────────────────────────────────────────────────
 app.get('/api/tasks/:id/approvals', (c) => {
   const all = c.req.query('all') === '1';
