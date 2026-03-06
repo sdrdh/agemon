@@ -897,15 +897,15 @@ class ACPAgentManager {
 ### Task 4.16: Dynamic Slash Command Menu in Chat
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Capture `available_commands_update` from ACP session updates and broadcast to frontend via WebSocket
-- [ ] Store available commands per session in frontend state (Zustand)
-- [ ] Show autocomplete dropdown when user types `/` in chat input, filtered by typing
-- [ ] Display command name and description in dropdown items
-- [ ] Selecting a command inserts `/<command>` into the input (sent as regular message)
-- [ ] Commands refresh automatically when agent sends updated command list (e.g. after session mode change)
+- [x] Capture `available_commands_update` from ACP session updates and broadcast to frontend via WebSocket
+- [x] Store available commands per session in frontend state (Zustand)
+- [x] Show autocomplete dropdown when user types `/` in chat input, filtered by typing
+- [x] Display command name and description in dropdown items
+- [x] Selecting a command inserts `/<command>` into the input (sent as regular message)
+- [x] Commands refresh automatically when agent sends updated command list (e.g. after session mode change)
 
 **Key Considerations:**
 - Commands are agent-provided (dynamic) — no hardcoded command lists. Each agent type (claude-code, opencode, aider, gemini) advertises its own set
@@ -947,12 +947,12 @@ class ACPAgentManager {
 ### Task 4.18: Fix Tool Call Approval Dialog Persistence
 
 **Priority:** P1
-**Estimated Time:** 4 hours
+**Status:** Done
 
 **Deliverables:**
-- [ ] Persist pending approval state so the dialog re-renders when user returns to a session
-- [ ] Auto-select the session with a pending approval when navigating back to a task
-- [ ] Ensure approval cards never silently disappear (fallback UI if lookup fails)
+- [x] Persist pending approval state so the dialog re-renders when user returns to a session
+- [x] Auto-select the session with a pending approval when navigating back to a task
+- [x] Ensure approval cards never silently disappear (fallback UI if lookup fails)
 - [ ] Add a global indicator (e.g., badge on task card or nav) showing tasks with unresolved approvals
 
 **Key Considerations:**
@@ -1018,14 +1018,14 @@ class ACPAgentManager {
 ### Task 4.21: MCP Server Configuration for Agent Sessions
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Global MCP server config — servers available to all agent sessions (stored in DB)
-- [ ] Task-level MCP server config — servers scoped to a specific task's sessions
-- [ ] Populate `mcpServers` in ACP `session/new` and `session/load` calls with merged global + task-level configs
-- [ ] API endpoints to manage MCP server configs (CRUD at global and task level)
-- [ ] Frontend UI to add/remove MCP servers at global and task level
+- [x] Global MCP server config — servers available to all agent sessions (stored in DB)
+- [x] Task-level MCP server config — servers scoped to a specific task's sessions
+- [x] Populate `mcpServers` in ACP `session/new` and `session/load` calls with merged global + task-level configs
+- [x] API endpoints to manage MCP server configs (CRUD at global and task level)
+- [x] Frontend UI to add/remove MCP servers at global and task level
 
 **Key Considerations:**
 - ACP already accepts `mcpServers` array in handshake — currently hardcoded to `[]` in three places in `acp.ts`
@@ -1999,4 +1999,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, and sessions page implemented. Known bug: tool call approval dialog lost on navigation (Task 4.18). Token usage tracking (Task 4.19) and context window monitoring (Task 4.20) planned. Terminal PTY, diff viewer, and GitHub PR flow remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, and approval persistence implemented. Token usage tracking (Task 4.19), context window monitoring (Task 4.20), and turn cancellation (Task 4.17) planned. Terminal PTY, diff viewer, and GitHub PR flow remaining.
