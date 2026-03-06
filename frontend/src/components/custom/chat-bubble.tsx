@@ -19,7 +19,6 @@ export function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
     const firstColon = content.indexOf(':');
     const secondColon = firstColon >= 0 ? content.indexOf(':', firstColon + 1) : -1;
     const approvalId = firstColon >= 0 ? content.slice(0, firstColon) : content;
-    const status = secondColon >= 0 ? content.slice(firstColon + 1, secondColon) : undefined;
     const toolName = secondColon >= 0 ? content.slice(secondColon + 1) : undefined;
     if (approvalLookup && onApprovalDecision) {
       const approval = approvalLookup.get(approvalId);
@@ -27,11 +26,11 @@ export function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
         return <ApprovalCard approval={approval} onDecision={onApprovalDecision} />;
       }
     }
-    // Approval not in store — render compact fallback from embedded data
-    const label = toolName ? `${toolName} — ${status === 'pending' ? 'awaiting approval' : status}` : 'Tool approval';
+    // Approval not yet in store — brief flash while HTTP fetch loads it
+    const fallbackLabel = `${toolName ?? 'Tool approval'} — loading…`;
     return (
       <div className="flex justify-center my-2">
-        <span className="text-xs text-muted-foreground italic px-3 py-1">{label}</span>
+        <span className="text-xs text-muted-foreground italic px-3 py-1">{fallbackLabel}</span>
       </div>
     );
   }

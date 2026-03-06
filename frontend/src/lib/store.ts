@@ -30,7 +30,6 @@ interface WsState {
   removePendingInput: (inputId: string) => void;
   addPendingApproval: (approval: PendingApproval) => void;
   resolvePendingApproval: (approvalId: string, decision: ApprovalDecision) => void;
-  removePendingApproval: (approvalId: string) => void;
   mergePendingApprovals: (taskId: string, approvals: PendingApproval[]) => void;
   setAgentActivity: (sessionId: string, activity: string | null) => void;
   markUnread: (sessionId: string) => void;
@@ -100,11 +99,6 @@ export const useWsStore = create<WsState>((set) => ({
       pendingApprovals: state.pendingApprovals.map((a) =>
         a.id === approvalId ? { ...a, status: 'resolved' as const, decision } : a
       ),
-    })),
-
-  removePendingApproval: (approvalId) =>
-    set((state) => ({
-      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== approvalId),
     })),
 
   mergePendingApprovals: (taskId, approvals) =>

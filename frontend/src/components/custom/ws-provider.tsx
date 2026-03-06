@@ -154,10 +154,6 @@ export function WsProvider({ children }: { children: ReactNode }) {
           if (approval) {
             store().setAgentActivity(approval.sessionId, null);
           }
-          // Prune from store after delay so user sees the resolved state briefly
-          setTimeout(() => {
-            store().removePendingApproval(event.approvalId);
-          }, 30_000);
           break;
         }
         case 'config_options_updated': {
