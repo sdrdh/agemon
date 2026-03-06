@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { X, GitFork, Clock, Bot, Loader2 } from 'lucide-react';
+import { X, GitFork, Clock, Bot, Loader2, Plug } from 'lucide-react';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
+import { McpServerList } from '@/components/custom/mcp-server-list';
 import type { Task } from '@agemon/shared';
 
 export function TaskInfoDrawer({
@@ -117,6 +118,14 @@ export function TaskInfoDrawer({
                 <span className="ml-auto font-mono text-xs truncate max-w-[140px]">{task.id}</span>
               </div>
             </div>
+          </section>
+
+          <section>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Plug className="h-3 w-3" />
+              MCP Servers
+            </h3>
+            <McpServerList scope="task" taskId={task.id} />
           </section>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH ?? './agemon.db';
@@ -24,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 /**
  * Extract a display name from a repo URL.
@@ -224,6 +224,9 @@ export function runMigrations() {
         }
       }
 
+      // ── v9 migration: mcp_servers table ──
+      // (Table created by schema.sql via CREATE TABLE IF NOT EXISTS — no extra DDL needed here)
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
@@ -291,6 +294,21 @@ function parseSession(row: AgentSession): AgentSession {
     throw new Error(`[db] unexpected agent type: ${row.agent_type}`);
   }
   return row;
+}
+
+// ── Shared MCP server helpers ────────────────────────────────────────────────
+
+interface RawMcpServer { id: string; name: string; task_id: string | null; config: string; created_at: string }
+
+function mapMcpServer(row: RawMcpServer): McpServerEntry {
+  return {
+    id: row.id,
+    name: row.name,
+    scope: row.task_id ? 'task' : 'global',
+    taskId: row.task_id,
+    config: JSON.parse(row.config),
+    createdAt: row.created_at,
+  };
 }
 
 // ── Shared approval helpers ─────────────────────────────────────────────────
@@ -833,5 +851,65 @@ export const db = {
       toolName: row.tool_name,
       createdAt: row.created_at,
     };
+  },
+
+  // ── MCP Servers ──
+
+  addMcpServer(id: string, name: string, taskId: string | null, config: McpServerConfig): McpServerEntry {
+    const database = getDb();
+    database.run(
+      'INSERT INTO mcp_servers (id, name, task_id, config) VALUES (?, ?, ?, ?)',
+      [id, name, taskId, JSON.stringify(config)]
+    );
+    return {
+      id,
+      name,
+      scope: taskId ? 'task' : 'global',
+      taskId,
+      config,
+      createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    };
+  },
+
+  removeMcpServer(id: string): boolean {
+    const database = getDb();
+    const result = database.run('DELETE FROM mcp_servers WHERE id = ?', [id]);
+    return result.changes > 0;
+  },
+
+  getMcpServer(id: string): McpServerEntry | null {
+    const row = getDb().query<RawMcpServer, [string]>(
+      'SELECT * FROM mcp_servers WHERE id = ?'
+    ).get(id);
+    return row ? mapMcpServer(row) : null;
+  },
+
+  listGlobalMcpServers(): McpServerEntry[] {
+    return getDb().query<RawMcpServer, []>(
+      'SELECT * FROM mcp_servers WHERE task_id IS NULL ORDER BY name'
+    ).all().map(mapMcpServer);
+  },
+
+  listTaskMcpServers(taskId: string): McpServerEntry[] {
+    return getDb().query<RawMcpServer, [string]>(
+      'SELECT * FROM mcp_servers WHERE task_id = ? ORDER BY name'
+    ).all(taskId).map(mapMcpServer);
+  },
+
+  /** Merge global + task-level MCP servers. Task overrides global by name. */
+  getMergedMcpServers(taskId: string): McpServerConfig[] {
+    const globals = this.listGlobalMcpServers();
+    const taskServers = this.listTaskMcpServers(taskId);
+    const taskNames = new Set(taskServers.map(s => s.name));
+    const merged: McpServerConfig[] = [];
+    // Add globals that aren't overridden by task-level
+    for (const g of globals) {
+      if (!taskNames.has(g.name)) merged.push(g.config);
+    }
+    // Add all task-level servers
+    for (const t of taskServers) {
+      merged.push(t.config);
+    }
+    return merged;
   },
 };

@@ -135,9 +135,13 @@ async function runAcpHandshake(
     const supportsLoadSession = !!capabilities?.loadSession;
 
     // 2. Create ACP session via session/new
+    const mcpServers = db.getMergedMcpServers(taskId);
+    if (mcpServers.length > 0) {
+      console.info(`[acp] session ${sessionId} passing ${mcpServers.length} MCP server(s): ${mcpServers.map(s => s.name).join(', ')}`);
+    }
     const sessionResult = await transport.request('session/new', {
       cwd,
-      mcpServers: [],
+      mcpServers,
     });
 
     // Extract the ACP session ID returned by the agent
@@ -772,12 +776,13 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     let sessionResultObj: Record<string, unknown> | null = null;
 
     // 2. Try session/load if supported and we have a stored external ID
+    const mcpServers = db.getMergedMcpServers(sessionRecord.task_id);
     if (supportsLoadSession && storedExternalId) {
       try {
         const loadResult = await rs.transport.request('session/load', {
           sessionId: storedExternalId,
           cwd: agentCwd,
-          mcpServers: [],
+          mcpServers,
         });
 
         sessionResultObj = loadResult as Record<string, unknown> | null;
@@ -798,7 +803,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     if (!acpSessionId) {
       const sessionResult = await rs.transport.request('session/new', {
         cwd: agentCwd,
-        mcpServers: [],
+        mcpServers,
       });
 
       sessionResultObj = sessionResult as Record<string, unknown> | null;

@@ -174,6 +174,38 @@ export interface ApiError {
   statusCode: number;
 }
 
+// ─── MCP Server Configuration ───────────────────────────────────────────────
+
+export interface McpServerStdio {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: { name: string; value: string }[];
+}
+
+export interface McpServerHttp {
+  type: 'http';
+  name: string;
+  url: string;
+  headers?: { name: string; value: string }[];
+}
+
+export type McpServerConfig = McpServerStdio | McpServerHttp;
+
+export interface McpServerEntry {
+  id: string;
+  name: string;
+  scope: 'global' | 'task';
+  taskId: string | null;
+  config: McpServerConfig;
+  createdAt: string;
+}
+
+export interface CreateMcpServerBody {
+  name: string;
+  config: McpServerConfig;
+}
+
 // ─── Shared Validation ──────────────────────────────────────────────────────
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */

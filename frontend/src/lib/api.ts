@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -85,6 +85,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ configId, value }),
     }),
+
+  // MCP Servers
+  listGlobalMcpServers: () => request<McpServerEntry[]>('/mcp-servers'),
+  addGlobalMcpServer: (body: CreateMcpServerBody) =>
+    request<McpServerEntry>('/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+  removeGlobalMcpServer: (id: string) => request<void>(`/mcp-servers/${id}`, { method: 'DELETE' }),
+  listTaskMcpServers: (taskId: string) =>
+    request<{ global: McpServerEntry[]; task: McpServerEntry[] }>(`/tasks/${taskId}/mcp-servers`),
+  addTaskMcpServer: (taskId: string, body: CreateMcpServerBody) =>
+    request<McpServerEntry>(`/tasks/${taskId}/mcp-servers`, { method: 'POST', body: JSON.stringify(body) }),
+  removeTaskMcpServer: (taskId: string, serverId: string) =>
+    request<void>(`/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),
