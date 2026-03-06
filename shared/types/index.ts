@@ -206,6 +206,16 @@ export interface CreateMcpServerBody {
   config: McpServerConfig;
 }
 
+export interface TestMcpServerBody {
+  config: McpServerConfig;
+}
+
+export interface TestMcpServerResult {
+  status: 'connected' | 'error';
+  message: string;
+  latencyMs: number;
+}
+
 // ─── Shared Validation ──────────────────────────────────────────────────────
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */

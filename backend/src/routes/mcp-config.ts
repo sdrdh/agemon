@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { db } from '../db/client.ts';
-import type { CreateMcpServerBody, McpServerConfig } from '@agemon/shared';
+import type { CreateMcpServerBody, McpServerConfig, McpServerStdio, McpServerHttp, TestMcpServerResult } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
   throw new HTTPException(statusCode as ContentfulStatusCode, { message });
@@ -54,6 +54,108 @@ mcpConfigRoutes.post('/mcp-servers', async (c) => {
     }
     throw err;
   }
+});
+
+// ── Test MCP Server Connectivity ──────────────────────────────────────────────
+
+async function testHttpServer(config: McpServerHttp): Promise<TestMcpServerResult> {
+  const start = Date.now();
+  const hdrs: Record<string, string> = {};
+  if (config.headers) {
+    for (const h of config.headers) {
+      if (h.name.trim()) hdrs[h.name.trim()] = h.value;
+    }
+  }
+  try {
+    const res = await fetch(config.url, {
+      method: 'GET',
+      headers: hdrs,
+      signal: AbortSignal.timeout(5000),
+    });
+    const latencyMs = Date.now() - start;
+    if (res.ok || res.status === 405) {
+      return { status: 'connected', message: `HTTP ${res.status} ${res.statusText}`, latencyMs };
+    }
+    return { status: 'error', message: `HTTP ${res.status} ${res.statusText}`, latencyMs };
+  } catch (err) {
+    return { status: 'error', message: err instanceof Error ? err.message : 'Connection failed', latencyMs: Date.now() - start };
+  }
+}
+
+async function testStdioServer(config: McpServerStdio): Promise<TestMcpServerResult> {
+  const start = Date.now();
+  let proc: ReturnType<typeof Bun.spawn> | null = null;
+  try {
+    const env = config.env
+      ? { ...process.env, ...Object.fromEntries(config.env.map(e => [e.name, e.value])) }
+      : undefined;
+    proc = Bun.spawn([config.command, ...(config.args ?? [])], {
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env,
+    });
+
+    const initRequest = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'agemon-health-check', version: '1.0.0' },
+      },
+    }) + '\n';
+
+    const stdin = proc.stdin as import('bun').FileSink;
+    stdin.write(initRequest);
+    stdin.flush();
+
+    // Race read against a 5s timeout to guarantee cleanup
+    const stdout = proc.stdout as ReadableStream<Uint8Array>;
+    const reader = stdout.getReader();
+    const result = await Promise.race([
+      reader.read(),
+      new Promise<{ value: undefined; done: true }>((resolve) =>
+        setTimeout(() => resolve({ value: undefined, done: true }), 5000),
+      ),
+    ]);
+
+    const latencyMs = Date.now() - start;
+    const { value } = result;
+
+    if (value) {
+      const text = new TextDecoder().decode(value);
+      try {
+        const response = JSON.parse(text);
+        if (response.result?.protocolVersion) {
+          const serverName = response.result.serverInfo?.name ?? 'unknown';
+          return { status: 'connected', message: `MCP ${response.result.protocolVersion} — ${serverName}`, latencyMs };
+        }
+      } catch { /* not valid JSON, but process responded */ }
+      return { status: 'connected', message: 'Process started and responded', latencyMs };
+    }
+
+    return { status: 'error', message: 'Process started but timed out waiting for response', latencyMs };
+  } catch (err) {
+    return { status: 'error', message: err instanceof Error ? err.message : 'Failed to spawn process', latencyMs: Date.now() - start };
+  } finally {
+    try { proc?.kill(); } catch { /* already dead */ }
+  }
+}
+
+mcpConfigRoutes.post('/mcp-servers/test', async (c) => {
+  const raw = await c.req.json();
+  if (!raw?.config || typeof raw.config !== 'object') {
+    sendError(400, 'config is required');
+  }
+  const config = raw.config as Record<string, unknown>;
+  if (config.type === 'http') {
+    if (typeof config.url !== 'string' || !config.url.trim()) sendError(400, 'config.url is required for http transport');
+    return c.json(await testHttpServer(raw.config as McpServerHttp));
+  }
+  if (typeof config.command !== 'string' || !config.command.trim()) sendError(400, 'config.command is required for stdio transport');
+  return c.json(await testStdioServer(raw.config as McpServerStdio));
 });
 
 mcpConfigRoutes.delete('/mcp-servers/:id', (c) => {

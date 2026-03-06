@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Globe, Terminal, Loader2 } from 'lucide-react';
+import { Plus, X, Globe, Terminal, Loader2, CheckCircle2, AlertCircle, Wifi } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import type { McpServerEntry, McpServerConfig } from '@agemon/shared';
 
 type TransportType = 'stdio' | 'http';
+type TestStatus = 'idle' | 'checking' | 'connected' | 'error';
 
 function McpServerItem({
   entry,
@@ -75,8 +76,40 @@ function AddMcpServerForm({
   const [headers, setHeaders] = useState<{ name: string; value: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [testStatus, setTestStatus] = useState<TestStatus>('idle');
+  const [testMessage, setTestMessage] = useState('');
+  const [testLatency, setTestLatency] = useState<number | null>(null);
 
   const isValid = name.trim() && (transport === 'stdio' ? command.trim() : url.trim());
+
+  // Reset test status when inputs change
+  useEffect(() => {
+    setTestStatus('idle');
+    setTestMessage('');
+    setTestLatency(null);
+  }, [transport, command, args, url, headers]);
+
+  function buildConfig(): McpServerConfig {
+    const trimmedName = name.trim() || 'test';
+    return transport === 'stdio'
+      ? { name: trimmedName, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : undefined }
+      : { type: 'http' as const, name: trimmedName, url: url.trim(), ...(headers.some(h => h.name.trim()) ? { headers: headers.filter(h => h.name.trim()) } : {}) };
+  }
+
+  async function handleTest() {
+    setTestStatus('checking');
+    setTestMessage('');
+    setTestLatency(null);
+    try {
+      const result = await api.testMcpServer({ config: buildConfig() });
+      setTestStatus(result.status);
+      setTestMessage(result.message);
+      setTestLatency(result.latencyMs);
+    } catch (err) {
+      setTestStatus('error');
+      setTestMessage(err instanceof Error ? err.message : 'Test failed');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,11 +117,8 @@ function AddMcpServerForm({
     setSubmitting(true);
     setError('');
     try {
-      const trimmedName = name.trim();
-      const config: McpServerConfig = transport === 'stdio'
-        ? { name: trimmedName, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : undefined }
-        : { type: 'http', name: trimmedName, url: url.trim(), ...(headers.some(h => h.name.trim()) ? { headers: headers.filter(h => h.name.trim()) } : {}) };
-      await onAdd(trimmedName, config);
+      const config = buildConfig();
+      await onAdd(name.trim(), config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add');
     } finally {
@@ -197,6 +227,44 @@ function AddMcpServerForm({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Connection test */}
+      {isValid && (
+        <div className="space-y-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={testStatus === 'checking'}
+            onClick={handleTest}
+            className="w-full"
+          >
+            {testStatus === 'checking' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+            ) : (
+              <Wifi className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {testStatus === 'checking' ? 'Testing...' : 'Test Connection'}
+          </Button>
+
+          {testStatus === 'connected' && (
+            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-2 rounded-md">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{testMessage}</span>
+              {testLatency !== null && (
+                <span className="shrink-0 text-muted-foreground">{testLatency}ms</span>
+              )}
+            </div>
+          )}
+
+          {testStatus === 'error' && (
+            <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 p-2 rounded-md">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{testMessage}</span>
+            </div>
+          )}
         </div>
       )}
 
