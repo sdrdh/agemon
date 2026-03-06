@@ -14,12 +14,26 @@ export function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
 }) {
   const { role, content, eventType } = message;
 
-  if (eventType === 'approval_request' && approvalLookup && onApprovalDecision) {
-    const approval = approvalLookup.get(content);
-    if (approval) {
-      return <ApprovalCard approval={approval} onDecision={onApprovalDecision} />;
+  if (eventType === 'approval_request') {
+    // Content format: "approvalId:status:toolName" (toolName may contain colons)
+    const firstColon = content.indexOf(':');
+    const secondColon = firstColon >= 0 ? content.indexOf(':', firstColon + 1) : -1;
+    const approvalId = firstColon >= 0 ? content.slice(0, firstColon) : content;
+    const status = secondColon >= 0 ? content.slice(firstColon + 1, secondColon) : undefined;
+    const toolName = secondColon >= 0 ? content.slice(secondColon + 1) : undefined;
+    if (approvalLookup && onApprovalDecision) {
+      const approval = approvalLookup.get(approvalId);
+      if (approval) {
+        return <ApprovalCard approval={approval} onDecision={onApprovalDecision} />;
+      }
     }
-    return null;
+    // Approval not in store — render compact fallback from embedded data
+    const label = toolName ? `${toolName} — ${status === 'pending' ? 'awaiting approval' : status}` : 'Tool approval';
+    return (
+      <div className="flex justify-center my-2">
+        <span className="text-xs text-muted-foreground italic px-3 py-1">{label}</span>
+      </div>
+    );
   }
 
   if (role === 'system') {

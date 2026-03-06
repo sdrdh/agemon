@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { tasksListQuery } from '@/lib/query';
 import { TaskCard } from '@/components/custom/task-card';
 import { friendlyError } from '@/lib/errors';
+import { useApprovalCountByTask } from '@/hooks/use-approval-counts';
 import type { Task, TaskStatus } from '@agemon/shared';
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -17,6 +18,7 @@ const COLUMNS: { status: TaskStatus; label: string }[] = [
 export default function KanbanPage() {
   const navigate = useNavigate();
   const { data: tasks, isLoading, error } = useQuery(tasksListQuery());
+  const approvalCountByTask = useApprovalCountByTask();
   // On mobile, default-open columns that have tasks (computed after data loads)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -114,6 +116,7 @@ export default function KanbanPage() {
                       onClick={() =>
                         navigate({ to: '/tasks/$id', params: { id: task.id } })
                       }
+                      pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                     />
                   ))}
                   {columnTasks.length === 0 && (
@@ -148,6 +151,7 @@ export default function KanbanPage() {
                     onClick={() =>
                       navigate({ to: '/tasks/$id', params: { id: task.id } })
                     }
+                    pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                   />
                 ))}
                 {columnTasks.length === 0 && (

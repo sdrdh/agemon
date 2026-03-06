@@ -199,7 +199,10 @@ app.route('/api', tasksRoutes);
 
 // ─── Approval endpoints ──────────────────────────────────────────────────────
 app.get('/api/tasks/:id/approvals', (c) => {
-  const approvals = db.listPendingApprovals(c.req.param('id'));
+  const all = c.req.query('all') === '1';
+  const approvals = all
+    ? db.listAllApprovals(c.req.param('id'))
+    : db.listPendingApprovals(c.req.param('id'));
   return c.json(approvals);
 });
 

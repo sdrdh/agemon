@@ -139,7 +139,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().appendChatMessage(event.approval.sessionId, {
             id: `approval-${event.approval.id}`,
             role: 'system',
-            content: event.approval.id, // approval ID as content — looked up from store
+            content: `${event.approval.id}:${event.approval.status}:${event.approval.toolName}`,
             eventType: 'approval_request',
             timestamp: event.approval.createdAt,
           });
@@ -150,10 +150,14 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'approval_resolved': {
           store().resolvePendingApproval(event.approvalId, event.decision);
           // Find the approval to clear activity on the right session
-          const resolved = store().pendingApprovals.find(a => a.id === event.approvalId);
-          if (resolved) {
-            store().setAgentActivity(resolved.sessionId, null);
+          const approval = store().pendingApprovals.find(a => a.id === event.approvalId);
+          if (approval) {
+            store().setAgentActivity(approval.sessionId, null);
           }
+          // Prune from store after delay so user sees the resolved state briefly
+          setTimeout(() => {
+            store().removePendingApproval(event.approvalId);
+          }, 30_000);
           break;
         }
         case 'config_options_updated': {

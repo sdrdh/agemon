@@ -48,23 +48,41 @@ export default function TaskDetailView() {
     });
   }, [sessions]);
 
-  // ── Auto-select logic (desktop only) ──────────────────────────────────
+  // ── Approval state (declared early for auto-select) ────────────────
+  const allPendingApprovals = useWsStore((s) => s.pendingApprovals);
+  const mergePendingApprovals = useWsStore((s) => s.mergePendingApprovals);
+
+  const taskApprovalSessionId = useMemo(() => {
+    const sessionIds = new Set(sessions.map(s => s.id));
+    return allPendingApprovals.find(
+      a => a.status === 'pending' && a.taskId === taskId && sessionIds.has(a.sessionId)
+    )?.sessionId ?? null;
+  }, [allPendingApprovals, taskId, sessions]);
+
+  // ── Auto-select logic ───────────────────────────────────────────────
   useEffect(() => {
     if (sessions.length === 0) {
       setSelectedSessionId(null);
       return;
     }
-    if (isDesktop && !selectedSessionId) {
-      setSelectedSessionId(sessions[sessions.length - 1].id);
+    if (!selectedSessionId) {
+      // On desktop: prefer session with a pending approval, then fall back to last session
+      // On mobile: only auto-select if there's a pending approval (otherwise stay on session list)
+      if (taskApprovalSessionId) {
+        setSelectedSessionId(taskApprovalSessionId);
+      } else if (isDesktop) {
+        setSelectedSessionId(sessions[sessions.length - 1].id);
+      }
+      return;
     }
-    if (selectedSessionId && !sessions.find(s => s.id === selectedSessionId)) {
+    if (!sessions.find(s => s.id === selectedSessionId)) {
       if (isDesktop) {
         setSelectedSessionId(sessions[sessions.length - 1].id);
       } else {
         setSelectedSessionId(null);
       }
     }
-  }, [sessions, selectedSessionId, isDesktop]);
+  }, [sessions, selectedSessionId, isDesktop, taskApprovalSessionId]);
 
   const activeSession = useMemo(
     () => sessions.find(s => s.id === selectedSessionId) ?? null,
@@ -102,9 +120,7 @@ export default function TaskDetailView() {
     [allPendingInputs, selectedSessionId],
   );
 
-  // ── Approval state ──────────────────────────────────────────────────
-  const allPendingApprovals = useWsStore((s) => s.pendingApprovals);
-  const setPendingApprovals = useWsStore((s) => s.setPendingApprovals);
+  // ── Session approvals ──────────────────────────────────────────────
   const sessionApprovals = useMemo(
     () => selectedSessionId
       ? allPendingApprovals.filter((a) => a.sessionId === selectedSessionId)
@@ -114,17 +130,15 @@ export default function TaskDetailView() {
 
   useEffect(() => {
     if (!taskId) return;
-    fetch(`/api/tasks/${taskId}/approvals`, {
+    fetch(`/api/tasks/${taskId}/approvals?all=1`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('agemon_key') ?? ''}` },
     })
       .then(r => r.ok ? r.json() : [])
       .then((approvals: PendingApproval[]) => {
-        if (approvals.length > 0) {
-          setPendingApprovals(approvals);
-        }
+        mergePendingApprovals(taskId, approvals);
       })
       .catch(() => { /* ignore */ });
-  }, [taskId, setPendingApprovals]);
+  }, [taskId, mergePendingApprovals]);
 
   // ── Clear unread for the active session ─────────────────────────────
   useEffect(() => {

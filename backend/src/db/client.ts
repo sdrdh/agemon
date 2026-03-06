@@ -293,6 +293,38 @@ function parseSession(row: AgentSession): AgentSession {
   return row;
 }
 
+// ── Shared approval helpers ─────────────────────────────────────────────────
+
+interface RawApproval {
+  id: string;
+  task_id: string;
+  session_id: string;
+  tool_name: string;
+  tool_title: string;
+  context: string;
+  options: string;
+  status: string;
+  decision: string | null;
+  created_at: string;
+}
+
+const APPROVAL_COLUMNS = 'id, task_id, session_id, tool_name, tool_title, context, options, status, decision, created_at';
+
+function mapApproval(row: RawApproval): PendingApproval {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    sessionId: row.session_id,
+    toolName: row.tool_name,
+    toolTitle: row.tool_title,
+    context: JSON.parse(row.context),
+    options: JSON.parse(row.options),
+    status: row.status as 'pending' | 'resolved',
+    decision: (row.decision as ApprovalDecision | null) ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
 export const db = {
   // ── Repos ──
 
@@ -689,14 +721,17 @@ export const db = {
       timestamp: string;
     }
 
-    const rows = database.query<RawChatRow, [string, string, number]>(`
+    const rows = database.query<RawChatRow, [string, string, string, number]>(`
       SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
         FROM acp_events WHERE session_id = ?
       UNION ALL
       SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
         FROM awaiting_input WHERE session_id = ? AND status = 'answered'
+      UNION ALL
+      SELECT id, 'system' as role, id || ':' || status || ':' || tool_name as content, 'approval_request' as event_type, created_at as timestamp
+        FROM pending_approvals WHERE session_id = ?
       ORDER BY timestamp ASC LIMIT ?
-    `).all(sessionId, sessionId, limit);
+    `).all(sessionId, sessionId, sessionId, limit);
 
     const eventTypeMap: Record<string, ChatMessage['eventType']> = {
       thought: 'thought',
@@ -705,11 +740,12 @@ export const db = {
       result: 'action',
       prompt: 'prompt',
       input_response: 'input_response',
+      approval_request: 'approval_request',
     };
 
     return rows.map((row): ChatMessage => ({
-      id: row.id,
-      role: row.role === 'user' ? 'user' : (row.event_type === 'prompt' ? 'user' : 'agent'),
+      id: row.event_type === 'approval_request' ? `approval-${row.id}` : row.id,
+      role: row.role === 'user' ? 'user' : (row.event_type === 'prompt' ? 'user' : row.role as 'agent' | 'system'),
       content: row.content ?? '',
       eventType: eventTypeMap[row.event_type] ?? 'thought',
       timestamp: row.timestamp,
@@ -742,97 +778,28 @@ export const db = {
   },
 
   getPendingApproval(id: string): PendingApproval | null {
-    const database = getDb();
-    interface RawApproval {
-      id: string;
-      task_id: string;
-      session_id: string;
-      tool_name: string;
-      tool_title: string;
-      context: string;
-      options: string;
-      status: string;
-      decision: string | null;
-      created_at: string;
-    }
-    const row = database.query<RawApproval, [string]>(
-      'SELECT * FROM pending_approvals WHERE id = ?'
+    const row = getDb().query<RawApproval, [string]>(
+      `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE id = ?`
     ).get(id);
-    if (!row) return null;
-    return {
-      id: row.id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      toolName: row.tool_name,
-      toolTitle: row.tool_title,
-      context: JSON.parse(row.context),
-      options: JSON.parse(row.options),
-      status: row.status as 'pending' | 'resolved',
-      decision: row.decision as ApprovalDecision | undefined,
-      createdAt: row.created_at,
-    };
+    return row ? mapApproval(row) : null;
   },
 
   listPendingApprovals(taskId: string): PendingApproval[] {
-    const database = getDb();
-    interface RawApproval {
-      id: string;
-      task_id: string;
-      session_id: string;
-      tool_name: string;
-      tool_title: string;
-      context: string;
-      options: string;
-      status: string;
-      decision: string | null;
-      created_at: string;
-    }
-    const rows = database.query<RawApproval, [string]>(
-      "SELECT * FROM pending_approvals WHERE task_id = ? AND status = 'pending' ORDER BY created_at ASC"
-    ).all(taskId);
-    return rows.map(row => ({
-      id: row.id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      toolName: row.tool_name,
-      toolTitle: row.tool_title,
-      context: JSON.parse(row.context),
-      options: JSON.parse(row.options),
-      status: row.status as 'pending' | 'resolved',
-      decision: row.decision as ApprovalDecision | undefined,
-      createdAt: row.created_at,
-    }));
+    return getDb().query<RawApproval, [string]>(
+      `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE task_id = ? AND status = 'pending' ORDER BY created_at ASC`
+    ).all(taskId).map(mapApproval);
+  },
+
+  listAllApprovals(taskId: string): PendingApproval[] {
+    return getDb().query<RawApproval, [string]>(
+      `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE task_id = ? ORDER BY created_at ASC`
+    ).all(taskId).map(mapApproval);
   },
 
   listPendingApprovalsBySession(sessionId: string): PendingApproval[] {
-    const database = getDb();
-    interface RawApproval {
-      id: string;
-      task_id: string;
-      session_id: string;
-      tool_name: string;
-      tool_title: string;
-      context: string;
-      options: string;
-      status: string;
-      decision: string | null;
-      created_at: string;
-    }
-    const rows = database.query<RawApproval, [string]>(
-      "SELECT * FROM pending_approvals WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC"
-    ).all(sessionId);
-    return rows.map(row => ({
-      id: row.id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      toolName: row.tool_name,
-      toolTitle: row.tool_title,
-      context: JSON.parse(row.context),
-      options: JSON.parse(row.options),
-      status: row.status as 'pending' | 'resolved',
-      decision: row.decision as ApprovalDecision | undefined,
-      createdAt: row.created_at,
-    }));
+    return getDb().query<RawApproval, [string]>(
+      `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC`
+    ).all(sessionId).map(mapApproval);
   },
 
   // ── Approval Rules ──

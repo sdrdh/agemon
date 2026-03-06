@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { TaskCard } from '@/components/custom/task-card';
 import { tasksByProjectQuery } from '@/lib/query';
 import { friendlyError } from '@/lib/errors';
+import { useApprovalCountByTask } from '@/hooks/use-approval-counts';
 
 export default function ProjectListView() {
   const navigate = useNavigate();
   const { data, isLoading, error } = useQuery(tasksByProjectQuery());
+  const approvalCountByTask = useApprovalCountByTask();
 
   if (isLoading) {
     return (
@@ -68,6 +70,7 @@ export default function ProjectListView() {
                   key={`${name}-${task.id}`}
                   task={task}
                   onClick={() => navigate({ to: '/tasks/$id', params: { id: task.id } })}
+                  pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                 />
               ))}
             </div>
@@ -83,6 +86,7 @@ export default function ProjectListView() {
                   key={task.id}
                   task={task}
                   onClick={() => navigate({ to: '/tasks/$id', params: { id: task.id } })}
+                  pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                 />
               ))}
             </div>

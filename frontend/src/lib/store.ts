@@ -30,7 +30,8 @@ interface WsState {
   removePendingInput: (inputId: string) => void;
   addPendingApproval: (approval: PendingApproval) => void;
   resolvePendingApproval: (approvalId: string, decision: ApprovalDecision) => void;
-  setPendingApprovals: (approvals: PendingApproval[]) => void;
+  removePendingApproval: (approvalId: string) => void;
+  mergePendingApprovals: (taskId: string, approvals: PendingApproval[]) => void;
   setAgentActivity: (sessionId: string, activity: string | null) => void;
   markUnread: (sessionId: string) => void;
   clearUnread: (sessionId: string) => void;
@@ -38,6 +39,7 @@ interface WsState {
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
+const MAX_APPROVALS = 200;
 
 export const useWsStore = create<WsState>((set) => ({
   connected: false,
@@ -100,8 +102,29 @@ export const useWsStore = create<WsState>((set) => ({
       ),
     })),
 
-  setPendingApprovals: (approvals) =>
-    set({ pendingApprovals: approvals }),
+  removePendingApproval: (approvalId) =>
+    set((state) => ({
+      pendingApprovals: state.pendingApprovals.filter((a) => a.id !== approvalId),
+    })),
+
+  mergePendingApprovals: (taskId, approvals) =>
+    set((state) => {
+      const serverIds = new Set(approvals.map((a) => a.id));
+      // Keep entries from other tasks, plus any WebSocket-delivered entries for this
+      // task that the server response doesn't yet include (race window).
+      const kept = state.pendingApprovals.filter(
+        (a) => a.taskId !== taskId || !serverIds.has(a.id),
+      );
+      let merged = [...kept, ...approvals];
+      // Cap: if over limit, drop oldest resolved entries first
+      if (merged.length > MAX_APPROVALS) {
+        const pending = merged.filter((a) => a.status === 'pending');
+        const resolved = merged.filter((a) => a.status !== 'pending')
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        merged = [...pending, ...resolved.slice(resolved.length - (MAX_APPROVALS - pending.length))];
+      }
+      return { pendingApprovals: merged };
+    }),
 
   setAgentActivity: (sessionId, activity) =>
     set((state) => ({
