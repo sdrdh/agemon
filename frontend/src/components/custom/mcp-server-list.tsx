@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import type { McpServerEntry, McpServerConfig } from '@agemon/shared';
+import type { McpServerEntry, McpServerConfig, McpToolInfo } from '@agemon/shared';
 
 type TransportType = 'stdio' | 'http';
 type TestStatus = 'idle' | 'checking' | 'connected' | 'error';
@@ -79,6 +79,7 @@ function AddMcpServerForm({
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [testLatency, setTestLatency] = useState<number | null>(null);
+  const [testTools, setTestTools] = useState<McpToolInfo[] | null>(null);
 
   const isValid = name.trim() && (transport === 'stdio' ? command.trim() : url.trim());
 
@@ -87,6 +88,7 @@ function AddMcpServerForm({
     setTestStatus('idle');
     setTestMessage('');
     setTestLatency(null);
+    setTestTools(null);
   }, [transport, command, args, url, headers]);
 
   function buildConfig(): McpServerConfig {
@@ -100,11 +102,13 @@ function AddMcpServerForm({
     setTestStatus('checking');
     setTestMessage('');
     setTestLatency(null);
+    setTestTools(null);
     try {
       const result = await api.testMcpServer({ config: buildConfig() });
       setTestStatus(result.status);
       setTestMessage(result.message);
       setTestLatency(result.latencyMs);
+      setTestTools(result.tools ?? null);
     } catch (err) {
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Test failed');
@@ -250,11 +254,18 @@ function AddMcpServerForm({
           </Button>
 
           {testStatus === 'connected' && (
-            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-2 rounded-md">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{testMessage}</span>
-              {testLatency !== null && (
-                <span className="shrink-0 text-muted-foreground">{testLatency}ms</span>
+            <div className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-2 rounded-md space-y-1">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{testMessage}</span>
+                {testLatency !== null && (
+                  <span className="shrink-0 text-muted-foreground">{testLatency}ms</span>
+                )}
+              </div>
+              {testTools && testTools.length > 0 && (
+                <div className="text-muted-foreground pl-5.5">
+                  {testTools.length} tool{testTools.length !== 1 ? 's' : ''} available
+                </div>
               )}
             </div>
           )}

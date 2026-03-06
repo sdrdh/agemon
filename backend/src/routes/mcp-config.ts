@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { db } from '../db/client.ts';
-import type { CreateMcpServerBody, McpServerConfig, McpServerStdio, McpServerHttp, TestMcpServerResult } from '@agemon/shared';
+import type { CreateMcpServerBody, McpServerConfig, McpServerStdio, McpServerHttp, TestMcpServerResult, McpToolInfo } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
   throw new HTTPException(statusCode as ContentfulStatusCode, { message });
@@ -58,6 +58,55 @@ mcpConfigRoutes.post('/mcp-servers', async (c) => {
 
 // ── Test MCP Server Connectivity ──────────────────────────────────────────────
 
+/** POST a JSON-RPC message to an MCP Streamable HTTP endpoint and parse the response. */
+async function postJsonRpc(
+  url: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+  sessionId?: string,
+): Promise<{ json: Record<string, unknown> | null; sessionId?: string }> {
+  const reqHeaders: Record<string, string> = {
+    ...headers,
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+  };
+  if (sessionId) reqHeaders['Mcp-Session-Id'] = sessionId;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: reqHeaders,
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(5000),
+  });
+
+  const newSessionId = res.headers.get('Mcp-Session-Id') ?? sessionId;
+  const contentType = res.headers.get('Content-Type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    return { json: await res.json() as Record<string, unknown>, sessionId: newSessionId };
+  }
+
+  // SSE response — extract first JSON-RPC message from the stream
+  if (contentType.includes('text/event-stream')) {
+    const text = await res.text();
+    for (const line of text.split('\n')) {
+      if (line.startsWith('data: ')) {
+        try {
+          return { json: JSON.parse(line.slice(6)) as Record<string, unknown>, sessionId: newSessionId };
+        } catch { /* skip non-JSON data lines */ }
+      }
+    }
+    return { json: null, sessionId: newSessionId };
+  }
+
+  // Notification accepted (no body expected)
+  if (res.status === 202 || res.status === 204) {
+    return { json: null, sessionId: newSessionId };
+  }
+
+  return { json: null, sessionId: newSessionId };
+}
+
 async function testHttpServer(config: McpServerHttp): Promise<TestMcpServerResult> {
   const start = Date.now();
   const hdrs: Record<string, string> = {};
@@ -67,18 +116,85 @@ async function testHttpServer(config: McpServerHttp): Promise<TestMcpServerResul
     }
   }
   try {
-    const res = await fetch(config.url, {
-      method: 'GET',
-      headers: hdrs,
-      signal: AbortSignal.timeout(5000),
+    // 1. Initialize
+    const initResult = await postJsonRpc(config.url, hdrs, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'agemon-health-check', version: '1.0.0' },
+      },
     });
-    const latencyMs = Date.now() - start;
-    if (res.ok || res.status === 405) {
-      return { status: 'connected', message: `HTTP ${res.status} ${res.statusText}`, latencyMs };
+
+    if (!initResult.json?.result || !(initResult.json.result as Record<string, unknown>).protocolVersion) {
+      const latencyMs = Date.now() - start;
+      if (initResult.json) {
+        return { status: 'connected', message: 'Server responded but not MCP-compatible', latencyMs };
+      }
+      return { status: 'error', message: 'No response from server', latencyMs };
     }
-    return { status: 'error', message: `HTTP ${res.status} ${res.statusText}`, latencyMs };
+
+    const result = initResult.json.result as Record<string, unknown>;
+    const serverName = (result.serverInfo as Record<string, unknown>)?.name ?? 'unknown';
+    const protocolVersion = result.protocolVersion as string;
+
+    // 2. Send initialized notification
+    await postJsonRpc(config.url, hdrs, {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    }, initResult.sessionId);
+
+    // 3. Request tools/list
+    const toolsResult = await postJsonRpc(config.url, hdrs, {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/list',
+      params: {},
+    }, initResult.sessionId);
+
+    const latencyMs = Date.now() - start;
+
+    let tools: McpToolInfo[] | undefined;
+    if (toolsResult.json?.result) {
+      const toolsList = (toolsResult.json.result as Record<string, unknown>).tools;
+      if (Array.isArray(toolsList)) {
+        tools = toolsList.map((t: Record<string, unknown>) => ({
+          name: t.name as string,
+          ...(t.description ? { description: t.description as string } : {}),
+        }));
+      }
+    }
+
+    return {
+      status: 'connected',
+      message: `MCP ${protocolVersion} — ${serverName}`,
+      latencyMs,
+      tools,
+    };
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'Connection failed', latencyMs: Date.now() - start };
+  }
+}
+
+/** Read a single JSON-RPC message from the stdout reader with a timeout. */
+async function readJsonRpcMessage(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs: number,
+): Promise<Record<string, unknown> | null> {
+  const result = await Promise.race([
+    reader.read(),
+    new Promise<{ value: undefined; done: true }>((resolve) =>
+      setTimeout(() => resolve({ value: undefined, done: true }), timeoutMs),
+    ),
+  ]);
+  if (!result.value) return null;
+  const text = new TextDecoder().decode(result.value);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 
@@ -96,7 +212,12 @@ async function testStdioServer(config: McpServerStdio): Promise<TestMcpServerRes
       env,
     });
 
-    const initRequest = JSON.stringify({
+    const stdin = proc.stdin as import('bun').FileSink;
+    const stdout = proc.stdout as ReadableStream<Uint8Array>;
+    const reader = stdout.getReader();
+
+    // 1. Send initialize
+    stdin.write(JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
       method: 'initialize',
@@ -105,38 +226,55 @@ async function testStdioServer(config: McpServerStdio): Promise<TestMcpServerRes
         capabilities: {},
         clientInfo: { name: 'agemon-health-check', version: '1.0.0' },
       },
-    }) + '\n';
-
-    const stdin = proc.stdin as import('bun').FileSink;
-    stdin.write(initRequest);
+    }) + '\n');
     stdin.flush();
 
-    // Race read against a 5s timeout to guarantee cleanup
-    const stdout = proc.stdout as ReadableStream<Uint8Array>;
-    const reader = stdout.getReader();
-    const result = await Promise.race([
-      reader.read(),
-      new Promise<{ value: undefined; done: true }>((resolve) =>
-        setTimeout(() => resolve({ value: undefined, done: true }), 5000),
-      ),
-    ]);
-
-    const latencyMs = Date.now() - start;
-    const { value } = result;
-
-    if (value) {
-      const text = new TextDecoder().decode(value);
-      try {
-        const response = JSON.parse(text);
-        if (response.result?.protocolVersion) {
-          const serverName = response.result.serverInfo?.name ?? 'unknown';
-          return { status: 'connected', message: `MCP ${response.result.protocolVersion} — ${serverName}`, latencyMs };
-        }
-      } catch { /* not valid JSON, but process responded */ }
-      return { status: 'connected', message: 'Process started and responded', latencyMs };
+    const initResponse = await readJsonRpcMessage(reader, 5000);
+    if (!initResponse?.result || !(initResponse.result as Record<string, unknown>).protocolVersion) {
+      const latencyMs = Date.now() - start;
+      if (initResponse) {
+        return { status: 'connected', message: 'Process started and responded', latencyMs };
+      }
+      return { status: 'error', message: 'Process started but timed out waiting for response', latencyMs };
     }
 
-    return { status: 'error', message: 'Process started but timed out waiting for response', latencyMs };
+    const initResult = initResponse.result as Record<string, unknown>;
+    const serverName = (initResult.serverInfo as Record<string, unknown>)?.name ?? 'unknown';
+    const protocolVersion = initResult.protocolVersion as string;
+
+    // 2. Send initialized notification
+    stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+    stdin.flush();
+
+    // 3. Send tools/list
+    stdin.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/list',
+      params: {},
+    }) + '\n');
+    stdin.flush();
+
+    const toolsResponse = await readJsonRpcMessage(reader, 5000);
+    const latencyMs = Date.now() - start;
+
+    let tools: McpToolInfo[] | undefined;
+    if (toolsResponse?.result) {
+      const toolsList = (toolsResponse.result as Record<string, unknown>).tools;
+      if (Array.isArray(toolsList)) {
+        tools = toolsList.map((t: Record<string, unknown>) => ({
+          name: t.name as string,
+          ...(t.description ? { description: t.description as string } : {}),
+        }));
+      }
+    }
+
+    return {
+      status: 'connected',
+      message: `MCP ${protocolVersion} — ${serverName}`,
+      latencyMs,
+      tools,
+    };
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'Failed to spawn process', latencyMs: Date.now() - start };
   } finally {

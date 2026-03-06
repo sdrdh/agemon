@@ -210,10 +210,16 @@ export interface TestMcpServerBody {
   config: McpServerConfig;
 }
 
+export interface McpToolInfo {
+  name: string;
+  description?: string;
+}
+
 export interface TestMcpServerResult {
   status: 'connected' | 'error';
   message: string;
   latencyMs: number;
+  tools?: McpToolInfo[];
 }
 
 // ─── Shared Validation ──────────────────────────────────────────────────────
