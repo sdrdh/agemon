@@ -168,6 +168,12 @@ Run these after any backend route, DB, or schema changes.
 
 ---
 
+## Worktree-Aware Development
+
+Claude Code may be running inside a git worktree (e.g. `.claude/worktrees/<name>/`), not the main checkout. **Do not hardcode absolute paths.** Use relative paths from the current working directory. When running commands like `bun install`, `bun run`, or type-checking, run them relative to where you are. The `tsc` binary lives at `frontend/node_modules/.bin/tsc` (no root-level typescript install).
+
+---
+
 ## Non-Goals (v1)
 
 No multi-user, no cloud SaaS, no desktop native app, no CI/CD integration, no project management tool integrations.
