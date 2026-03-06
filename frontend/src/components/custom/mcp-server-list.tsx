@@ -40,6 +40,11 @@ function McpServerItem({
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate mt-0.5 font-mono">{detail}</p>
+        {isHttp && config.headers && config.headers.length > 0 && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {config.headers.length} header{config.headers.length !== 1 ? 's' : ''}
+          </p>
+        )}
       </div>
       {!readOnly && onDelete && (
         <button
@@ -67,6 +72,7 @@ function AddMcpServerForm({
   const [command, setCommand] = useState('');
   const [args, setArgs] = useState('');
   const [url, setUrl] = useState('');
+  const [headers, setHeaders] = useState<{ name: string; value: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -81,7 +87,7 @@ function AddMcpServerForm({
       const trimmedName = name.trim();
       const config: McpServerConfig = transport === 'stdio'
         ? { name: trimmedName, command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : undefined }
-        : { type: 'http', name: trimmedName, url: url.trim() };
+        : { type: 'http', name: trimmedName, url: url.trim(), ...(headers.some(h => h.name.trim()) ? { headers: headers.filter(h => h.name.trim()) } : {}) };
       await onAdd(trimmedName, config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add');
@@ -141,12 +147,57 @@ function AddMcpServerForm({
           />
         </div>
       ) : (
-        <Input
-          placeholder="URL (e.g. https://...)"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          className="text-sm font-mono"
-        />
+        <div className="space-y-2">
+          <Input
+            placeholder="URL (e.g. https://...)"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="text-sm font-mono"
+          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-muted-foreground">Headers</label>
+              <button
+                type="button"
+                onClick={() => setHeaders([...headers, { name: '', value: '' }])}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+              >
+                <Plus className="h-3 w-3" /> Add
+              </button>
+            </div>
+            {headers.map((header, i) => (
+              <div key={i} className="flex gap-1.5 items-center">
+                <Input
+                  placeholder="Header name"
+                  value={header.name}
+                  onChange={(e) => {
+                    const updated = [...headers];
+                    updated[i] = { ...updated[i], name: e.target.value };
+                    setHeaders(updated);
+                  }}
+                  className="text-sm font-mono flex-1"
+                />
+                <Input
+                  placeholder="Value"
+                  value={header.value}
+                  onChange={(e) => {
+                    const updated = [...headers];
+                    updated[i] = { ...updated[i], value: e.target.value };
+                    setHeaders(updated);
+                  }}
+                  className="text-sm font-mono flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => setHeaders(headers.filter((_, j) => j !== i))}
+                  className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
