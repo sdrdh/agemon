@@ -134,7 +134,8 @@ export type ServerEvent =
   | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
   | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] }
   | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] }
-  | { type: 'turn_cancelled'; sessionId: string; taskId: string };
+  | { type: 'turn_cancelled'; sessionId: string; taskId: string }
+  | { type: 'turn_completed'; sessionId: string; taskId: string };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
