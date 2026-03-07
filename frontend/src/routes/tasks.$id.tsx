@@ -51,38 +51,12 @@ export default function TaskDetailView() {
   const allPendingApprovals = useWsStore((s) => s.pendingApprovals);
   const mergePendingApprovals = useWsStore((s) => s.mergePendingApprovals);
 
-  const taskApprovalSessionId = useMemo(() => {
-    const sessionIds = new Set(sessions.map(s => s.id));
-    return allPendingApprovals.find(
-      a => a.status === 'pending' && a.taskId === taskId && sessionIds.has(a.sessionId)
-    )?.sessionId ?? null;
-  }, [allPendingApprovals, taskId, sessions]);
-
-  // ── Auto-select logic ───────────────────────────────────────────────
+  // ── Guard: clear selection if the session was removed ───────────────
   useEffect(() => {
-    if (sessions.length === 0) {
+    if (selectedSessionId && !sessions.some(s => s.id === selectedSessionId)) {
       setSelectedSessionId(null);
-      return;
     }
-    if (!selectedSessionId) {
-      // On desktop: prefer session with a pending approval, then fall back to last session
-      // On mobile: only auto-select if there's a pending approval (otherwise stay on session list)
-      if (taskApprovalSessionId) {
-        setSelectedSessionId(taskApprovalSessionId);
-        if (!isDesktop) window.history.pushState({ agemonSession: taskApprovalSessionId }, '');
-      } else if (isDesktop) {
-        setSelectedSessionId(sessions[sessions.length - 1].id);
-      }
-      return;
-    }
-    if (!sessions.find(s => s.id === selectedSessionId)) {
-      if (isDesktop) {
-        setSelectedSessionId(sessions[sessions.length - 1].id);
-      } else {
-        setSelectedSessionId(null);
-      }
-    }
-  }, [sessions, selectedSessionId, isDesktop, taskApprovalSessionId]);
+  }, [sessions, selectedSessionId]);
 
   const activeSession = useMemo(
     () => sessions.find(s => s.id === selectedSessionId) ?? null,

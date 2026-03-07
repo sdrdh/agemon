@@ -951,7 +951,7 @@ class ACPAgentManager {
 
 **Deliverables:**
 - [x] Persist pending approval state so the dialog re-renders when user returns to a session
-- [x] Auto-select the session with a pending approval when navigating back to a task
+- [x] ~Auto-select the session with a pending approval when navigating back to a task~ (removed — auto-select caused back gesture to immediately re-enter the session; session list icons are sufficient for discovery)
 - [x] Ensure approval cards never silently disappear (fallback UI if lookup fails)
 - [ ] Add a global indicator (e.g., badge on task card or nav) showing tasks with unresolved approvals
 
@@ -1058,15 +1058,17 @@ class ACPAgentManager {
 ### Task 4.23: Back Gesture Navigation from Session to Session List
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Swiping left (back gesture) on a session view navigates back to the session list page
-- [ ] Ensure browser/OS back gesture and in-app back button both work consistently
+- [x] Swiping left (back gesture) on a session view navigates back to the session list page
+- [x] Ensure browser/OS back gesture and in-app back button both work consistently
+- [x] Removed session auto-select entirely — was causing back gesture to immediately re-enter the session
 
 **Key Considerations:**
 - Mobile-first: back gesture is a primary navigation pattern on phones
-- May be a router history issue — verify TanStack Router pushes session list onto the history stack before session detail
+- Uses `history.pushState` on session select + `popstate` listener to handle back gesture
+- Auto-select was conflicting with back navigation — removed in favor of session list icons showing approval/unread status
 
 **Affected Areas:** frontend (routing, session views)
 
