@@ -733,7 +733,7 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
 }
 
 /**
- * Resume a stopped/crashed session by spawning a new process.
+ * Resume a stopped/crashed/interrupted session by spawning a new process.
  * Attempts session/load if the agent supports it, falls back to session/new.
  */
 export async function resumeSession(sessionId: string): Promise<AgentSession> {
@@ -741,8 +741,8 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
   if (!sessionRecord) {
     throw new Error(`Session ${sessionId} not found`);
   }
-  if (sessionRecord.state !== 'stopped' && sessionRecord.state !== 'crashed') {
-    throw new Error(`Session ${sessionId} is in state ${sessionRecord.state}, can only resume stopped or crashed sessions`);
+  if (sessionRecord.state !== 'stopped' && sessionRecord.state !== 'crashed' && sessionRecord.state !== 'interrupted') {
+    throw new Error(`Session ${sessionId} is in state ${sessionRecord.state}, can only resume stopped, crashed, or interrupted sessions`);
   }
 
   const taskId = sessionRecord.task_id;

@@ -1108,12 +1108,12 @@ class ACPAgentManager {
 ### Task 4.25: Allow Resuming Interrupted Sessions
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Add `'interrupted'` to the allowed states check in `resumeSession()` (`acp.ts:743`) so interrupted sessions can be resumed like stopped/crashed ones
-- [ ] Frontend: show Resume button on interrupted sessions (same as stopped/crashed)
-- [ ] Consider auto-resuming interrupted sessions on server startup (finish Task 4.2's unchecked deliverables)
+- [x] Add `'interrupted'` to the allowed states check in `resumeSession()` (`acp.ts:743`) so interrupted sessions can be resumed like stopped/crashed ones
+- [x] Frontend: show Resume button on interrupted sessions (same as stopped/crashed) — already handled by `isSessionTerminal()` including `'interrupted'`
+- [~] Auto-resuming interrupted sessions on server startup — deferred (user manually resumes via button)
 
 **Key Considerations:**
 - Currently `resumeSession()` only allows `stopped` and `crashed` states — `interrupted` is rejected with an error
