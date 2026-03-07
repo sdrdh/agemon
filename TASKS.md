@@ -1074,6 +1074,60 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.24: Archive Tasks and Sessions
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Add `archived` boolean column to `tasks` table (default false), with schema migration
+- [ ] Add `archived` boolean column to `agent_sessions` table (default false), with schema migration
+- [ ] Update `TaskStatus` type or add `archived` field to `Task` and `AgentSession` shared types
+- [ ] Backend: `PATCH /tasks/:id` accepts `archived: boolean` to archive/unarchive a task
+- [ ] Backend: `PATCH /sessions/:id/archive` endpoint to archive/unarchive a session
+- [ ] Backend: `GET /tasks` and `GET /tasks/by-project` exclude archived tasks by default; accept `?archived=true` query param to include them
+- [ ] Backend: `GET /sessions` excludes archived sessions by default; accept `?archived=true` to include them
+- [ ] Frontend kanban view filters out archived tasks (they don't appear in any column)
+- [ ] Frontend session list filters out archived sessions
+- [ ] Frontend: add archive/unarchive action to task detail view (swipe action or menu item)
+- [ ] Frontend: add archive/unarchive action to session list items
+- [ ] Frontend: optional "Show archived" toggle on kanban and session list views to reveal archived items (dimmed styling)
+
+**Key Considerations:**
+- Archive is a soft-hide, not a delete — archived tasks/sessions remain in DB and can be restored
+- Archiving a task should NOT auto-archive its sessions (user may want to keep session history visible)
+- Mobile-first: archive action should be accessible via swipe or context menu, not just a buried settings option
+- Done tasks accumulate over time and clutter the kanban "Done" column — archive is the escape valve
+
+**Affected Areas:** shared types, backend (db schema, routes), frontend (kanban, session list, task detail)
+
+**Dependencies:** None
+
+---
+
+### Task 4.25: Allow Resuming Interrupted Sessions
+
+**Priority:** P1
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Add `'interrupted'` to the allowed states check in `resumeSession()` (`acp.ts:743`) so interrupted sessions can be resumed like stopped/crashed ones
+- [ ] Frontend: show Resume button on interrupted sessions (same as stopped/crashed)
+- [ ] Consider auto-resuming interrupted sessions on server startup (finish Task 4.2's unchecked deliverables)
+
+**Key Considerations:**
+- Currently `resumeSession()` only allows `stopped` and `crashed` states — `interrupted` is rejected with an error
+- `interrupted` means the server went down while the session was active — semantically these are the most important sessions to resume
+- The resume path already handles `session/load` with `external_session_id` fallback to `session/new` — no protocol changes needed
+- Task 4.2 has unchecked deliverables for auto-resume on startup that depend on this fix
+- One-line backend fix + frontend state check update
+
+**Affected Areas:** backend (`lib/acp.ts`), frontend (session list resume button visibility)
+
+**Dependencies:** None
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
