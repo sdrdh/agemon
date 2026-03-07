@@ -69,6 +69,7 @@ export default function TaskDetailView() {
       // On mobile: only auto-select if there's a pending approval (otherwise stay on session list)
       if (taskApprovalSessionId) {
         setSelectedSessionId(taskApprovalSessionId);
+        if (!isDesktop) window.history.pushState({ agemonSession: taskApprovalSessionId }, '');
       } else if (isDesktop) {
         setSelectedSessionId(sessions[sessions.length - 1].id);
       }
@@ -262,11 +263,33 @@ export default function TaskDetailView() {
   const handleSelectSession = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
     clearUnread(sessionId);
-  }, [clearUnread]);
+    // Push history entry on mobile so back gesture returns to session list
+    if (!isDesktop) {
+      window.history.pushState({ agemonSession: sessionId }, '');
+    }
+  }, [clearUnread, isDesktop]);
 
   const handleBackToList = useCallback(() => {
-    setSelectedSessionId(null);
-  }, []);
+    if (!isDesktop) {
+      // Pop the history entry we pushed when selecting the session
+      window.history.back();
+    } else {
+      setSelectedSessionId(null);
+    }
+  }, [isDesktop]);
+
+  // Handle browser back gesture / back button on mobile
+  useEffect(() => {
+    if (isDesktop) return;
+    const onPopState = (e: PopStateEvent) => {
+      if (selectedSessionId) {
+        // User pressed back while viewing a session — return to session list
+        setSelectedSessionId(null);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isDesktop, selectedSessionId]);
 
   // ── Derived state ─────────────────────────────────────────────────────
   const isDone = task?.status === 'done';

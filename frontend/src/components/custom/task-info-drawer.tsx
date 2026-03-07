@@ -1,8 +1,14 @@
 import { useEffect } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { X, GitFork, Clock, Bot, Loader2, Plug } from 'lucide-react';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { McpServerList } from '@/components/custom/mcp-server-list';
 import type { Task } from '@agemon/shared';
+
+const remarkPlugins = [remarkGfm];
+const rehypePlugins = [rehypeHighlight];
 
 export function TaskInfoDrawer({
   task,
@@ -73,7 +79,9 @@ export function TaskInfoDrawer({
           {task.description && (
             <section>
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
-              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{task.description}</p>
+              <div className="text-sm text-foreground leading-relaxed prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
+                <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{task.description}</Markdown>
+              </div>
             </section>
           )}
 
