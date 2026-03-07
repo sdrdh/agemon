@@ -1041,11 +1041,11 @@ class ACPAgentManager {
 ### Task 4.22: Markdown Rendering for Task Descriptions
 
 **Priority:** P2
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Render task description as Markdown in the task info drawer
-- [ ] Support GFM (tables, checklists, strikethrough) and syntax-highlighted code blocks
+- [x] Render task description as Markdown in the task info drawer
+- [x] Support GFM (tables, checklists, strikethrough) and syntax-highlighted code blocks
 
 **Key Considerations:**
 - All dependencies already installed and used for chat bubbles (`react-markdown`, `remark-gfm`, `rehype-highlight`, `@tailwindcss/typography`)
