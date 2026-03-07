@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Archive } from 'lucide-react';
 import { sessionsListQuery, tasksListQuery } from '@/lib/query';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
@@ -89,7 +90,7 @@ function SessionRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left px-4 py-3 min-h-[52px] border-b last:border-b-0 hover:bg-accent/50 active:bg-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      className={`w-full text-left px-4 py-3 min-h-[52px] border-b last:border-b-0 hover:bg-accent/50 active:bg-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${session.archived ? 'opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -123,8 +124,9 @@ function SessionRow({
 
 export default function SessionsPage() {
   const navigate = useNavigate();
-  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery(sessionsListQuery());
-  const { data: tasks } = useQuery(tasksListQuery());
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery(sessionsListQuery(100, showArchived));
+  const { data: tasks } = useQuery(tasksListQuery(true));
 
   // Build task lookup by ID
   const taskMap = useMemo(() => {
@@ -186,6 +188,15 @@ export default function SessionsPage() {
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
             {sessions.length}
           </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setShowArchived(!showArchived)}
+            className={`inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-xs rounded-md transition-colors ${showArchived ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            {showArchived ? 'Hide archived' : 'Show archived'}
+          </button>
         </div>
       </div>
       {grouped.map((group) => (

@@ -1,5 +1,5 @@
 -- Agemon Database Schema
--- Version: 9
+-- Version: 10
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tasks (
                 CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
   agent       TEXT NOT NULL DEFAULT 'claude-code'
                 CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
+  archived    INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   state               TEXT NOT NULL DEFAULT 'starting'
                         CHECK (state IN ('starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted')),
   started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  archived            INTEGER NOT NULL DEFAULT 0,
   ended_at            TEXT,          -- NULL while running
   exit_code           INTEGER        -- NULL while running; 0=clean exit; non-zero=error
 );

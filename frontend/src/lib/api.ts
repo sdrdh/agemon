@@ -56,8 +56,8 @@ export async function validateKey(key: string): Promise<boolean> {
 
 export const api = {
   // Tasks
-  listTasks: () => request<Task[]>('/tasks'),
-  listTasksByProject: () => request<TasksByProject>('/tasks/by-project'),
+  listTasks: (includeArchived = false) => request<Task[]>(`/tasks${includeArchived ? '?archived=true' : ''}`),
+  listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
   getTask: (id: string) => request<Task>(`/tasks/${id}`),
   createTask: (body: CreateTaskBody) => request<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) }),
   updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
@@ -68,14 +68,18 @@ export const api = {
   // Sessions
   createSession: (taskId: string, body: CreateSessionBody = {}) =>
     request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
-  getTaskSessions: (taskId: string) => request<AgentSession[]>(`/tasks/${taskId}/sessions`),
+  getTaskSessions: (taskId: string, includeArchived = false) =>
+    request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
   getSessionChat: (sessionId: string, limit = 500) =>
     request<ChatMessage[]>(`/sessions/${sessionId}/chat?limit=${limit}`),
   resumeSession: (sessionId: string) =>
     request<AgentSession>(`/sessions/${sessionId}/resume`, { method: 'POST' }),
   stopSession: (sessionId: string) =>
     request<{ message: string; sessionId: string }>(`/sessions/${sessionId}/stop`, { method: 'POST' }),
-  listAllSessions: (limit = 100) => request<AgentSession[]>(`/sessions?limit=${limit}`),
+  listAllSessions: (limit = 100, includeArchived = false) =>
+    request<AgentSession[]>(`/sessions?limit=${limit}${includeArchived ? '&archived=true' : ''}`),
+  archiveSession: (sessionId: string, archived: boolean) =>
+    request<AgentSession>(`/sessions/${sessionId}/archive`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
 
   // Config options
   getSessionConfig: (sessionId: string) =>

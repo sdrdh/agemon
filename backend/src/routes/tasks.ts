@@ -43,7 +43,8 @@ export const tasksRoutes = new Hono();
 // ── Task CRUD ────────────────────────────────────────────────────────────────
 
 tasksRoutes.get('/tasks', (c) => {
-  return c.json(db.listTasks());
+  const includeArchived = c.req.query('archived') === 'true';
+  return c.json(db.listTasks(includeArchived));
 });
 
 tasksRoutes.post('/tasks', async (c) => {
@@ -81,7 +82,8 @@ tasksRoutes.post('/tasks', async (c) => {
 
 // IMPORTANT: /tasks/by-project MUST be before /tasks/:id to avoid Hono matching "by-project" as an :id
 tasksRoutes.get('/tasks/by-project', (c) => {
-  return c.json(db.listTasksByProject());
+  const includeArchived = c.req.query('archived') === 'true';
+  return c.json(db.listTasksByProject(includeArchived));
 });
 
 tasksRoutes.get('/tasks/:id', (c) => {
@@ -99,7 +101,7 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
     sendError(400, 'Request body must be valid JSON');
   }
 
-  const { title, description, agent, repos, status } = body;
+  const { title, description, agent, repos, status, archived } = body;
   validateTaskFields({ title, description, agent });
 
   if (status !== undefined && !VALID_TASK_STATUSES.has(status)) {
@@ -108,6 +110,10 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
 
   if (repos !== undefined) {
     validateRepoUrls(repos);
+  }
+
+  if (archived !== undefined && typeof archived !== 'boolean') {
+    sendError(400, 'archived must be a boolean');
   }
 
   // Handle "mark done" — clean up worktrees
@@ -123,7 +129,7 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
     });
   }
 
-  const updated = db.updateTask(task.id, { title, description, agent, repos, status });
+  const updated = db.updateTask(task.id, { title, description, agent, repos, status, archived });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
   broadcast({ type: 'task_updated', task: updated });
   return c.json(updated);
@@ -176,8 +182,8 @@ tasksRoutes.post('/tasks/:id/sessions', async (c) => {
     sendError(400, `agentType must be one of: ${[...AGENT_TYPES].join(', ')}`);
   }
 
-  // Create worktrees if this is the first session for the task
-  const existingSessions = db.listSessions(task.id);
+  // Create worktrees if this is the first session for the task (include archived)
+  const existingSessions = db.listSessions(task.id, true);
   if (existingSessions.length === 0) {
     for (const repo of task.repos) {
       try {
@@ -202,7 +208,8 @@ tasksRoutes.post('/tasks/:id/sessions', async (c) => {
  */
 tasksRoutes.get('/tasks/:id/sessions', (c) => {
   const task = requireTask(c.req.param('id'));
-  return c.json(db.listSessions(task.id));
+  const includeArchived = c.req.query('archived') === 'true';
+  return c.json(db.listSessions(task.id, includeArchived));
 });
 
 /**
@@ -291,6 +298,31 @@ tasksRoutes.get('/sessions/:id/config', (c) => {
   return c.json(configOptions);
 });
 
+/**
+ * PATCH /sessions/:id/archive — archive or unarchive a session.
+ */
+tasksRoutes.patch('/sessions/:id/archive', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) return sendError(404, 'Session not found');
+
+  let body: { archived: boolean };
+  try {
+    body = await c.req.json();
+  } catch {
+    return sendError(400, 'Request body must be valid JSON');
+  }
+
+  if (typeof body.archived !== 'boolean') {
+    return sendError(400, 'archived must be a boolean');
+  }
+
+  const updated = db.updateSessionArchived(sessionId, body.archived);
+  if (!updated) return sendError(404, 'Session not found');
+  broadcast({ type: 'task_updated', task: db.getTask(updated.task_id)! });
+  return c.json(updated);
+});
+
 // ── Legacy endpoints (backward compat) ──────────────────────────────────────
 
 tasksRoutes.post('/tasks/:id/stop', (c) => {
@@ -320,7 +352,8 @@ tasksRoutes.get('/tasks/:id/chat', (c) => {
 tasksRoutes.get('/sessions', (c) => {
   const limitParam = parseInt(c.req.query('limit') ?? '100', 10);
   const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 1000 ? 100 : limitParam;
-  const sessions = db.listAllSessions(limit);
+  const includeArchived = c.req.query('archived') === 'true';
+  const sessions = db.listAllSessions(limit, includeArchived);
   return c.json(sessions);
 });
 

@@ -14,23 +14,23 @@ export const queryClient = new QueryClient({
 
 export const taskKeys = {
   all: ['tasks'] as const,
-  byProject: () => [...taskKeys.all, 'by-project'] as const,
-  lists: () => [...taskKeys.all, 'list'] as const,
+  byProject: (includeArchived?: boolean) => [...taskKeys.all, 'by-project', { includeArchived }] as const,
+  lists: (includeArchived?: boolean) => [...taskKeys.all, 'list', { includeArchived }] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
   events: (id: string) => [...taskKeys.all, 'events', id] as const,
 };
 
-export function tasksListQuery() {
+export function tasksListQuery(includeArchived = false) {
   return {
-    queryKey: taskKeys.lists(),
-    queryFn: (): Promise<Task[]> => api.listTasks(),
+    queryKey: taskKeys.lists(includeArchived),
+    queryFn: (): Promise<Task[]> => api.listTasks(includeArchived),
   };
 }
 
-export function tasksByProjectQuery() {
+export function tasksByProjectQuery(includeArchived = false) {
   return {
-    queryKey: taskKeys.byProject(),
-    queryFn: (): Promise<TasksByProject> => api.listTasksByProject(),
+    queryKey: taskKeys.byProject(includeArchived),
+    queryFn: (): Promise<TasksByProject> => api.listTasksByProject(includeArchived),
   };
 }
 
@@ -52,22 +52,22 @@ export function taskEventsQuery(id: string, limit = 500) {
 
 export const sessionKeys = {
   all: ['sessions'] as const,
-  list: () => [...sessionKeys.all, 'list'] as const,
-  forTask: (taskId: string) => [...sessionKeys.all, 'task', taskId] as const,
+  list: (includeArchived?: boolean) => [...sessionKeys.all, 'list', { includeArchived }] as const,
+  forTask: (taskId: string, includeArchived?: boolean) => [...sessionKeys.all, 'task', taskId, { includeArchived }] as const,
   chat: (sessionId: string) => [...sessionKeys.all, 'chat', sessionId] as const,
 };
 
-export function sessionsListQuery(limit = 100) {
+export function sessionsListQuery(limit = 100, includeArchived = false) {
   return {
-    queryKey: sessionKeys.list(),
-    queryFn: (): Promise<AgentSession[]> => api.listAllSessions(limit),
+    queryKey: sessionKeys.list(includeArchived),
+    queryFn: (): Promise<AgentSession[]> => api.listAllSessions(limit, includeArchived),
   };
 }
 
-export function taskSessionsQuery(taskId: string) {
+export function taskSessionsQuery(taskId: string, includeArchived = false) {
   return {
-    queryKey: sessionKeys.forTask(taskId),
-    queryFn: (): Promise<AgentSession[]> => api.getTaskSessions(taskId),
+    queryKey: sessionKeys.forTask(taskId, includeArchived),
+    queryFn: (): Promise<AgentSession[]> => api.getTaskSessions(taskId, includeArchived),
     enabled: !!taskId,
   };
 }
