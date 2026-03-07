@@ -253,6 +253,11 @@ export default function TaskDetailView() {
     setTurnInFlight(true);
   }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage]);
 
+  const handleCancelTurn = useCallback(() => {
+    if (!selectedSessionId || !turnInFlight) return;
+    sendClientEvent({ type: 'cancel_turn', sessionId: selectedSessionId });
+  }, [selectedSessionId, turnInFlight]);
+
   const handleApprovalDecision = useCallback((approvalId: string, decision: ApprovalDecision) => {
     sendClientEvent({ type: 'approval_response', approvalId, decision });
   }, []);
@@ -356,6 +361,7 @@ export default function TaskDetailView() {
             inputText={inputText}
             setInputText={setInputText}
             handleSend={handleSend}
+            onCancelTurn={handleCancelTurn}
             turnInFlight={turnInFlight}
             isDone={isDone}
             actionLoading={actionLoading}

@@ -164,6 +164,19 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAvailableCommands(event.sessionId, event.commands);
           break;
         }
+        case 'turn_cancelled': {
+          store().appendChatMessage(event.sessionId, {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: 'Turn cancelled',
+            eventType: 'status',
+            timestamp: new Date().toISOString(),
+          });
+          store().setAgentActivity(event.sessionId, null);
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          break;
+        }
       }
     });
 

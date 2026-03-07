@@ -133,14 +133,16 @@ export type ServerEvent =
   | { type: 'approval_requested'; approval: PendingApproval }
   | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
   | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] }
-  | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] };
+  | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] }
+  | { type: 'turn_cancelled'; sessionId: string; taskId: string };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
   | { type: 'terminal_input'; sessionId: string; data: string }
   | { type: 'send_message'; sessionId: string; content: string }
   | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision }
-  | { type: 'set_config_option'; sessionId: string; configId: string; value: string };
+  | { type: 'set_config_option'; sessionId: string; configId: string; value: string }
+  | { type: 'cancel_turn'; sessionId: string };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 

@@ -82,7 +82,7 @@ app.get('/api/health', (c) =>
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response', 'set_config_option']);
+const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response', 'set_config_option', 'cancel_turn']);
 const wsClients = new Set<WSContext>();
 
 app.use('/ws', async (c, next) => {
@@ -182,6 +182,16 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
       console.info(`[ws] set_config_option: ${ev.configId}=${ev.value} on session=${ev.sessionId}`);
     } catch (err) {
       console.error(`[ws] set_config_option error for session=${ev.sessionId}:`, (err as Error).message);
+    }
+  }
+
+  else if (ev.type === 'cancel_turn') {
+    const { cancelTurn } = await import('./lib/acp.ts');
+    try {
+      cancelTurn(ev.sessionId);
+      console.info(`[ws] cancel_turn: session=${ev.sessionId}`);
+    } catch (err) {
+      console.error(`[ws] cancel_turn error for session=${ev.sessionId}:`, (err as Error).message);
     }
   }
 });
