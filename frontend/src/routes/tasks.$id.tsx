@@ -270,11 +270,11 @@ export default function TaskDetailView() {
   }, [clearUnread, isDesktop]);
 
   const handleBackToList = useCallback(() => {
+    // Clear selection immediately so UI updates without waiting for popstate
+    setSelectedSessionId(null);
     if (!isDesktop) {
-      // Pop the history entry we pushed when selecting the session
+      // Also pop the history entry we pushed when selecting the session
       window.history.back();
-    } else {
-      setSelectedSessionId(null);
     }
   }, [isDesktop]);
 
