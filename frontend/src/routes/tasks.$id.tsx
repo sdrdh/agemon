@@ -53,10 +53,7 @@ export default function TaskDetailView() {
 
   // ── Guard: clear selection if the session was removed ───────────────
   useEffect(() => {
-    if (selectedSessionId && sessions.length > 0 && !sessions.find(s => s.id === selectedSessionId)) {
-      setSelectedSessionId(null);
-    }
-    if (sessions.length === 0 && selectedSessionId) {
+    if (selectedSessionId && !sessions.some(s => s.id === selectedSessionId)) {
       setSelectedSessionId(null);
     }
   }, [sessions, selectedSessionId]);
