@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { ArrowLeft, Send, Square, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
+import { ArrowLeft, Send, Ban, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ActivityGroup } from '@/components/custom/activity-group';
@@ -351,7 +351,7 @@ export function SessionChatPanel({
                     className="min-h-[44px] min-w-[44px]"
                     aria-label="Cancel turn"
                   >
-                    <Square className="h-4 w-4" />
+                    <Ban className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button

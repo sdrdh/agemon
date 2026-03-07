@@ -24,6 +24,8 @@ interface WsState {
   configOptions: Record<string, SessionConfigOption[]>;
   /** Available slash commands advertised by agents, keyed by sessionId */
   availableCommands: Record<string, AgentCommand[]>;
+  /** Sessions with a turn currently in flight */
+  turnsInFlight: Record<string, boolean>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -38,6 +40,7 @@ interface WsState {
   clearUnread: (sessionId: string) => void;
   setConfigOptions: (sessionId: string, options: SessionConfigOption[]) => void;
   setAvailableCommands: (sessionId: string, commands: AgentCommand[]) => void;
+  setTurnInFlight: (sessionId: string, inFlight: boolean) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -52,6 +55,7 @@ export const useWsStore = create<WsState>((set) => ({
   unreadSessions: {},
   configOptions: {},
   availableCommands: {},
+  turnsInFlight: {},
 
   setConnected: (connected) => set({ connected }),
 
@@ -149,5 +153,10 @@ export const useWsStore = create<WsState>((set) => ({
   setAvailableCommands: (sessionId, commands) =>
     set((state) => ({
       availableCommands: { ...state.availableCommands, [sessionId]: commands },
+    })),
+
+  setTurnInFlight: (sessionId, inFlight) =>
+    set((state) => ({
+      turnsInFlight: { ...state.turnsInFlight, [sessionId]: inFlight },
     })),
 }));

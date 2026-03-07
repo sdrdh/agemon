@@ -727,6 +727,7 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   } finally {
     flushCurrentMessage(sessionId, taskId);
     entry.turnInFlight = false;
+    broadcast({ type: 'turn_completed', sessionId, taskId });
     deriveTaskStatus(taskId);
   }
 }

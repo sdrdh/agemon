@@ -26,7 +26,6 @@ export default function TaskDetailView() {
   const qc = useQueryClient();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
-  const [turnInFlight, setTurnInFlight] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const isDesktop = useIsDesktop();
@@ -112,6 +111,10 @@ export default function TaskDetailView() {
   );
   const unreadSessions = useWsStore((s) => s.unreadSessions);
   const clearUnread = useWsStore((s) => s.clearUnread);
+  const turnInFlight = useWsStore((s) =>
+    selectedSessionId ? (s.turnsInFlight[selectedSessionId] ?? false) : false
+  );
+  const setTurnInFlight = useWsStore((s) => s.setTurnInFlight);
 
   const pendingInputs = useMemo(
     () => selectedSessionId
@@ -158,19 +161,13 @@ export default function TaskDetailView() {
     }
   }, [sessionChatHistory, selectedSessionId, setChatMessages]);
 
-  // ── Clear turn-in-flight when agent responds ──────────────────────────
-  useEffect(() => {
-    if (!turnInFlight) return;
-    const last = chatMessages[chatMessages.length - 1];
-    if (last && last.role !== 'user') {
-      setTurnInFlight(false);
-    }
-  }, [chatMessages, turnInFlight]);
-
+  // ── Clear turn-in-flight when session terminates ────────────────────
   const sessionState = activeSession?.state;
   useEffect(() => {
-    if (sessionState && isSessionTerminal(sessionState)) setTurnInFlight(false);
-  }, [sessionState]);
+    if (selectedSessionId && sessionState && isSessionTerminal(sessionState)) {
+      setTurnInFlight(selectedSessionId, false);
+    }
+  }, [selectedSessionId, sessionState, setTurnInFlight]);
 
   // ── Grouped items ─────────────────────────────────────────────────────
   const groupedItems = useMemo(() => groupMessages(chatMessages), [chatMessages]);
@@ -250,8 +247,8 @@ export default function TaskDetailView() {
     };
     appendChatMessage(selectedSessionId, optimisticMsg);
     setInputText('');
-    setTurnInFlight(true);
-  }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage]);
+    setTurnInFlight(selectedSessionId, true);
+  }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage, setTurnInFlight]);
 
   const handleCancelTurn = useCallback(() => {
     if (!selectedSessionId || !turnInFlight) return;
