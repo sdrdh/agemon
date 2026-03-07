@@ -919,7 +919,10 @@ export function cancelTurn(sessionId: string): void {
     }
   }
 
-  // 2. Send ACP session/cancel notification (fire-and-forget, no response expected)
+  // 2. Send ACP session/cancel notification (fire-and-forget, no response expected).
+  //    Note: turnInFlight is NOT reset here — the in-flight sendPromptTurn() call
+  //    will receive stopReason: "cancelled" and its finally block handles cleanup
+  //    (flushCurrentMessage, turnInFlight = false, deriveTaskStatus).
   entry.transport.notify('session/cancel', { sessionId: entry.acpSessionId });
   console.info(`[acp] session ${sessionId} turn cancel sent`);
 }

@@ -165,6 +165,8 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'turn_cancelled': {
+          // Appending a system message also triggers the turnInFlight reset
+          // effect in tasks.$id.tsx (clears when last message role !== 'user')
           store().appendChatMessage(event.sessionId, {
             id: crypto.randomUUID(),
             role: 'system',
