@@ -711,13 +711,10 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       prompt: [{ type: 'text', text: content }],
     });
 
-    // Check for cancelled stop reason
+    // Check for cancelled stop reason — cleanup handled by finally block
     const resultObj = result as Record<string, unknown> | undefined;
     if (resultObj?.stopReason === 'cancelled') {
       console.info(`[acp] session ${sessionId} prompt turn cancelled`);
-      flushCurrentMessage(sessionId, taskId);
-      entry.turnInFlight = false;
-      deriveTaskStatus(taskId);
       broadcast({ type: 'turn_cancelled', sessionId, taskId });
       return;
     }
@@ -911,15 +908,14 @@ export function cancelTurn(sessionId: string): void {
 
   // 1. Auto-deny all pending approvals for this session
   //    (resolves the blocked Promises so the transport isn't stuck)
-  for (const [approvalId, resolver] of pendingApprovalResolvers) {
-    if (resolver.sessionId === sessionId) {
-      const approval = db.getPendingApproval(approvalId);
-      if (approval && approval.status === 'pending') {
-        db.resolvePendingApproval(approvalId, 'deny');
-        resolver.resolve({ outcome: { outcome: 'cancelled' } });
-        pendingApprovalResolvers.delete(approvalId);
-        broadcast({ type: 'approval_resolved', approvalId, decision: 'deny' });
-      }
+  const pendingApprovals = db.listPendingApprovalsBySession(sessionId);
+  for (const approval of pendingApprovals) {
+    const resolver = pendingApprovalResolvers.get(approval.id);
+    if (resolver) {
+      db.resolvePendingApproval(approval.id, 'deny');
+      resolver.resolve({ outcome: { outcome: 'cancelled' } });
+      pendingApprovalResolvers.delete(approval.id);
+      broadcast({ type: 'approval_resolved', approvalId: approval.id, decision: 'deny' });
     }
   }
 
