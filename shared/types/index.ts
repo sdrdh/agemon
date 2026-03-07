@@ -21,6 +21,7 @@ export interface Task {
   status: TaskStatus;
   repos: Repo[];
   agent: AgentType;
+  archived: boolean;
   created_at: string; // ISO 8601
 }
 
@@ -32,6 +33,7 @@ export interface AgentSession {
   external_session_id: string | null; // Provider session ID for --resume
   pid: number | null;                 // OS process ID; null if not running
   state: AgentSessionState;
+  archived: boolean;
   started_at: string;   // ISO 8601
   ended_at: string | null;
   exit_code: number | null;
@@ -160,6 +162,7 @@ export interface UpdateTaskBody {
   status?: TaskStatus;
   repos?: string[];  // SSH URLs; replaces full set
   agent?: AgentType;
+  archived?: boolean;
 }
 
 export interface CreateSessionBody {

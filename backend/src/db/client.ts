@@ -24,7 +24,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 /**
  * Extract a display name from a repo URL.
@@ -227,6 +227,23 @@ export function runMigrations() {
       // ── v9 migration: mcp_servers table ──
       // (Table created by schema.sql via CREATE TABLE IF NOT EXISTS — no extra DDL needed here)
 
+      // ── v10 migration: add archived column to tasks and agent_sessions ──
+      if (current < 10) {
+        const taskCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('tasks')"
+        ).all();
+        if (!taskCols.some(c => c.name === 'archived')) {
+          db.run('ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0');
+        }
+
+        const sessionCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        if (!sessionCols.some(c => c.name === 'archived')) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0');
+        }
+      }
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
@@ -265,6 +282,7 @@ interface RawTask {
   description: string | null;
   status: string;
   agent: string;
+  archived: number;
   created_at: string;
 }
 
@@ -279,7 +297,7 @@ function parseTask(row: RawTask): Omit<Task, 'repos'> {
   const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
     ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
-  return { id: row.id, title: row.title, description: row.description, status, agent, created_at: row.created_at };
+  return { id: row.id, title: row.title, description: row.description, status, agent, archived: !!row.archived, created_at: row.created_at };
 }
 
 const SESSION_STATES = new Set<AgentSessionState>([
@@ -293,7 +311,8 @@ function parseSession(row: AgentSession): AgentSession {
   if (!AGENT_TYPES_SET.has(row.agent_type)) {
     throw new Error(`[db] unexpected agent type: ${row.agent_type}`);
   }
-  return row;
+  // SQLite returns 0/1 for boolean columns
+  return { ...row, archived: !!(row as any).archived };
 }
 
 // ── Shared MCP server helpers ────────────────────────────────────────────────
@@ -420,9 +439,10 @@ export const db = {
 
   // ── Tasks ──
 
-  listTasks(): Task[] {
+  listTasks(includeArchived = false): Task[] {
     const database = getDb();
-    const rows = database.query<RawTask, []>('SELECT * FROM tasks ORDER BY created_at DESC').all();
+    const where = includeArchived ? '' : 'WHERE archived = 0';
+    const rows = database.query<RawTask, []>(`SELECT * FROM tasks ${where} ORDER BY created_at DESC`).all();
     const repoMap = this._buildRepoMap(rows.map(r => r.id));
     return rows.map(row => ({
       ...parseTask(row),
@@ -452,7 +472,7 @@ export const db = {
     return { ...parseTask(row), repos };
   },
 
-  updateTask(id: string, fields: { title?: string; description?: string | null; status?: TaskStatus; agent?: AgentType; repos?: string[] }): Task | null {
+  updateTask(id: string, fields: { title?: string; description?: string | null; status?: TaskStatus; agent?: AgentType; repos?: string[]; archived?: boolean }): Task | null {
     const sets: string[] = [];
     const values: (string | number | null)[] = [];
 
@@ -460,6 +480,7 @@ export const db = {
     if (fields.description !== undefined) { sets.push('description = ?'); values.push(fields.description ?? null); }
     if (fields.status !== undefined) { sets.push('status = ?'); values.push(fields.status); }
     if (fields.agent !== undefined) { sets.push('agent = ?'); values.push(fields.agent); }
+    if (fields.archived !== undefined) { sets.push('archived = ?'); values.push(fields.archived ? 1 : 0); }
 
     const database = getDb();
 
@@ -484,8 +505,9 @@ export const db = {
     return result.changes > 0;
   },
 
-  listTasksByProject(): TasksByProject {
+  listTasksByProject(includeArchived = false): TasksByProject {
     const database = getDb();
+    const archiveFilter = includeArchived ? '' : 'AND t.archived = 0';
 
     interface TaskRepoRow extends RawTask {
       repo_url: string;
@@ -496,12 +518,14 @@ export const db = {
       FROM tasks t
       JOIN task_repos tr ON tr.task_id = t.id
       JOIN repos r ON r.id = tr.repo_id
+      WHERE 1=1 ${archiveFilter}
       ORDER BY r.name, t.created_at DESC
     `).all();
 
     const ungroupedRows = database.query<RawTask, []>(`
       SELECT t.* FROM tasks t
       WHERE t.id NOT IN (SELECT task_id FROM task_repos)
+      ${archiveFilter}
       ORDER BY t.created_at DESC
     `).all();
 
@@ -545,10 +569,11 @@ export const db = {
     return row ? parseSession(row) : null;
   },
 
-  listSessions(taskId: string): AgentSession[] {
+  listSessions(taskId: string, includeArchived = false): AgentSession[] {
     const db = getDb();
+    const archiveFilter = includeArchived ? '' : 'AND archived = 0';
     return db.query<AgentSession, [string]>(
-      'SELECT * FROM agent_sessions WHERE task_id = ? ORDER BY started_at ASC'
+      `SELECT * FROM agent_sessions WHERE task_id = ? ${archiveFilter} ORDER BY started_at ASC`
     ).all(taskId).map(parseSession);
   },
 
@@ -610,6 +635,13 @@ export const db = {
   updateSessionConfigOptions(id: string, options: SessionConfigOption[]): void {
     const db = getDb();
     db.run('UPDATE agent_sessions SET config_options = ? WHERE id = ?', [JSON.stringify(options), id]);
+  },
+
+  updateSessionArchived(id: string, archived: boolean): AgentSession | null {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET archived = ? WHERE id = ?', [archived ? 1 : 0, id]);
+    const row = db.query<AgentSession, [string]>('SELECT * FROM agent_sessions WHERE id = ?').get(id);
+    return row ? parseSession(row) : null;
   },
 
   getSessionConfigOptions(id: string): SessionConfigOption[] | null {
@@ -777,10 +809,11 @@ export const db = {
     }));
   },
 
-  listAllSessions(limit: number): AgentSession[] {
+  listAllSessions(limit: number, includeArchived = false): AgentSession[] {
     const database = getDb();
+    const where = includeArchived ? '' : 'WHERE archived = 0';
     return database.query<AgentSession, [number]>(
-      'SELECT * FROM agent_sessions ORDER BY started_at DESC LIMIT ?'
+      `SELECT * FROM agent_sessions ${where} ORDER BY started_at DESC LIMIT ?`
     ).all(limit).map(parseSession);
   },
 

@@ -1,4 +1,4 @@
-import { Shield } from 'lucide-react';
+import { Shield, Archive, ArchiveRestore } from 'lucide-react';
 import type { Task } from '@agemon/shared';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { StatusBadge } from './status-badge';
@@ -7,14 +7,15 @@ interface TaskCardProps {
   task: Task;
   onClick: () => void;
   pendingApprovalCount?: number;
+  onArchive?: (archived: boolean) => void;
 }
 
-export function TaskCard({ task, onClick, pendingApprovalCount = 0 }: TaskCardProps) {
+export function TaskCard({ task, onClick, pendingApprovalCount = 0, onArchive }: TaskCardProps) {
   return (
     <Card
       role="button"
       tabIndex={0}
-      className="cursor-pointer active:bg-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={`cursor-pointer active:bg-accent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${task.archived ? 'opacity-50' : ''}`}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
@@ -27,6 +28,16 @@ export function TaskCard({ task, onClick, pendingApprovalCount = 0 }: TaskCardPr
                 <Shield className="h-3 w-3" />
                 {pendingApprovalCount}
               </span>
+            )}
+            {onArchive && (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-muted text-muted-foreground"
+                title={task.archived ? 'Unarchive' : 'Archive'}
+                onClick={(e) => { e.stopPropagation(); onArchive(!task.archived); }}
+              >
+                {task.archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+              </button>
             )}
             <StatusBadge status={task.status} />
           </div>

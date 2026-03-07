@@ -162,6 +162,69 @@ echo "=== Events ==="
 check "list events" 200 GET "/api/tasks/$TASK_B/events"
 
 echo ""
+echo "=== Archive Tasks ==="
+# Create a task to test archiving
+check "create archive test task" 201 POST /api/tasks \
+  '{"title":"Archive me"}'
+TASK_ARC=$(jq_field "['id']")
+
+# Verify archived defaults to false
+ARC_VAL=$(jq_field "['archived']")
+if [[ "$ARC_VAL" == "False" ]]; then
+  echo "  PASS  new task archived=false"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL  expected archived=False, got $ARC_VAL"
+  FAIL=$((FAIL+1))
+fi
+
+# Archive the task
+check "archive task" 200 PATCH "/api/tasks/$TASK_ARC" \
+  '{"archived":true}'
+ARC_VAL=$(jq_field "['archived']")
+if [[ "$ARC_VAL" == "True" ]]; then
+  echo "  PASS  task archived=true after PATCH"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL  expected archived=True, got $ARC_VAL"
+  FAIL=$((FAIL+1))
+fi
+
+# Default list excludes archived
+check "list tasks (default)" 200 GET /api/tasks
+TASK_COUNT=$(body | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+# Should still have TASK_B (not archived) but not TASK_ARC
+if echo "$TASK_COUNT" | grep -qE '^[0-9]+$'; then
+  # Check that TASK_ARC is NOT in the list
+  ARC_IN_LIST=$(body | python3 -c "import sys,json; ids=[t['id'] for t in json.load(sys.stdin)]; print('$TASK_ARC' in ids)")
+  if [[ "$ARC_IN_LIST" == "False" ]]; then
+    echo "  PASS  archived task excluded from default list"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL  archived task should be excluded from default list"
+    FAIL=$((FAIL+1))
+  fi
+fi
+
+# ?archived=true includes it
+check "list tasks (archived=true)" 200 GET "/api/tasks?archived=true"
+ARC_IN_LIST=$(body | python3 -c "import sys,json; ids=[t['id'] for t in json.load(sys.stdin)]; print('$TASK_ARC' in ids)")
+if [[ "$ARC_IN_LIST" == "True" ]]; then
+  echo "  PASS  archived task included with ?archived=true"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL  archived task should be in ?archived=true list"
+  FAIL=$((FAIL+1))
+fi
+
+# Unarchive
+check "unarchive task" 200 PATCH "/api/tasks/$TASK_ARC" \
+  '{"archived":false}'
+
+# Clean up
+curl -s -o /dev/null -X DELETE -H "$AUTH" "$BASE/api/tasks/$TASK_ARC"
+
+echo ""
 echo "=== Cleanup ==="
 check "delete task B" 204 DELETE "/api/tasks/$TASK_B"
 

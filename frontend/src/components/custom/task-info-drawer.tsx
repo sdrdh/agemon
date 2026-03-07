@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { X, GitFork, Clock, Bot, Loader2, Plug } from 'lucide-react';
+import { X, GitFork, Clock, Bot, Loader2, Plug, Archive, ArchiveRestore } from 'lucide-react';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { McpServerList } from '@/components/custom/mcp-server-list';
 import type { Task } from '@agemon/shared';
@@ -15,11 +15,13 @@ export function TaskInfoDrawer({
   sessionCount,
   open,
   onClose,
+  onArchive,
 }: {
   task: Task;
   sessionCount: number;
   open: boolean;
   onClose: () => void;
+  onArchive?: (archived: boolean) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -135,6 +137,19 @@ export function TaskInfoDrawer({
             </h3>
             <McpServerList scope="task" taskId={task.id} />
           </section>
+
+          {onArchive && (
+            <section className="pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => onArchive(!task.archived)}
+                className="flex items-center gap-2 w-full min-h-[44px] px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted transition-colors"
+              >
+                {task.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                {task.archived ? 'Unarchive task' : 'Archive task'}
+              </button>
+            </section>
+          )}
         </div>
       </div>
     </>

@@ -192,11 +192,35 @@ export default function TaskDetailView() {
     mutationFn: () => api.updateTask(taskId, { status: 'done' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.byProject() });
+      qc.invalidateQueries({ queryKey: taskKeys.all });
       showToast({ title: 'Task marked as done' });
     },
     onError: (err: Error) => {
       showToast({ title: 'Failed to mark task done', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const archiveTaskMutation = useMutation({
+    mutationFn: (archived: boolean) => api.updateTask(taskId, { archived }),
+    onSuccess: (_, archived) => {
+      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
+      qc.invalidateQueries({ queryKey: taskKeys.all });
+      showToast({ title: archived ? 'Task archived' : 'Task unarchived' });
+    },
+    onError: (err: Error) => {
+      showToast({ title: 'Failed to update archive status', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const archiveSessionMutation = useMutation({
+    mutationFn: ({ sessionId, archived }: { sessionId: string; archived: boolean }) =>
+      api.archiveSession(sessionId, archived),
+    onSuccess: (_, { archived }) => {
+      qc.invalidateQueries({ queryKey: sessionKeys.all });
+      showToast({ title: archived ? 'Session archived' : 'Session unarchived' });
+    },
+    onError: (err: Error) => {
+      showToast({ title: 'Failed to update session', description: err.message, variant: 'destructive' });
     },
   });
 
@@ -333,6 +357,7 @@ export default function TaskDetailView() {
             onStop={(sid) => stopMutation.mutate(sid)}
             onResume={(sid) => resumeMutation.mutate(sid)}
             onMarkDone={() => markDoneMutation.mutate()}
+            onArchiveSession={(sid, archived) => archiveSessionMutation.mutate({ sessionId: sid, archived })}
             newDisabled={isDone || actionLoading}
             isDone={isDone}
             hasActiveSessions={hasActiveSessions}
@@ -379,6 +404,7 @@ export default function TaskDetailView() {
         sessionCount={sessions.length}
         open={infoOpen}
         onClose={() => setInfoOpen(false)}
+        onArchive={(archived) => archiveTaskMutation.mutate(archived)}
       />
     </div>
   );

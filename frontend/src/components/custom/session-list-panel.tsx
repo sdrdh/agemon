@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, RotateCcw, CheckCircle2, Archive } from 'lucide-react';
+import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType, AgentSession } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ export function SessionListPanel({
   onStop,
   onResume,
   onMarkDone,
+  onArchiveSession,
   newDisabled,
   isDone,
   hasActiveSessions,
@@ -50,6 +51,7 @@ export function SessionListPanel({
   onStop: (id: string) => void;
   onResume: (id: string) => void;
   onMarkDone: () => void;
+  onArchiveSession?: (id: string, archived: boolean) => void;
   newDisabled: boolean;
   isDone: boolean;
   hasActiveSessions: boolean;
@@ -137,14 +139,14 @@ export function SessionListPanel({
                     size="sm"
                     variant="ghost"
                     className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                    aria-label={`Archive ${label}`}
+                    aria-label={`Stop ${label}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onStop(session.id);
                     }}
                     disabled={actionLoading}
                   >
-                    <Archive className="h-3.5 w-3.5" />
+                    <Square className="h-3.5 w-3.5" />
                   </Button>
                 )}
                 {canResume && (
@@ -160,6 +162,21 @@ export function SessionListPanel({
                     disabled={actionLoading}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {isSessionTerminal(session.state) && onArchiveSession && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={`h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50 ${session.archived ? 'opacity-50' : ''}`}
+                    aria-label={session.archived ? `Unarchive ${label}` : `Archive ${label}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onArchiveSession(session.id, !session.archived);
+                    }}
+                    disabled={actionLoading}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </button>

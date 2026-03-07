@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { tasksListQuery } from '@/lib/query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, ChevronRight, Archive } from 'lucide-react';
+import { tasksListQuery, taskKeys } from '@/lib/query';
 import { TaskCard } from '@/components/custom/task-card';
 import { friendlyError } from '@/lib/errors';
 import { useApprovalCountByTask } from '@/hooks/use-approval-counts';
+import { api } from '@/lib/api';
 import type { Task, TaskStatus } from '@agemon/shared';
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -17,10 +18,17 @@ const COLUMNS: { status: TaskStatus; label: string }[] = [
 
 export default function KanbanPage() {
   const navigate = useNavigate();
-  const { data: tasks, isLoading, error } = useQuery(tasksListQuery());
+  const queryClient = useQueryClient();
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: tasks, isLoading, error } = useQuery(tasksListQuery(showArchived));
   const approvalCountByTask = useApprovalCountByTask();
   // On mobile, default-open columns that have tasks (computed after data loads)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const handleArchive = async (taskId: string, archived: boolean) => {
+    await api.updateTask(taskId, { archived });
+    queryClient.invalidateQueries({ queryKey: taskKeys.all });
+  };
 
   const toggle = (status: string) =>
     setCollapsed((prev) => ({ ...prev, [status]: !prev[status] }));
@@ -84,6 +92,16 @@ export default function KanbanPage() {
 
   return (
     <div className="p-4">
+      <div className="flex items-center justify-end mb-3">
+        <button
+          type="button"
+          onClick={() => setShowArchived(!showArchived)}
+          className={`inline-flex items-center gap-1.5 min-h-[44px] px-3 py-2 text-xs rounded-md transition-colors ${showArchived ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+        >
+          <Archive className="h-3.5 w-3.5" />
+          {showArchived ? 'Hide archived' : 'Show archived'}
+        </button>
+      </div>
       {/* ── Mobile: collapsible vertical columns ── */}
       <div className="space-y-2 lg:hidden">
         {COLUMNS.map((col) => {
@@ -117,6 +135,7 @@ export default function KanbanPage() {
                         navigate({ to: '/tasks/$id', params: { id: task.id } })
                       }
                       pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
+                      onArchive={(archived) => handleArchive(task.id, archived)}
                     />
                   ))}
                   {columnTasks.length === 0 && (
@@ -152,6 +171,7 @@ export default function KanbanPage() {
                       navigate({ to: '/tasks/$id', params: { id: task.id } })
                     }
                     pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
+                    onArchive={(archived) => handleArchive(task.id, archived)}
                   />
                 ))}
                 {columnTasks.length === 0 && (
