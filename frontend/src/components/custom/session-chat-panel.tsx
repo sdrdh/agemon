@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { ArrowLeft, Send, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
+import { ArrowLeft, Send, Square, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ActivityGroup } from '@/components/custom/activity-group';
@@ -43,6 +43,7 @@ export function SessionChatPanel({
   inputText,
   setInputText,
   handleSend,
+  onCancelTurn,
   turnInFlight,
   isDone,
   actionLoading,
@@ -62,6 +63,7 @@ export function SessionChatPanel({
   inputText: string;
   setInputText: (text: string) => void;
   handleSend: () => void;
+  onCancelTurn: () => void;
   turnInFlight: boolean;
   isDone: boolean;
   actionLoading: boolean;
@@ -340,14 +342,27 @@ export function SessionChatPanel({
                   disabled={!canType && !sessionReady}
                   className={`flex-1 min-h-[44px] transition-colors ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
                 />
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={(!canType && !sessionReady) || !inputText.trim()}
-                  className="min-h-[44px] min-w-[44px]"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
+                {turnInFlight ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    onClick={onCancelTurn}
+                    className="min-h-[44px] min-w-[44px]"
+                    aria-label="Cancel turn"
+                  >
+                    <Square className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={(!canType && !sessionReady) || !inputText.trim()}
+                    className="min-h-[44px] min-w-[44px]"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                )}
               </form>
             </div>
             {(modeOption || modelOption) && (

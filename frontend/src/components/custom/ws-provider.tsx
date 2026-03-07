@@ -164,6 +164,21 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAvailableCommands(event.sessionId, event.commands);
           break;
         }
+        case 'turn_cancelled': {
+          // Appending a system message also triggers the turnInFlight reset
+          // effect in tasks.$id.tsx (clears when last message role !== 'user')
+          store().appendChatMessage(event.sessionId, {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: 'Turn cancelled',
+            eventType: 'status',
+            timestamp: new Date().toISOString(),
+          });
+          store().setAgentActivity(event.sessionId, null);
+          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          break;
+        }
       }
     });
 

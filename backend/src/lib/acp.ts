@@ -706,10 +706,19 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   }
 
   try {
-    await entry.transport.request('session/prompt', {
+    const result = await entry.transport.request('session/prompt', {
       sessionId: entry.acpSessionId,
       prompt: [{ type: 'text', text: content }],
     });
+
+    // Check for cancelled stop reason — cleanup handled by finally block
+    const resultObj = result as Record<string, unknown> | undefined;
+    if (resultObj?.stopReason === 'cancelled') {
+      console.info(`[acp] session ${sessionId} prompt turn cancelled`);
+      broadcast({ type: 'turn_cancelled', sessionId, taskId });
+      return;
+    }
+
     console.info(`[acp] session ${sessionId} prompt turn completed`);
   } catch (err) {
     if (!entry.transport.isClosed) {
@@ -876,6 +885,46 @@ export function getSessionConfigOptions(sessionId: string): SessionConfigOption[
   const entry = sessions.get(sessionId);
   if (entry) return entry.configOptions;
   return db.getSessionConfigOptions(sessionId) ?? [];
+}
+
+/**
+ * Cancel the current turn for a session without killing the process.
+ * 1. Auto-deny any pending approvals (unblocks the JSON-RPC request handler)
+ * 2. Send ACP session/cancel notification (the agent will respond to the
+ *    in-flight session/prompt with stopReason: "cancelled")
+ * 3. The session stays alive and ready for the next prompt.
+ */
+export function cancelTurn(sessionId: string): void {
+  const entry = sessions.get(sessionId);
+  if (!entry) {
+    throw new Error(`No running session found with id ${sessionId}`);
+  }
+  if (!entry.turnInFlight) {
+    throw new Error('No turn in flight to cancel');
+  }
+  if (!entry.acpSessionId) {
+    throw new Error(`No ACP session ID for session ${sessionId}`);
+  }
+
+  // 1. Auto-deny all pending approvals for this session
+  //    (resolves the blocked Promises so the transport isn't stuck)
+  const pendingApprovals = db.listPendingApprovalsBySession(sessionId);
+  for (const approval of pendingApprovals) {
+    const resolver = pendingApprovalResolvers.get(approval.id);
+    if (resolver) {
+      db.resolvePendingApproval(approval.id, 'deny');
+      resolver.resolve({ outcome: { outcome: 'cancelled' } });
+      pendingApprovalResolvers.delete(approval.id);
+      broadcast({ type: 'approval_resolved', approvalId: approval.id, decision: 'deny' });
+    }
+  }
+
+  // 2. Send ACP session/cancel notification (fire-and-forget, no response expected).
+  //    Note: turnInFlight is NOT reset here — the in-flight sendPromptTurn() call
+  //    will receive stopReason: "cancelled" and its finally block handles cleanup
+  //    (flushCurrentMessage, turnInFlight = false, deriveTaskStatus).
+  entry.transport.notify('session/cancel', { sessionId: entry.acpSessionId });
+  console.info(`[acp] session ${sessionId} turn cancel sent`);
 }
 
 /**
