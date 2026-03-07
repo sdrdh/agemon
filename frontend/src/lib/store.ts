@@ -156,7 +156,13 @@ export const useWsStore = create<WsState>((set) => ({
     })),
 
   setTurnInFlight: (sessionId, inFlight) =>
-    set((state) => ({
-      turnsInFlight: { ...state.turnsInFlight, [sessionId]: inFlight },
-    })),
+    set((state) => {
+      const turnsInFlight = { ...state.turnsInFlight };
+      if (inFlight) {
+        turnsInFlight[sessionId] = true;
+      } else {
+        delete turnsInFlight[sessionId];
+      }
+      return { turnsInFlight };
+    }),
 }));
