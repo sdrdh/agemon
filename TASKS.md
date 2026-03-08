@@ -1050,14 +1050,14 @@ class ACPAgentManager {
 ### Task 4.17: Cancel Agent Turn (Escape Key Equivalent)
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Implement `cancelTurn(sessionId)` in acp.ts — sends ACP `session/cancel` notification, auto-denies pending approvals, keeps session alive ready for next prompt
-- [ ] Handle `stopReason: "cancelled"` in prompt turn response — flush partial messages, reset `turnInFlight`, re-derive task status to `awaiting_input`
-- [ ] Add WebSocket action `cancel_turn` so frontend can trigger cancellation
-- [ ] Convert send button to stop button while agent turn is in flight (same position, same 44px target, swap icon/action)
-- [ ] Broadcast a `turn_cancelled` event so frontend can show inline cancellation indicator in chat stream
+- [x] Implement `cancelTurn(sessionId)` in acp.ts — sends ACP `session/cancel` notification, auto-denies pending approvals, keeps session alive ready for next prompt
+- [x] Handle `stopReason: "cancelled"` in prompt turn response — flush partial messages, reset `turnInFlight`, re-derive task status to `awaiting_input`
+- [x] Add WebSocket action `cancel_turn` so frontend can trigger cancellation
+- [x] Convert send button to stop button while agent turn is in flight (same position, same 44px target, swap icon/action)
+- [x] Broadcast a `turn_cancelled` event so frontend can show inline cancellation indicator in chat stream
 
 **Key Considerations:**
 - Send → Stop toggle: button stays in the same position, swaps between send icon and stop icon based on `turnInFlight` state. Tap stop = cancel current turn
@@ -1208,21 +1208,21 @@ class ACPAgentManager {
 ### Task 4.24: Archive Tasks and Sessions
 
 **Priority:** P1
-**Status:** Todo
+**Status:** Done
 
 **Deliverables:**
-- [ ] Add `archived` boolean column to `tasks` table (default false), with schema migration
-- [ ] Add `archived` boolean column to `agent_sessions` table (default false), with schema migration
-- [ ] Update `TaskStatus` type or add `archived` field to `Task` and `AgentSession` shared types
-- [ ] Backend: `PATCH /tasks/:id` accepts `archived: boolean` to archive/unarchive a task
-- [ ] Backend: `PATCH /sessions/:id/archive` endpoint to archive/unarchive a session
-- [ ] Backend: `GET /tasks` and `GET /tasks/by-project` exclude archived tasks by default; accept `?archived=true` query param to include them
-- [ ] Backend: `GET /sessions` excludes archived sessions by default; accept `?archived=true` to include them
-- [ ] Frontend kanban view filters out archived tasks (they don't appear in any column)
-- [ ] Frontend session list filters out archived sessions
-- [ ] Frontend: add archive/unarchive action to task detail view (swipe action or menu item)
-- [ ] Frontend: add archive/unarchive action to session list items
-- [ ] Frontend: optional "Show archived" toggle on kanban and session list views to reveal archived items (dimmed styling)
+- [x] Add `archived` boolean column to `tasks` table (default false), with schema migration
+- [x] Add `archived` boolean column to `agent_sessions` table (default false), with schema migration
+- [x] Update `TaskStatus` type or add `archived` field to `Task` and `AgentSession` shared types
+- [x] Backend: `PATCH /tasks/:id` accepts `archived: boolean` to archive/unarchive a task
+- [x] Backend: `PATCH /sessions/:id/archive` endpoint to archive/unarchive a session
+- [x] Backend: `GET /tasks` and `GET /tasks/by-project` exclude archived tasks by default; accept `?archived=true` query param to include them
+- [x] Backend: `GET /sessions` excludes archived sessions by default; accept `?archived=true` to include them
+- [x] Frontend kanban view filters out archived tasks (they don't appear in any column)
+- [x] Frontend session list filters out archived sessions
+- [x] Frontend: add archive/unarchive action to task detail view (swipe action or menu item)
+- [x] Frontend: add archive/unarchive action to session list items
+- [x] Frontend: optional "Show archived" toggle on kanban and session list views to reveal archived items (dimmed styling)
 
 **Key Considerations:**
 - Archive is a soft-hide, not a delete — archived tasks/sessions remain in DB and can be restored
@@ -1292,10 +1292,10 @@ class ACPAgentManager {
 **Estimated Time:** 2 hours
 
 **Deliverables:**
-- [ ] Tap-to-copy action on chat bubbles — copies the raw text content (not rendered HTML) to clipboard
-- [ ] Visual feedback on copy (brief toast or checkmark animation)
-- [ ] Works on all message types (agent, user, system, input requests)
-- [ ] Mobile-friendly interaction — copy icon button or long-press gesture with haptic feedback
+- [x] Tap-to-copy action on chat bubbles — copies the raw text content (not rendered HTML) to clipboard
+- [x] Visual feedback on copy (brief toast or checkmark animation)
+- [x] Works on all message types (agent, user, system, input requests)
+- [x] Mobile-friendly interaction — copy icon button or long-press gesture with haptic feedback
 
 **Key Considerations:**
 - Copy the raw markdown/text content, not the rendered HTML — users want pasteable text
@@ -2234,4 +2234,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, and approval persistence implemented. Agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20), and turn cancellation (Task 4.17) planned. Terminal PTY, diff viewer, and GitHub PR flow remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20) planned. Terminal PTY, diff viewer, and GitHub PR flow remaining.
