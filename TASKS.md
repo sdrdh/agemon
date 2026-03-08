@@ -795,17 +795,17 @@ class ACPAgentManager {
 ### Task 4.12: Rich Tool Call Details in Chat
 
 **Priority:** P2
-**Status:** Todo
+**Status:** Done
 
 **Approach:** Breaking change — store tool call events as structured JSON in `acp_events.content` instead of the current `[tool:ID] Title (status)` string format. Pre-1.0, so no migration needed.
 
 **Deliverables:**
-- [ ] Define `ToolCallEvent` and `ToolCallUpdateEvent` types in `shared/types/` with fields: `toolCallId`, `kind`, `title`, `status`, `args` (tool-specific input params)
-- [ ] Backend (`acp.ts`): in `tool_call` handler, store `JSON.stringify({ toolCallId, kind, title, status, args })` as `content` instead of the formatted string. Reuse `extractToolContext()` logic (already extracts file_path, command, pattern, query, etc.) for the `args` field
-- [ ] Backend (`acp.ts`): in `tool_call_update` handler, store `JSON.stringify({ toolCallId, status })` as `content`
-- [ ] Frontend (`chat-utils.ts`): replace regex-based `parseActivityMessages` and `isCollapsibleActivity` with JSON parsing
-- [ ] Frontend (`activity-group.tsx`): render tool-specific details on expand — command for Bash, file path for Read/Edit/Write, pattern for Grep/Glob, query for WebSearch, prompt summary for Agent
-- [ ] Mobile-friendly expandable detail view (inline accordion, current UX pattern)
+- [x] Define `ToolCallEvent` and `ToolCallUpdateEvent` types in `shared/types/` with fields: `toolCallId`, `kind`, `title`, `status`, `args` (tool-specific input params)
+- [x] Backend (`acp.ts`): in `tool_call` handler, store `JSON.stringify({ toolCallId, kind, title, status, args })` as `content` instead of the formatted string. Reuse `extractToolContext()` logic (already extracts file_path, command, pattern, query, etc.) for the `args` field
+- [x] Backend (`acp.ts`): in `tool_call_update` handler, store `JSON.stringify({ toolCallId, status })` as `content`
+- [x] Frontend (`chat-utils.ts`): replace regex-based `parseActivityMessages` and `isCollapsibleActivity` with JSON parsing
+- [x] Frontend (`activity-group.tsx`): render tool-specific details on expand — command for Bash, file path for Read/Edit/Write, pattern for Grep/Glob, query for WebSearch, prompt summary for Agent
+- [x] Mobile-friendly expandable detail view (inline accordion, current UX pattern)
 
 **Key Considerations:**
 - `extractToolContext()` in `acp.ts` already does the right field extraction for approvals — reuse it for all tool call events

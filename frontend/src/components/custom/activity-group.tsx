@@ -1,7 +1,44 @@
 import { useState, useMemo } from 'react';
 import { ChevronRight, Check, X, Loader2, Brain, Wrench, Zap } from 'lucide-react';
 import { parseActivityMessages, shortenToolLabel } from '@/lib/chat-utils';
+import type { ToolCallEntry } from '@/lib/chat-utils';
 import type { ChatMessage } from '@agemon/shared';
+
+/** Render a one-line detail string for a tool call based on its kind and args. */
+function toolDetail(tc: ToolCallEntry): string | null {
+  if (!tc.args) return null;
+  const a = tc.args;
+  switch (tc.toolKind) {
+    case 'Bash':
+      return a.command ? truncate(a.command, 80) : null;
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+      return a.filePath ? shortPath(a.filePath) : null;
+    case 'Grep':
+      return a.pattern ? `/${a.pattern}/` + (a.path ? ` in ${shortPath(a.path)}` : '') : null;
+    case 'Glob':
+      return a.pattern ?? null;
+    case 'WebSearch':
+      return a.command ?? a.pattern ?? null;
+    case 'WebFetch':
+      return a.url ? truncate(a.url, 60) : null;
+    case 'Agent':
+      return a.preview ? truncate(a.preview, 60) : null;
+    default:
+      // Generic: show filePath or command if available
+      return a.filePath ? shortPath(a.filePath) : a.command ? truncate(a.command, 60) : null;
+  }
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + '\u2026' : s;
+}
+
+function shortPath(p: string): string {
+  const parts = p.split('/');
+  return parts.length > 2 ? '\u2026/' + parts.slice(-2).join('/') : p;
+}
 
 export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -85,19 +122,25 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
       >
         <div className="overflow-hidden">
           <div className="space-y-0.5 pb-2" onClick={(e) => e.stopPropagation()}>
-            {toolCalls.map((tc) => (
-              <div key={tc.id} className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground">
-                {tc.kind === 'skill' ? (
-                  <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                ) : (
-                  <Wrench className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                )}
-                {tc.status === 'completed' && <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
-                {tc.status === 'failed' && <X className="h-3.5 w-3.5 text-red-500 shrink-0" />}
-                {tc.status === 'pending' && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
-                <span className="font-mono truncate">{shortenToolLabel(tc.label)}</span>
-              </div>
-            ))}
+            {toolCalls.map((tc) => {
+              const detail = toolDetail(tc);
+              return (
+                <div key={tc.id} className="flex items-center gap-2 py-0.5 text-sm text-muted-foreground min-w-0">
+                  {tc.kind === 'skill' ? (
+                    <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  ) : (
+                    <Wrench className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                  )}
+                  {tc.status === 'completed' && <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                  {tc.status === 'failed' && <X className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                  {tc.status === 'pending' && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />}
+                  <span className="font-mono truncate">{shortenToolLabel(tc.label)}</span>
+                  {detail && (
+                    <span className="font-mono text-xs text-muted-foreground/60 truncate">{detail}</span>
+                  )}
+                </div>
+              );
+            })}
             {thoughts.length > 0 && (
               <div className="mt-1.5 space-y-1 border-t border-muted/50 pt-1.5">
                 {thoughts.map((m) => (

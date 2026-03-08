@@ -14,7 +14,7 @@
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentCommand, AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption } from '@agemon/shared';
+import type { AgentCommand, AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption, ToolCallEvent, ToolCallStatus, ToolCallUpdateEvent } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
@@ -326,12 +326,15 @@ function handleSessionUpdate(
       // Flush any pending streaming message before tool output
       flushCurrentMessage(sessionId, taskId);
 
+      const toolCall = update as Record<string, unknown>;
       const toolCallId = (update.toolCallId as string) ?? '';
       const title = (update.title as string) ?? 'tool';
-      const status = (update.status as string) ?? '';
-      const content = toolCallId
-        ? `[tool:${toolCallId}] ${title} (${status})`
-        : `[tool] ${title} (${status})`;
+      const status = ((update.status as string) ?? 'pending') as ToolCallStatus;
+      const kind = extractToolName(toolCall);
+      const args = extractToolContext(toolCall);
+
+      const event: ToolCallEvent = { toolCallId, kind, title, status, args };
+      const content = JSON.stringify(event);
 
       db.insertEvent({
         id: randomUUID(),
@@ -346,9 +349,11 @@ function handleSessionUpdate(
 
     case 'tool_call_update': {
       const toolCallId = (update.toolCallId as string) ?? '';
-      const status = (update.status as string) ?? '';
+      const status = ((update.status as string) ?? '') as ToolCallStatus;
       if (!status) return;
-      const content = `[tool update] ${toolCallId}: ${status}`;
+
+      const event: ToolCallUpdateEvent = { toolCallId, status };
+      const content = JSON.stringify(event);
 
       db.insertEvent({
         id: randomUUID(),
