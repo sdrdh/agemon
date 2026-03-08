@@ -225,7 +225,7 @@ export function SessionChatPanel({
               disabled={actionLoading}
               className="gap-1.5"
             >
-              <Ban className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+              <Ban className="h-3.5 w-3.5 text-red-500" />
               Stop
             </Button>
           )}

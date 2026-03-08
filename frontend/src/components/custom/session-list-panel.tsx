@@ -146,7 +146,7 @@ export function SessionListPanel({
                     }}
                     disabled={actionLoading}
                   >
-                    <Ban className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+                    <Ban className="h-3.5 w-3.5 text-red-500" />
                   </Button>
                 )}
                 {canResume && (
