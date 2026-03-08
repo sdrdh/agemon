@@ -29,7 +29,7 @@ export interface ToolCallEntry {
 function parseToolCallEvent(content: string): ToolCallEvent | null {
   try {
     const obj = JSON.parse(content);
-    if (obj && typeof obj.toolCallId === 'string' && typeof obj.kind === 'string' && typeof obj.title === 'string' && typeof obj.status === 'string' && obj.args && typeof obj.args === 'object') {
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.kind === 'string' && typeof obj.title === 'string' && typeof obj.status === 'string' && obj.args && typeof obj.args === 'object' && !obj.isUpdate) {
       return obj as ToolCallEvent;
     }
   } catch { /* not JSON */ }
