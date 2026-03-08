@@ -350,9 +350,24 @@ function handleSessionUpdate(
     case 'tool_call_update': {
       const toolCallId = (update.toolCallId as string) ?? '';
       const status = ((update.status as string) ?? '') as ToolCallStatus;
-      if (!status) return;
 
-      const event: ToolCallUpdateEvent = { toolCallId, status };
+      // tool_call_update carries the actual rawInput, updated title, and kind
+      const title = (update.title as string) || undefined;
+      const kind = extractToolName(update as Record<string, unknown>) || undefined;
+      const args = extractToolContext(update as Record<string, unknown>);
+      const hasArgs = Object.keys(args).length > 0;
+
+      // Skip if there's nothing useful to report
+      if (!status && !title && !hasArgs) return;
+
+      const event: ToolCallUpdateEvent = {
+        toolCallId,
+        status: status || 'in_progress',
+        isUpdate: true,
+        ...(title ? { title } : {}),
+        ...(kind && kind !== 'unknown' ? { kind } : {}),
+        ...(hasArgs ? { args } : {}),
+      };
       const content = JSON.stringify(event);
 
       db.insertEvent({
@@ -537,10 +552,13 @@ function spawnProcess(
 
 function extractToolName(toolCall: Record<string, unknown> | undefined): string {
   if (!toolCall) return 'unknown';
-  // ACP sends `kind` as the tool type (e.g. "fetch", "bash", "edit")
-  if (toolCall.kind && typeof toolCall.kind === 'string') return toolCall.kind;
+  // Prefer _meta.claudeCode.toolName (e.g. "Read", "Bash", "Edit") — proper casing
   const meta = toolCall._meta as Record<string, unknown> | undefined;
+  const claudeCode = meta?.claudeCode as Record<string, unknown> | undefined;
+  if (claudeCode?.toolName) return claudeCode.toolName as string;
   if (meta?.toolName) return meta.toolName as string;
+  // ACP generic kind (e.g. "read", "bash", "edit") as fallback
+  if (toolCall.kind && typeof toolCall.kind === 'string') return toolCall.kind;
   const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
   if (rawInput?.tool) return rawInput.tool as string;
   const title = toolCall.title as string | undefined;
