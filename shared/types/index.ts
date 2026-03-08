@@ -96,6 +96,21 @@ export interface Diff {
   created_at: string;
 }
 
+// ─── Tool Call Event Types ───────────────────────────────────────────────────
+
+export interface ToolCallEvent {
+  toolCallId: string;
+  kind: string;           // Tool type: "Bash", "Read", "Edit", "Write", "Grep", "Glob", "WebSearch", "Agent", etc.
+  title: string;          // Display title from ACP
+  status: string;         // "pending", "in_progress", "completed", "failed"
+  args: Record<string, string>; // Tool-specific params (command, filePath, pattern, etc.)
+}
+
+export interface ToolCallUpdateEvent {
+  toolCallId: string;
+  status: string;
+}
+
 // ─── Agent Commands (Slash Commands) ────────────────────────────────────────
 
 export interface AgentCommand {

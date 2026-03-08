@@ -1,4 +1,4 @@
-import type { ChatMessage, AgentSessionState } from '@agemon/shared';
+import type { ChatMessage, AgentSessionState, ToolCallEvent, ToolCallUpdateEvent } from '@agemon/shared';
 
 // ─── Types for grouped chat items ──────────────────────────────────────────
 
@@ -21,6 +21,30 @@ export interface ToolCallEntry {
   label: string;
   status: 'pending' | 'completed' | 'failed';
   kind: 'tool' | 'skill';
+  toolKind?: string;          // e.g. "Bash", "Read", "Edit", "Grep"
+  args?: Record<string, string>; // Tool-specific params for detail rendering
+}
+
+/** Try to parse content as a ToolCallEvent JSON. Returns null if not valid. */
+function parseToolCallEvent(content: string): ToolCallEvent | null {
+  try {
+    const obj = JSON.parse(content);
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.kind === 'string' && typeof obj.title === 'string') {
+      return obj as ToolCallEvent;
+    }
+  } catch { /* not JSON */ }
+  return null;
+}
+
+/** Try to parse content as a ToolCallUpdateEvent JSON. Returns null if not valid. */
+function parseToolCallUpdateEvent(content: string): ToolCallUpdateEvent | null {
+  try {
+    const obj = JSON.parse(content);
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.status === 'string' && !('kind' in obj)) {
+      return obj as ToolCallUpdateEvent;
+    }
+  } catch { /* not JSON */ }
+  return null;
 }
 
 // ─── Session state helpers ──────────────────────────────────────────────────
@@ -56,7 +80,12 @@ export function isSessionTerminal(state: AgentSessionState): boolean {
 export function isCollapsibleActivity(msg: ChatMessage): boolean {
   if (msg.role !== 'agent') return false;
   if (msg.eventType === 'thought') return true;
-  if (msg.eventType === 'action' && msg.content.startsWith('[tool')) return true;
+  if (msg.eventType === 'action') {
+    // Structured JSON tool call or update
+    if (parseToolCallEvent(msg.content) || parseToolCallUpdateEvent(msg.content)) return true;
+    // Legacy string format fallback
+    if (msg.content.startsWith('[tool')) return true;
+  }
   return false;
 }
 
@@ -105,6 +134,35 @@ export function parseActivityMessages(messages: ChatMessage[]) {
   let unnamedIdx = 0;
 
   for (const msg of messages) {
+    // Try structured JSON format first
+    const tcEvent = parseToolCallEvent(msg.content);
+    if (tcEvent) {
+      const entry: ToolCallEntry = {
+        id: tcEvent.toolCallId || `unnamed-${unnamedIdx++}`,
+        label: tcEvent.title,
+        status: 'pending',
+        kind: tcEvent.kind === 'Skill' ? 'skill' : 'tool',
+        toolKind: tcEvent.kind,
+        args: tcEvent.args,
+      };
+      toolCalls.push(entry);
+      if (tcEvent.toolCallId) toolCallMap.set(tcEvent.toolCallId, entry);
+      continue;
+    }
+
+    const updateEvent = parseToolCallUpdateEvent(msg.content);
+    if (updateEvent) {
+      const entry = toolCallMap.get(updateEvent.toolCallId);
+      if (entry) {
+        entry.status = updateEvent.status as 'completed' | 'failed';
+      } else {
+        const pending = toolCalls.find((tc) => tc.status === 'pending' && tc.id.startsWith('unnamed-'));
+        if (pending) pending.status = updateEvent.status as 'completed' | 'failed';
+      }
+      continue;
+    }
+
+    // Legacy string format fallback
     const newMatch = msg.content.match(/^\[tool:([^\]]+)\]\s+(.+?)(?:\s*\((?:pending|in_progress|completed|failed)\))?\s*$/);
     if (newMatch) {
       const rawLabel = newMatch[2].trim();
