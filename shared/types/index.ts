@@ -111,6 +111,10 @@ export interface ToolCallEvent {
 export interface ToolCallUpdateEvent {
   toolCallId: string;
   status: ToolCallStatus;
+  isUpdate: true;                     // Discriminator to distinguish from ToolCallEvent
+  title?: string;                     // Updated display title (e.g. "Read /etc/hostname")
+  kind?: string;                      // Tool kind if changed
+  args?: Record<string, string>;      // Tool-specific params from rawInput
 }
 
 // ─── Agent Commands (Slash Commands) ────────────────────────────────────────

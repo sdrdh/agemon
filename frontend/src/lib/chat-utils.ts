@@ -40,7 +40,11 @@ function parseToolCallEvent(content: string): ToolCallEvent | null {
 function parseToolCallUpdateEvent(content: string): ToolCallUpdateEvent | null {
   try {
     const obj = JSON.parse(content);
-    if (obj && typeof obj.toolCallId === 'string' && typeof obj.status === 'string' && !('kind' in obj)) {
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.status === 'string' && obj.isUpdate === true) {
+      return obj as ToolCallUpdateEvent;
+    }
+    // Legacy format without isUpdate discriminator
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.status === 'string' && !('kind' in obj) && !('title' in obj)) {
       return obj as ToolCallUpdateEvent;
     }
   } catch { /* not JSON */ }
@@ -153,11 +157,19 @@ export function parseActivityMessages(messages: ChatMessage[]) {
     const updateEvent = parseToolCallUpdateEvent(msg.content);
     if (updateEvent) {
       const entry = toolCallMap.get(updateEvent.toolCallId);
-      if (entry) {
-        entry.status = updateEvent.status as 'completed' | 'failed';
-      } else {
-        const pending = toolCalls.find((tc) => tc.status === 'pending' && tc.id.startsWith('unnamed-'));
-        if (pending) pending.status = updateEvent.status as 'completed' | 'failed';
+      const target = entry ?? toolCalls.find((tc) => tc.status === 'pending' && tc.id.startsWith('unnamed-'));
+      if (target) {
+        if (updateEvent.status === 'completed' || updateEvent.status === 'failed') {
+          target.status = updateEvent.status;
+        }
+        if (updateEvent.title) target.label = updateEvent.title;
+        if (updateEvent.kind) {
+          target.toolKind = updateEvent.kind;
+          target.kind = updateEvent.kind === 'Skill' ? 'skill' : 'tool';
+        }
+        if (updateEvent.args && Object.keys(updateEvent.args).length > 0) {
+          target.args = { ...target.args, ...updateEvent.args };
+        }
       }
       continue;
     }
