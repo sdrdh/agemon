@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
+import { Plus, RotateCcw, CheckCircle2, Ban, Archive } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType, AgentSession } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
@@ -146,7 +146,7 @@ export function SessionListPanel({
                     }}
                     disabled={actionLoading}
                   >
-                    <Square className="h-3.5 w-3.5" />
+                    <Ban className="h-3.5 w-3.5 fill-red-500 text-red-500" />
                   </Button>
                 )}
                 {canResume && (

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { ArrowLeft, Send, Ban, RotateCcw, Archive, ChevronsDown } from 'lucide-react';
+import { ArrowLeft, Send, Ban, RotateCcw, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ActivityGroup } from '@/components/custom/activity-group';
@@ -220,13 +220,13 @@ export function SessionChatPanel({
             <Button
               size="sm"
               variant="outline"
-              aria-label="Archive session"
+              aria-label="Stop session"
               onClick={() => onStop(session.id)}
               disabled={actionLoading}
               className="gap-1.5"
             >
-              <Archive className="h-3.5 w-3.5" />
-              Archive
+              <Ban className="h-3.5 w-3.5 fill-red-500 text-red-500" />
+              Stop
             </Button>
           )}
         </div>
