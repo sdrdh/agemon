@@ -421,68 +421,15 @@ class GitWorktreeManager {
 
 ---
 
-### Task 3.2: GitHub Integration
+### Task 3.2: GitHub Integration → **Deferred to Post-v1**
 
-**Priority:** P1  
-**Estimated Time:** 8 hours
-
-**Deliverables:**
-- [ ] Install `@octokit/rest` for GitHub API
-- [ ] Create GitHub client wrapper
-- [ ] Implement PR creation
-- [ ] Store PR URLs in database
-- [ ] Handle authentication with PAT
-
-**Functions:**
-```typescript
-class GitHubClient {
-  createPR(repo: string, branch: string, title: string, body: string): Promise<string>
-  getPRStatus(url: string): Promise<'open' | 'merged' | 'closed'>
-  linkPRToTask(taskId: string, prUrl: string): Promise<void>
-}
-```
-
-**Acceptance Criteria:**
-- PR created successfully via API
-- PR URL stored in task metadata
-- Handles GitHub API errors gracefully
-- Works with organization and personal repos
-- PAT loaded from environment variable
-
-**Dependencies:** Task 3.1
+> **Rationale:** Agents (Claude Code, OpenCode, etc.) have full CLI access to `git` and `gh`. They can create PRs, push branches, and manage repos directly. Agemon-level GitHub integration is redundant for v1.
 
 ---
 
-### Task 3.3: "One-Tap" Multi-Repo PR Flow
+### Task 3.3: "One-Tap" Multi-Repo PR Flow → **Deferred to Post-v1**
 
-**Priority:** P1  
-**Estimated Time:** 6 hours
-
-**Deliverables:**
-- [ ] Create "Approve & Create PRs" button
-- [ ] Implement coordinated commit flow
-- [ ] Push all branches simultaneously
-- [ ] Create PRs for all repos
-- [ ] Update task status to "Done"
-- [ ] Show success notification with PR links
-
-**Flow:**
-1. User taps button
-2. Commit changes in all repos (same message)
-3. Push all branches
-4. Create linked PRs
-5. Update task to "Done"
-6. Display success message with PR links
-
-**Acceptance Criteria:**
-- Commits use consistent message across repos
-- All branches pushed before PR creation
-- PRs reference each other in description
-- Rollback on failure (atomic operation)
-- Shows progress indicator during operation
-- Mobile-friendly success screen with PR links
-
-**Dependencies:** Task 3.2
+> **Rationale:** Same as 3.2 — agents can be prompted to create coordinated PRs across repos using CLI tools.
 
 ---
 
@@ -1410,111 +1357,37 @@ class PTYSessionManager {
 
 ---
 
-## Phase 6: Diff Viewer (Week 6)
+## Phase 6: Diff Viewer (Week 6) → **Reworked: Lightweight Read-Only Diff View**
 
-**Goal:** Mobile-optimized code review interface
+**Goal:** Show changed files for context — no DB storage, no approve/reject flow
 
-### Task 6.1: Diff Generation
+> **Rationale:** Agents handle their own git operations. The old Phase 6 (diff generation → DB storage → approve/reject → commit/push) is redundant. Instead, provide a lightweight read-only view of `git diff` output so users can see what changed at a glance.
 
-**Priority:** P0  
-**Estimated Time:** 6 hours
+### Task 6.1: Lightweight Diff Viewer
+
+**Priority:** P2
+**Status:** Todo
+**Estimated Time:** 8 hours
 
 **Deliverables:**
-- [ ] Generate git diff for task workspace
-- [ ] Parse diff into structured format
-- [ ] Store diff in database
-- [ ] Trigger "awaiting_input" for approval
-- [ ] Handle multi-file diffs
+- [ ] Backend endpoint: `GET /tasks/:id/diff` — runs `git diff` in the task's worktree(s) and returns raw unified diff
+- [ ] Frontend: diff viewer component with syntax-highlighted unified diff (additions green, deletions red)
+- [ ] Collapsible file sections, sticky file headers
+- [ ] Mobile-optimized touch scrolling
+- [ ] "View Changes" button on task detail page (only shown when task has worktree repos)
 
-**Functions:**
-```typescript
-class DiffManager {
-  generateDiff(taskId: string): Promise<Diff>
-  parseDiff(diffText: string): ParsedDiff
-  storeDiff(taskId: string, diff: Diff): Promise<string>
-}
-```
-
-**Acceptance Criteria:**
-- Diff captures all changed files
-- Diff properly parsed with line numbers
-- Stored in database for review
-- Task moves to "awaiting_input" status
-- Multiple repos handled separately
+**Not included (deferred to post-v1):**
+- No DB storage of diffs
+- No approve/reject flow — agents manage their own commits
+- No PR creation from diff view
 
 **Dependencies:** Task 3.1
 
----
+### ~~Task 6.2: Diff Viewer Component~~ → Merged into Task 6.1
 
-### Task 6.2: Diff Viewer Component
+### ~~Task 6.3: Approve/Reject Flow~~ → **Deferred to Post-v1**
 
-**Priority:** P0  
-**Estimated Time:** 12 hours
-
-**Deliverables:**
-- [ ] Create mobile-optimized diff viewer
-- [ ] Implement syntax highlighting
-- [ ] Show line numbers
-- [ ] Color-code additions/deletions
-- [ ] Collapsible file sections
-- [ ] Approve/Reject buttons
-
-**Features:**
-- Unified diff view (better for mobile)
-- Syntax highlighting per language
-- Touch-friendly file navigation
-- Sticky file headers
-- Show/hide unchanged lines
-
-**Acceptance Criteria:**
-- Renders diffs correctly on mobile
-- Syntax highlighting works for common languages
-- Line numbers aligned properly
-- Additions shown in green, deletions in red
-- Files collapsible for easier navigation
-- Smooth scrolling on mobile
-- Works with large diffs (1000+ lines)
-
-**Dependencies:** Task 6.1, Task 2.1
-
----
-
-### Task 6.3: Approve/Reject Flow
-
-**Priority:** P0  
-**Estimated Time:** 6 hours
-
-**Deliverables:**
-- [ ] Approve button triggers commit + push
-- [ ] Reject button discards changes
-- [ ] Update diff status in database
-- [ ] Notify agent of decision
-- [ ] Move task to appropriate status
-
-**Flow for Approve:**
-1. User taps "Approve"
-2. Commit changes with diff description
-3. Push branch
-4. Update diff status to "approved"
-5. Move task back to "working" or trigger PR flow
-
-**Flow for Reject:**
-1. User taps "Reject"
-2. Optional: User provides feedback
-3. Discard staged changes (git reset)
-4. Update diff status to "rejected"
-5. Notify agent to retry
-6. Move task back to "working"
-
-**Acceptance Criteria:**
-- Approve commits and pushes successfully
-- Reject discards changes properly
-- User can provide rejection feedback
-- Agent notified of decision via ACP
-- Task status updates correctly
-- Works smoothly on mobile
-
-**Dependencies:** Task 6.2, Task 3.1
+> Agents handle commits/pushes via CLI. Approve/reject flow may be added later if needed.
 
 ---
 
@@ -2011,6 +1884,11 @@ website/
 - Custom agent templates
 - Workflow automation rules
 
+**v1.4 - Git Integration (Deferred from v1)**
+- GitHub Integration via Octokit (Task 3.2) — PR creation, status tracking
+- One-Tap Multi-Repo PR Flow (Task 3.3) — coordinated commit/push/PR across repos
+- Diff Approve/Reject Flow (Task 6.3) — approve/reject diffs with agent notification
+
 **v2.0 - Platform Expansion**
 - Desktop app (Tauri)
 - Browser extension
@@ -2068,17 +1946,15 @@ Week 5-6: Terminal
 └─ 5.3 Mobile Terminal (6h)
 ```
 
-#### **Track C: Git Integration (Independent)**
+#### **Track C: Git Integration (Simplified)**
 ```
 Week 3-4: Git Operations
-├─ 3.1 Git Worktree Manager (12h)  ◄── Can start after 1.2
-├─ 3.2 GitHub Integration (8h)
-└─ 3.3 One-Tap PR Flow (6h)
+├─ 3.1 Git Worktree Manager (12h)  ◄── Done
+├─ 3.2 GitHub Integration           ◄── Deferred to post-v1
+└─ 3.3 One-Tap PR Flow              ◄── Deferred to post-v1
 
-Week 6: Diff Management
-├─ 6.1 Diff Generation (6h)
-├─ 6.2 Diff Viewer (12h)
-└─ 6.3 Approve/Reject (6h)
+Week 6: Diff Viewer (Lightweight)
+└─ 6.1 Read-only Diff Viewer (8h)   ◄── No DB, no approve/reject
 ```
 
 #### **Track D: Documentation & Website (Continuous)**
