@@ -797,18 +797,21 @@ class ACPAgentManager {
 **Priority:** P2
 **Status:** Todo
 
+**Approach:** Breaking change — store tool call events as structured JSON in `acp_events.content` instead of the current `[tool:ID] Title (status)` string format. Pre-1.0, so no migration needed.
+
 **Deliverables:**
-- [ ] Store full tool call metadata (tool name, arguments, input params) in ACP events — not just the flattened content string
-- [ ] Parse and surface tool-specific details: command for Bash, file path for Read/Edit/Write, pattern for Grep/Glob, query for WebSearch
-- [ ] Render tool calls collapsed by default in activity groups (current behavior)
-- [ ] On tap/expand, show full tool call details inline — tool type, all arguments, and output/result
-- [ ] Mobile-friendly expandable detail view (consider bottom sheet or inline accordion)
+- [ ] Define `ToolCallEvent` and `ToolCallUpdateEvent` types in `shared/types/` with fields: `toolCallId`, `kind`, `title`, `status`, `args` (tool-specific input params)
+- [ ] Backend (`acp.ts`): in `tool_call` handler, store `JSON.stringify({ toolCallId, kind, title, status, args })` as `content` instead of the formatted string. Reuse `extractToolContext()` logic (already extracts file_path, command, pattern, query, etc.) for the `args` field
+- [ ] Backend (`acp.ts`): in `tool_call_update` handler, store `JSON.stringify({ toolCallId, status })` as `content`
+- [ ] Frontend (`chat-utils.ts`): replace regex-based `parseActivityMessages` and `isCollapsibleActivity` with JSON parsing
+- [ ] Frontend (`activity-group.tsx`): render tool-specific details on expand — command for Bash, file path for Read/Edit/Write, pattern for Grep/Glob, query for WebSearch, prompt summary for Agent
+- [ ] Mobile-friendly expandable detail view (inline accordion, current UX pattern)
 
 **Key Considerations:**
-- Currently all tool call data is flattened to a string like `[tool:ID] Title (status)` — rich metadata is lost at the backend before it reaches the frontend
-- Backend `acp.ts` receives full `toolCall` objects from the ACP agent but only extracts `toolCallId`, `title`, and `status`
-- May need a structured JSON column or separate fields in `acp_events` to preserve the full tool call payload
-- Builds on existing `parseActivityMessages` and `ActivityGroup` components
+- `extractToolContext()` in `acp.ts` already does the right field extraction for approvals — reuse it for all tool call events
+- `isCollapsibleActivity` currently checks `msg.content.startsWith('[tool')` — change to check `eventType === 'action'` + JSON parse, or add a new event type like `'tool_call'`
+- Consider adding `'tool_call'` as a new `acp_events.type` value (alongside thought/action/await_input/result/prompt) for cleaner filtering — breaking schema change, acceptable pre-1.0
+- Old string-format events in dev DBs will break — just wipe the DB (`rm agemon.db*`)
 
 **Dependencies:** None (existing tool call flow works, this enhances it)
 
