@@ -13,7 +13,6 @@ function toolDetail(tc: ToolCallEntry): string | null {
       return a.command ? truncate(a.command, 80) : null;
     case 'Read':
     case 'Write':
-      return a.filePath ? shortPath(a.filePath) : null;
     case 'Edit':
       return a.filePath ? shortPath(a.filePath) : null;
     case 'Grep':

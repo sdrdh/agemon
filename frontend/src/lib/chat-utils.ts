@@ -29,7 +29,7 @@ export interface ToolCallEntry {
 function parseToolCallEvent(content: string): ToolCallEvent | null {
   try {
     const obj = JSON.parse(content);
-    if (obj && typeof obj.toolCallId === 'string' && typeof obj.kind === 'string' && typeof obj.title === 'string') {
+    if (obj && typeof obj.toolCallId === 'string' && typeof obj.kind === 'string' && typeof obj.title === 'string' && typeof obj.status === 'string' && obj.args && typeof obj.args === 'object') {
       return obj as ToolCallEvent;
     }
   } catch { /* not JSON */ }
@@ -140,7 +140,7 @@ export function parseActivityMessages(messages: ChatMessage[]) {
       const entry: ToolCallEntry = {
         id: tcEvent.toolCallId || `unnamed-${unnamedIdx++}`,
         label: tcEvent.title,
-        status: 'pending',
+        status: (tcEvent.status === 'completed' || tcEvent.status === 'failed') ? tcEvent.status : 'pending',
         kind: tcEvent.kind === 'Skill' ? 'skill' : 'tool',
         toolKind: tcEvent.kind,
         args: tcEvent.args,
