@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
 import { ArrowLeft, Send, Ban, RotateCcw, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
 import { ConfigOptionPicker } from '@/components/custom/config-option-picker';
@@ -114,7 +113,20 @@ export function SessionChatPanel({
   const availableCommands = useWsStore((s) => s.availableCommands[session.id]) ?? [];
   const [selectedCommandIdx, setSelectedCommandIdx] = useState(-1);
   const hasNavigatedRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea height on input
+  const adjustTextareaHeight = useCallback((el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  // Reset height when input is cleared (after send)
+  useEffect(() => {
+    if (!inputText && inputRef.current) {
+      inputRef.current.style.height = '';
+    }
+  }, [inputText]);
 
   const filteredCommands = useMemo(() => {
     if (!inputText.startsWith('/') || availableCommands.length === 0) return [];
@@ -139,31 +151,42 @@ export function SessionChatPanel({
     inputRef.current?.focus();
   }, [setInputText]);
 
-  const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (!showCommandMenu) return;
-
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      hasNavigatedRef.current = true;
-      setSelectedCommandIdx((prev) =>
-        prev <= 0 ? filteredCommands.length - 1 : prev - 1
-      );
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      hasNavigatedRef.current = true;
-      setSelectedCommandIdx((prev) =>
-        prev >= filteredCommands.length - 1 ? 0 : prev + 1
-      );
-    } else if (e.key === 'Tab' || (e.key === 'Enter' && hasNavigatedRef.current && selectedCommandIdx >= 0)) {
-      e.preventDefault();
-      const cmd = filteredCommands[selectedCommandIdx];
-      if (cmd) selectCommand(cmd);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      // Clear the slash to dismiss
-      setInputText('');
+  const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showCommandMenu) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        hasNavigatedRef.current = true;
+        setSelectedCommandIdx((prev) =>
+          prev <= 0 ? filteredCommands.length - 1 : prev - 1
+        );
+        return;
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        hasNavigatedRef.current = true;
+        setSelectedCommandIdx((prev) =>
+          prev >= filteredCommands.length - 1 ? 0 : prev + 1
+        );
+        return;
+      } else if (e.key === 'Tab' || (e.key === 'Enter' && hasNavigatedRef.current && selectedCommandIdx >= 0)) {
+        e.preventDefault();
+        const cmd = filteredCommands[selectedCommandIdx];
+        if (cmd) selectCommand(cmd);
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setInputText('');
+        return;
+      }
     }
-  }, [showCommandMenu, filteredCommands, selectedCommandIdx, selectCommand, setInputText]);
+
+    // Enter sends; Shift+Enter inserts a newline
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if ((canType || sessionReady) && inputText.trim()) {
+        handleSend();
+      }
+    }
+  }, [showCommandMenu, filteredCommands, selectedCommandIdx, selectCommand, setInputText, canType, sessionReady, inputText, handleSend]);
 
   // ── Sticky scroll ─────────────────────────────────────────────────────
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -333,14 +356,18 @@ export function SessionChatPanel({
                   handleSend();
                 }}
               >
-                <Input
+                <textarea
                   ref={inputRef}
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => {
+                    setInputText(e.target.value);
+                    adjustTextareaHeight(e.target);
+                  }}
                   onKeyDown={handleInputKeyDown}
                   placeholder={inputPlaceholder}
                   disabled={!canType && !sessionReady}
-                  className={`flex-1 min-h-[44px] transition-colors ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
+                  rows={1}
+                  className={`flex-1 min-h-[44px] max-h-[40vh] resize-none overflow-y-auto rounded-md border border-input bg-background px-3 py-3 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
                 />
                 {turnInFlight ? (
                   <Button
