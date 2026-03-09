@@ -14,8 +14,10 @@ export const queryClient = new QueryClient({
 
 export const taskKeys = {
   all: ['tasks'] as const,
-  byProject: (includeArchived?: boolean) => [...taskKeys.all, 'by-project', { includeArchived }] as const,
-  lists: (includeArchived?: boolean) => [...taskKeys.all, 'list', { includeArchived }] as const,
+  byProjectPrefix: () => [...taskKeys.all, 'by-project'] as const,
+  byProject: (includeArchived?: boolean) => [...taskKeys.byProjectPrefix(), { includeArchived }] as const,
+  listsPrefix: () => [...taskKeys.all, 'list'] as const,
+  lists: (includeArchived?: boolean) => [...taskKeys.listsPrefix(), { includeArchived }] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
   events: (id: string) => [...taskKeys.all, 'events', id] as const,
 };
@@ -52,8 +54,10 @@ export function taskEventsQuery(id: string, limit = 500) {
 
 export const sessionKeys = {
   all: ['sessions'] as const,
-  list: (includeArchived?: boolean) => [...sessionKeys.all, 'list', { includeArchived }] as const,
-  forTask: (taskId: string, includeArchived?: boolean) => [...sessionKeys.all, 'task', taskId, { includeArchived }] as const,
+  listPrefix: () => [...sessionKeys.all, 'list'] as const,
+  list: (includeArchived?: boolean) => [...sessionKeys.listPrefix(), { includeArchived }] as const,
+  forTaskPrefix: (taskId: string) => [...sessionKeys.all, 'task', taskId] as const,
+  forTask: (taskId: string, includeArchived?: boolean) => [...sessionKeys.forTaskPrefix(taskId), { includeArchived }] as const,
   chat: (sessionId: string) => [...sessionKeys.all, 'chat', sessionId] as const,
 };
 
