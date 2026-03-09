@@ -1304,6 +1304,52 @@ class ACPAgentManager {
 
 **Dependencies:** None
 
+### Task 4.30: Persist Slash Commands Across Page Refresh
+
+**Priority:** P1
+**Estimated Time:** 30 min
+
+**Deliverables:**
+- [ ] Store available commands on RunningSession in acp.ts (same pattern as configOptions)
+- [ ] Add REST endpoint `GET /sessions/:id/commands` to retrieve stored commands
+- [ ] Frontend: re-fetch commands on mount when store is empty (same useEffect pattern as configOptions)
+
+**Key Considerations:**
+- Mirrors the exact pattern used for configOptions (stored on RunningSession, persisted to DB column, REST fallback on reconnect)
+- Commands are sent once via `available_commands_update` notification after session/new — lost on page refresh without persistence
+- Optionally persist to DB (add `available_commands TEXT` column to agent_sessions) for cross-restart survival
+
+**Affected Areas:** backend (acp.ts, routes, db), frontend (session-chat-panel useEffect, api client)
+
+**Dependencies:** None
+
+### Task 4.31: Database Cleanup for Archived Sessions
+
+**Priority:** P2
+**Estimated Time:** 1 day
+
+**Deliverables:**
+- [ ] Background cleanup job that runs on startup and periodically (e.g. daily)
+- [ ] Purge `acp_events` for archived sessions older than a configurable retention period (default 7 days)
+- [ ] Purge resolved `pending_approvals` and answered `awaiting_input` for archived sessions past retention
+- [ ] Keep task and session metadata records (small, useful for history browsing)
+- [ ] Run SQLite VACUUM after bulk deletes to reclaim disk space
+- [ ] Expose retention settings (days) via env var or settings API
+- [ ] Optional: show DB size in settings page for visibility
+
+**Key Considerations:**
+- `acp_events` is the dominant growth table — hundreds of large records per session
+- Session/task records themselves are tiny and worth keeping indefinitely for history
+- `ON DELETE CASCADE` already handles full task deletion — this is about partial cleanup (keep metadata, purge event detail)
+- SQLite doesn't reclaim space without explicit VACUUM — must run after bulk deletes
+- VACUUM rewrites the entire DB file — should run during low-activity periods, not mid-session
+- Consider WAL mode implications: VACUUM requires exclusive lock, may briefly block writes
+- Future enhancement: summarize events before deleting (store a session recap on the session record)
+
+**Affected Areas:** backend (new cleanup module, db helpers for bulk event deletion, startup hook)
+
+**Dependencies:** Task 4.24 (archive infrastructure)
+
 ---
 
 ## Phase 5: Terminal PTY (Week 5-6)
@@ -2397,4 +2443,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20), speech-to-text input (Task 4.28), auto-resize chat textarea (Task 4.29) planned. Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Slash command persistence fix (Task 4.30), DB cleanup for archived sessions (Task 4.31), agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20), speech-to-text input (Task 4.28), auto-resize chat textarea (Task 4.29) planned. Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.
