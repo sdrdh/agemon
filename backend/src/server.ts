@@ -215,12 +215,16 @@ for (const pluginPath of getAllPluginPaths()) {
   const link = join(pluginPath.globalDir, 'agemon');
   try {
     await lstat(link);
-  } catch {
-    try {
-      await symlink(join(AGEMON_DIR, 'plugins'), link);
-      console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/plugins`);
-    } catch (err) {
-      console.warn(`[agemon] could not create plugin symlink:`, (err as Error).message);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      try {
+        await symlink(join(AGEMON_DIR, 'plugins'), link);
+        console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/plugins`);
+      } catch (symlinkErr) {
+        console.warn(`[agemon] could not create plugin symlink:`, (symlinkErr as Error).message);
+      }
+    } else {
+      console.warn(`[agemon] unexpected error checking plugin symlink ${link}:`, err.message);
     }
   }
 }
@@ -234,12 +238,16 @@ for (const skillPath of getAllSkillPaths()) {
   const link = join(skillPath.globalDir, 'agemon');
   try {
     await lstat(link);
-  } catch {
-    try {
-      await symlink(join(AGEMON_DIR, 'skills'), link);
-      console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/skills`);
-    } catch (err) {
-      console.warn(`[agemon] could not create skill symlink:`, (err as Error).message);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      try {
+        await symlink(join(AGEMON_DIR, 'skills'), link);
+        console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/skills`);
+      } catch (symlinkErr) {
+        console.warn(`[agemon] could not create skill symlink:`, (symlinkErr as Error).message);
+      }
+    } else {
+      console.warn(`[agemon] unexpected error checking skill symlink ${link}:`, err.message);
     }
   }
 }

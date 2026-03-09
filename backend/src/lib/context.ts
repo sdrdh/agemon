@@ -11,9 +11,9 @@
  * Called at session start and when repos are attached/changed on a task.
  */
 
-import { mkdir, writeFile, symlink, rm, access, readdir, lstat, readlink } from 'fs/promises';
+import { mkdir, writeFile, symlink, rm, access, readdir, lstat, stat, readlink } from 'fs/promises';
 import type { Dirent } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { AGEMON_DIR } from './git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './agents.ts';
 import type { Task } from '@agemon/shared';
@@ -53,20 +53,27 @@ export function getTaskDir(taskId: string): string {
 // ─── CLAUDE.md ───────────────────────────────────────────────────────────────
 
 async function generateClaudeMd(task: Task, taskDir: string): Promise<void> {
+  // Sanitize user inputs to prevent prompt injection / markdown abuse
+  const safeTitle = task.title.replace(/\n/g, ' ').replace(/^#+\s*/g, '').slice(0, 500);
   const lines: string[] = [
-    `# Task: ${task.title}`,
+    `# Task: ${safeTitle}`,
     '',
   ];
 
   if (task.description) {
-    lines.push(task.description, '');
+    // Escape markdown headings and @ file references in description
+    const safeDesc = task.description
+      .replace(/^(#+)/gm, '\\$1')   // escape # headings
+      .replace(/@/g, '\\@');         // escape @ file references
+    lines.push(safeDesc, '');
   }
 
   lines.push('---', '', '## Global Instructions', '');
 
   const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
   if (await exists(globalClaudeMd)) {
-    lines.push(`@${globalClaudeMd}`, '');
+    lines.push(`@${globalClaudeMd}`);
+    lines.push('');
   }
 
   if (task.repos.length > 0) {
@@ -96,7 +103,7 @@ async function refreshPluginSymlinks(task: Task, taskDir: string): Promise<void>
   for (const repo of task.repos) {
     const repoSafe = safeName(repo.name);
     const repoPlugins = join(taskDir, repoSafe, '.claude', 'plugins');
-    if (await exists(repoPlugins)) {
+    if (await isRealDirectory(repoPlugins, taskDir)) {
       const linkPath = join(pluginsDir, repoSafe);
       if (!(await exists(linkPath))) {
         await symlink(repoPlugins, linkPath);
@@ -113,7 +120,7 @@ async function refreshSkillSymlinks(task: Task, taskDir: string): Promise<void> 
   for (const repo of task.repos) {
     const repoSafe = safeName(repo.name);
     const repoSkills = join(taskDir, repoSafe, '.claude', 'skills');
-    if (await exists(repoSkills)) {
+    if (await isRealDirectory(repoSkills, taskDir)) {
       const linkPath = join(skillsDir, repoSafe);
       if (!(await exists(linkPath))) {
         await symlink(repoSkills, linkPath);
@@ -122,10 +129,38 @@ async function refreshSkillSymlinks(task: Task, taskDir: string): Promise<void> 
   }
 }
 
+/**
+ * Verify a path is a real directory (not a symlink) and lives within the
+ * expected parent directory. Guards against malicious repos containing
+ * symlinks that escape the worktree to access sensitive host files.
+ */
+async function isRealDirectory(p: string, parentDir: string): Promise<boolean> {
+  try {
+    const resolved = resolve(p);
+    if (!resolved.startsWith(resolve(parentDir) + '/')) return false;
+    const s = await lstat(resolved);
+    // If it's a symlink, resolve and check the target is still within parentDir
+    if (s.isSymbolicLink()) {
+      const target = resolve(await readlink(resolved));
+      if (!target.startsWith(resolve(parentDir) + '/')) return false;
+      const ts = await stat(target);
+      return ts.isDirectory();
+    }
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Remove symlinks in dir for repos no longer attached to the task. */
 async function pruneStaleSymlinks(dir: string, task: Task): Promise<void> {
   let entries: string[];
-  try { entries = await readdir(dir); } catch { return; }
+  try {
+    entries = await readdir(dir);
+  } catch (err) {
+    console.warn(`[context] failed to read directory ${dir} for symlink pruning:`, err);
+    return;
+  }
 
   const validNames = new Set(task.repos.map(r => safeName(r.name)));
   for (const entry of entries) {
