@@ -349,13 +349,7 @@ export function SessionChatPanel({
                   ))}
                 </div>
               )}
-              <form
-                className="flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSend();
-                }}
-              >
+              <div className="flex gap-2">
                 <textarea
                   ref={inputRef}
                   value={inputText}
@@ -382,15 +376,16 @@ export function SessionChatPanel({
                   </Button>
                 ) : (
                   <Button
-                    type="submit"
+                    type="button"
                     size="icon"
+                    onClick={handleSend}
                     disabled={(!canType && !sessionReady) || !inputText.trim()}
                     className="min-h-[44px] min-w-[44px]"
                   >
                     <Send className="h-4 w-4" />
                   </Button>
                 )}
-              </form>
+              </div>
             </div>
             {(modeOption || modelOption) && (
               <div className="flex items-center gap-2 mt-2">
