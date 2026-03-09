@@ -661,10 +661,8 @@ export function spawnAndHandshake(taskId: string, agentType: AgentType): AgentSe
   // Broadcast session_started so all WS clients refresh
   broadcast({ type: 'session_started', taskId, session: db.getSession(sessionId)! });
 
-  // Resolve working directory
-  const agentCwd = task.repos.length > 0
-    ? gitManager.getWorktreePath(taskId, task.repos[0].name)
-    : process.cwd();
+  // Resolve working directory — always use task dir for consistency
+  const agentCwd = getTaskDir(taskId);
 
   // Run handshake asynchronously (transitions to ready)
   runAcpHandshake(rs.transport, sessionId, taskId, agentCwd).catch((err) => {
