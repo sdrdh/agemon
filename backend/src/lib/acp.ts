@@ -19,6 +19,7 @@ import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
 import { refreshTaskContext, getTaskDir } from './context.ts';
+import { mkdir } from 'fs/promises';
 
 // ─── Config Option Parsing ───────────────────────────────────────────────────
 
@@ -661,11 +662,11 @@ export function spawnAndHandshake(taskId: string, agentType: AgentType): AgentSe
   // Broadcast session_started so all WS clients refresh
   broadcast({ type: 'session_started', taskId, session: db.getSession(sessionId)! });
 
-  // Resolve working directory — always use task dir for consistency
+  // Ensure task directory exists, then run handshake
   const agentCwd = getTaskDir(taskId);
-
-  // Run handshake asynchronously (transitions to ready)
-  runAcpHandshake(rs.transport, sessionId, taskId, agentCwd).catch((err) => {
+  mkdir(agentCwd, { recursive: true }).then(() =>
+    runAcpHandshake(rs.transport, sessionId, taskId, agentCwd)
+  ).catch((err) => {
     console.error(`[acp] handshake error for session ${sessionId}:`, err);
   });
 
@@ -785,6 +786,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
   const rs = spawnProcess(sessionId, taskId, agentType);
 
   const agentCwd = getTaskDir(taskId);
+  await mkdir(agentCwd, { recursive: true });
 
   // Run handshake, then attempt session/load
   try {

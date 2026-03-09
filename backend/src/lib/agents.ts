@@ -216,6 +216,7 @@ function getExpandedPath(): string {
   const extraDirs = [
     `${home}/.local/bin`,
     `${home}/.bun/bin`,
+    `${home}/.opencode/bin`,
     `${home}/go/bin`,
     `${home}/.cargo/bin`,
     `${home}/.npm-global/bin`,
