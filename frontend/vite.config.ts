@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    allowedHosts: process.env.VITE_ALLOWED_HOSTS?.split(',').map(h => h.trim()) ?? [],
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
