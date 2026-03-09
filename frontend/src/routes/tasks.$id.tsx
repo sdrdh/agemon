@@ -155,7 +155,7 @@ export default function TaskDetailView() {
       if (sessions.length === 0 && task?.description) {
         setInputText(task.description);
       }
-      qc.invalidateQueries({ queryKey: sessionKeys.forTask(taskId) });
+      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
       qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
       showToast({ title: 'Session created' });
     },
@@ -167,7 +167,7 @@ export default function TaskDetailView() {
   const stopMutation = useMutation({
     mutationFn: (sessionId: string) => api.stopSession(sessionId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: sessionKeys.forTask(taskId) });
+      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
       qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
       showToast({ title: 'Stop signal sent' });
     },
@@ -179,7 +179,7 @@ export default function TaskDetailView() {
   const resumeMutation = useMutation({
     mutationFn: (sessionId: string) => api.resumeSession(sessionId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: sessionKeys.forTask(taskId) });
+      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
       qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
       showToast({ title: 'Session resumed' });
     },
@@ -279,7 +279,7 @@ export default function TaskDetailView() {
   // Handle browser back gesture / back button on mobile
   useEffect(() => {
     if (isDesktop) return;
-    const onPopState = (e: PopStateEvent) => {
+    const onPopState = (_e: PopStateEvent) => {
       if (selectedSessionId) {
         // User pressed back while viewing a session — return to session list
         setSelectedSessionId(null);

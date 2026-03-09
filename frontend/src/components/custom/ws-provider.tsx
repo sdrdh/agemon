@@ -45,8 +45,11 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'task_updated': {
           const task = event.task;
           queryClient.setQueryData(taskKeys.detail(task.id), task);
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
-          queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.listsPrefix() });
+          // Also invalidate session queries — task_updated is broadcast on session archive
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(task.id) });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
           break;
         }
         case 'agent_thought': {
@@ -93,21 +96,21 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().markUnread(event.sessionId);
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
           break;
         }
         case 'session_started': {
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'session_ready': {
           store().setAgentActivity(event.session.id, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'session_state_changed': {
@@ -128,9 +131,9 @@ export function WsProvider({ children }: { children: ReactNode }) {
           }
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTask(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'approval_requested': {
@@ -175,7 +178,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProject() });
+          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
           break;
         }
         case 'turn_completed': {
