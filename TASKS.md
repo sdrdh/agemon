@@ -1289,10 +1289,10 @@ class ACPAgentManager {
 **Estimated Time:** 2 hours
 
 **Deliverables:**
-- [ ] Replace fixed-height input with auto-resizing textarea in session chat panel
-- [ ] Grow textarea height as user types multi-line content (up to a max height, then scroll)
-- [ ] Shrink back to single-line height when content is cleared/sent
-- [ ] Apply same auto-resize behavior to task creation description textarea if fixed
+- [x] Replace fixed-height input with auto-resizing textarea in session chat panel
+- [x] Grow textarea height as user types multi-line content (up to a max height, then scroll)
+- [x] Shrink back to single-line height when content is cleared/sent
+- [x] Apply same auto-resize behavior to task creation description textarea if fixed
 
 **Key Considerations:**
 - Common pattern: listen to `input` event, reset height to `auto`, then set to `scrollHeight`, capped by `max-height`

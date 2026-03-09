@@ -65,10 +65,16 @@ export default function TaskCreateForm() {
           <Textarea
             id="description"
             value={description}
-            onChange={e => setDescription(e.target.value)}
+            onChange={e => {
+              setDescription(e.target.value);
+              const el = e.target;
+              el.style.height = 'auto';
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             placeholder="Additional context for the agent..."
             rows={3}
             maxLength={10000}
+            className="resize-none overflow-y-auto max-h-[50vh]"
           />
         </div>
 
