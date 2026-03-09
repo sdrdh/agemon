@@ -20,6 +20,18 @@ import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
 import { refreshTaskContext, getTaskDir } from './context.ts';
 import { mkdir } from 'fs/promises';
+import type { Task } from '@agemon/shared';
+
+/**
+ * Ensure the task directory exists and context artifacts are current.
+ * Worktrees are created when repos are attached (in routes/tasks.ts),
+ * not here — this just ensures the dir + CLAUDE.md/symlinks are ready.
+ */
+async function prepareTaskDir(task: Task): Promise<void> {
+  const taskDir = getTaskDir(task.id);
+  await mkdir(taskDir, { recursive: true });
+  await refreshTaskContext(task);
+}
 
 // ─── Config Option Parsing ───────────────────────────────────────────────────
 
@@ -662,9 +674,9 @@ export function spawnAndHandshake(taskId: string, agentType: AgentType): AgentSe
   // Broadcast session_started so all WS clients refresh
   broadcast({ type: 'session_started', taskId, session: db.getSession(sessionId)! });
 
-  // Ensure task directory exists, then run handshake
+  // Set up task directory: create worktrees for attached repos, then refresh context
   const agentCwd = getTaskDir(taskId);
-  mkdir(agentCwd, { recursive: true }).then(() =>
+  prepareTaskDir(task).then(() =>
     runAcpHandshake(rs.transport, sessionId, taskId, agentCwd)
   ).catch((err) => {
     console.error(`[acp] handshake error for session ${sessionId}:`, err);
@@ -786,7 +798,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
   const rs = spawnProcess(sessionId, taskId, agentType);
 
   const agentCwd = getTaskDir(taskId);
-  await mkdir(agentCwd, { recursive: true });
+  await prepareTaskDir(task);
 
   // Run handshake, then attempt session/load
   try {

@@ -77,6 +77,22 @@ tasksRoutes.post('/tasks', async (c) => {
     repos: repoUrls,
   });
 
+  // Create worktrees + context for any repos attached at creation
+  if (repoUrls.length > 0) {
+    (async () => {
+      for (const repo of task.repos) {
+        try {
+          await gitManager.createWorktree(task.id, repo.url);
+        } catch (err) {
+          console.warn(`[context] failed to create worktree for ${repo.name}:`, (err as Error).message);
+        }
+      }
+      await refreshTaskContext(task);
+    })().catch((err) => {
+      console.warn(`[context] failed to set up context for task ${task.id}:`, err);
+    });
+  }
+
   broadcast({ type: 'task_updated', task });
   return c.json(task, 201);
 });
@@ -133,9 +149,18 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
   const updated = db.updateTask(task.id, { title, description, agent, repos, status, archived });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
 
-  // Refresh task context when repos change
+  // When repos change: create worktrees + refresh context (CLAUDE.md, symlinks)
   if (repos !== undefined) {
-    refreshTaskContext(updated).catch((err) => {
+    (async () => {
+      for (const repo of updated.repos) {
+        try {
+          await gitManager.createWorktree(updated.id, repo.url);
+        } catch (err) {
+          console.warn(`[context] failed to create worktree for ${repo.name}:`, (err as Error).message);
+        }
+      }
+      await refreshTaskContext(updated);
+    })().catch((err) => {
       console.warn(`[context] failed to refresh context for task ${updated.id}:`, err);
     });
   }
