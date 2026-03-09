@@ -28,7 +28,7 @@ Phone / Browser
   (ACP protocol)
        │
   Git Worktrees
-  .agemon/tasks/{id}/{repo}/
+  ~/.agemon/tasks/{id}/{repo}/
 ```
 
 ## Components
