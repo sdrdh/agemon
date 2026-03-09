@@ -11,7 +11,8 @@
  * Called at session start and when repos are attached/changed on a task.
  */
 
-import { mkdir, writeFile, symlink, rm, access, readdir } from 'fs/promises';
+import { mkdir, writeFile, symlink, rm, access, readdir, lstat, readlink } from 'fs/promises';
+import type { Dirent } from 'fs';
 import { join } from 'path';
 import { AGEMON_DIR } from './git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './agents.ts';
@@ -164,24 +165,109 @@ async function wireAgentPluginDirs(taskDir: string): Promise<void> {
 
 /**
  * Wire each agent's skill discovery directory inside the task dir.
- * Skills are project-scoped (no global equivalent), so we only link
- * the aggregated .agemonskills/ into the agent's expected path.
+ *
+ * Claude Code (and most agents per the Agent Skills spec) scan only ONE
+ * level deep: they look for immediate child directories containing SKILL.md.
+ * So we can't just symlink a parent directory — we must flatten individual
+ * skill dirs directly into the agent's discovery path.
+ *
+ * Strategy: enumerate skill dirs from both .agemonskills/ (repo-level, which
+ * itself contains per-repo subdirs of skill dirs) and ~/.agemon/skills/
+ * (global), then symlink each individual skill dir into the agent's path.
+ * Prune stale links that no longer resolve.
  */
 async function wireAgentSkillDirs(taskDir: string): Promise<void> {
   for (const skillPath of getAllSkillPaths()) {
     const agentSkillsDir = join(taskDir, skillPath.taskRelative);
     await mkdir(agentSkillsDir, { recursive: true });
 
-    // _task → task-level aggregated skills
-    const taskLink = join(agentSkillsDir, '_task');
-    if (!(await exists(taskLink))) {
-      await symlink(join(taskDir, '.agemonskills'), taskLink);
+    // Collect individual skill dirs from repo-level aggregation.
+    // .agemonskills/{repoSafe}/ contains symlinks to repo .claude/skills/ dirs,
+    // each of which contains skill-name/ subdirs with SKILL.md.
+    const repoSkillsBase = join(taskDir, '.agemonskills');
+    await flattenSkillsInto(agentSkillsDir, repoSkillsBase, '_repo:');
+
+    // Collect individual skill dirs from global ~/.agemon/skills/
+    const globalSkillsBase = join(AGEMON_DIR, 'skills');
+    await flattenSkillsInto(agentSkillsDir, globalSkillsBase, '_global:');
+
+    // Prune stale symlinks (targets that no longer exist)
+    await pruneDeadSymlinks(agentSkillsDir);
+  }
+}
+
+/**
+ * Scan a source directory (which may contain skill dirs directly or
+ * subdirectories of skill dirs) and symlink each skill dir into destDir.
+ * Link names are prefixed to avoid collisions between sources.
+ *
+ * Handles two layouts:
+ *   source/my-skill/SKILL.md           → direct skill dir
+ *   source/org--repo/my-skill/SKILL.md → nested (repo aggregation)
+ */
+async function flattenSkillsInto(
+  destDir: string,
+  sourceDir: string,
+  prefix: string,
+): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(sourceDir, { withFileTypes: true });
+  } catch { return; }
+
+  for (const entry of entries) {
+    const childPath = join(sourceDir, entry.name);
+    // Resolve symlinks to check if target is a directory
+    const isDir = entry.isDirectory() || entry.isSymbolicLink();
+    if (!isDir) continue;
+
+    // Check if this child IS a skill dir (has SKILL.md)
+    if (await exists(join(childPath, 'SKILL.md'))) {
+      const linkName = `${prefix}${entry.name}`;
+      const linkPath = join(destDir, linkName);
+      if (!(await exists(linkPath))) {
+        try { await symlink(childPath, linkPath); } catch { /* skip collisions */ }
+      }
+      continue;
     }
 
-    // _global → ~/.agemon/skills/ (global skills shared across tasks)
-    const globalLink = join(agentSkillsDir, '_global');
-    if (!(await exists(globalLink))) {
-      await symlink(join(AGEMON_DIR, 'skills'), globalLink);
+    // Otherwise, scan one level deeper (e.g. .agemonskills/org--repo/ → skill dirs)
+    let subEntries: Dirent[];
+    try {
+      subEntries = await readdir(childPath, { withFileTypes: true });
+    } catch { continue; }
+
+    for (const sub of subEntries) {
+      const subPath = join(childPath, sub.name);
+      if (!(sub.isDirectory() || sub.isSymbolicLink())) continue;
+      if (await exists(join(subPath, 'SKILL.md'))) {
+        const linkName = `${prefix}${entry.name}:${sub.name}`;
+        const linkPath = join(destDir, linkName);
+        if (!(await exists(linkPath))) {
+          try { await symlink(subPath, linkPath); } catch { /* skip collisions */ }
+        }
+      }
+    }
+  }
+}
+
+/** Remove symlinks whose targets no longer exist. */
+async function pruneDeadSymlinks(dir: string): Promise<void> {
+  let entries: string[];
+  try { entries = await readdir(dir); } catch { return; }
+
+  for (const entry of entries) {
+    const entryPath = join(dir, entry);
+    try {
+      const stat = await lstat(entryPath);
+      if (!stat.isSymbolicLink()) continue;
+      // Check if target exists
+      if (!(await exists(entryPath))) {
+        await rm(entryPath, { force: true });
+      }
+    } catch {
+      // If lstat fails, try to remove
+      await rm(entryPath, { force: true }).catch(() => {});
     }
   }
 }
