@@ -179,8 +179,8 @@ export function SessionChatPanel({
       }
     }
 
-    // Enter sends; Shift+Enter inserts a newline
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Shift+Enter sends; Enter inserts a newline
+    if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
       if ((canType || sessionReady) && inputText.trim()) {
         handleSend();
