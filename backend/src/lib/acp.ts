@@ -18,6 +18,7 @@ import type { AgentCommand, AgentSession, AgentSessionState, AgentType, Approval
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
+import { refreshTaskContext, getTaskDir } from './context.ts';
 
 // ─── Config Option Parsing ───────────────────────────────────────────────────
 
@@ -785,9 +786,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
 
   const rs = spawnProcess(sessionId, taskId, agentType);
 
-  const agentCwd = task.repos.length > 0
-    ? gitManager.getWorktreePath(taskId, task.repos[0].name)
-    : process.cwd();
+  const agentCwd = getTaskDir(taskId);
 
   // Run handshake, then attempt session/load
   try {

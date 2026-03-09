@@ -5,6 +5,7 @@ import { db, generateTaskId } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions } from '../lib/acp.ts';
 import { gitManager } from '../lib/git.ts';
+import { refreshTaskContext } from '../lib/context.ts';
 import type { CreateTaskBody, UpdateTaskBody, CreateSessionBody, AgentType, Task, TaskStatus } from '@agemon/shared';
 import { AGENT_TYPES, SSH_REPO_REGEX } from '@agemon/shared';
 
@@ -131,6 +132,14 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
 
   const updated = db.updateTask(task.id, { title, description, agent, repos, status, archived });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
+
+  // Refresh task context when repos change
+  if (repos !== undefined) {
+    refreshTaskContext(updated).catch((err) => {
+      console.warn(`[context] failed to refresh context for task ${updated.id}:`, err);
+    });
+  }
+
   broadcast({ type: 'task_updated', task: updated });
   return c.json(updated);
 });

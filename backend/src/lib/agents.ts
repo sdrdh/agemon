@@ -6,16 +6,52 @@
  * Agemon variables before passing env to subprocesses.
  */
 
+import { join } from 'path';
+import { homedir } from 'os';
 import type { AgentType, SessionConfigOption } from '@agemon/shared';
 
 /** Strategy for parsing config options from a session/new response. */
 export type ConfigOptionParser = (result: Record<string, unknown>) => SessionConfigOption[];
+
+/**
+ * Path inside ~/.agemon/tasks/{taskId}/ where this agent discovers plugins.
+ * e.g. '.claude/plugins' → ~/.agemon/tasks/{taskId}/.claude/plugins/
+ *
+ * Also used at startup to symlink ~/.agemon/plugins into the agent's
+ * global discovery directory (e.g. ~/.claude/plugins/agemon).
+ */
+export interface AgentPluginPath {
+  /** Relative path from task dir for per-task plugin wiring */
+  taskRelative: string;
+  /** Absolute dir in user home for global plugin symlink (e.g. ~/.claude/plugins) */
+  globalDir: string;
+}
+
+/**
+ * Path inside ~/.agemon/tasks/{taskId}/ where this agent discovers skills.
+ * e.g. '.claude/skills' → ~/.agemon/tasks/{taskId}/.claude/skills/
+ *
+ * Per the Agent Skills spec (agentskills.io), agents scan both client-specific
+ * and cross-client (.agents/skills/) directories at project and user level.
+ * globalDir is optional — set it to also symlink ~/.agemon/skills into the
+ * agent's user-level discovery dir (e.g. ~/.agents/skills, ~/.claude/skills).
+ */
+export interface AgentSkillPath {
+  /** Relative path from task dir for per-task skill wiring */
+  taskRelative: string;
+  /** Absolute dir in user home for global skill symlink (optional) */
+  globalDir?: string;
+}
 
 export interface AgentConfig {
   command: string[];
   passEnvVars: string[];
   label: string;
   parseConfigOptions: ConfigOptionParser;
+  /** Where this agent looks for plugins. Empty array = no plugin discovery. */
+  pluginPaths: AgentPluginPath[];
+  /** Where this agent looks for skills. Empty array = no skill discovery. */
+  skillPaths: AgentSkillPath[];
 }
 
 // ─── Per-Agent Config Option Parsers ────────────────────────────────────────
@@ -89,26 +125,77 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: [],
     label: 'Claude Code (via claude-agent-acp)',
     parseConfigOptions: parseClaudeConfigOptions,
+    pluginPaths: [{
+      taskRelative: '.claude/plugins',
+      globalDir: join(homedir(), '.claude', 'plugins'),
+    }],
+    skillPaths: [
+      { taskRelative: '.claude/skills', globalDir: join(homedir(), '.claude', 'skills') },
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'opencode': {
     command: ['opencode', 'acp'],
     passEnvVars: ['OPENCODE_API_KEY'],
     label: 'OpenCode',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    pluginPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'aider': {
     command: ['aider', '--acp'],
     passEnvVars: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'],
     label: 'Aider',
     parseConfigOptions: parseNoConfigOptions,
+    pluginPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
     parseConfigOptions: parseNoConfigOptions,
+    pluginPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
 };
+
+/** Collect all unique plugin discovery paths across all agents. */
+export function getAllPluginPaths(): AgentPluginPath[] {
+  const seen = new Set<string>();
+  const paths: AgentPluginPath[] = [];
+  for (const config of Object.values(AGENT_CONFIGS)) {
+    for (const p of config.pluginPaths) {
+      const key = `${p.globalDir}::${p.taskRelative}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        paths.push(p);
+      }
+    }
+  }
+  return paths;
+}
+
+/** Collect all unique skill discovery paths across all agents. */
+export function getAllSkillPaths(): AgentSkillPath[] {
+  const seen = new Set<string>();
+  const paths: AgentSkillPath[] = [];
+  for (const config of Object.values(AGENT_CONFIGS)) {
+    for (const p of config.skillPaths) {
+      if (!seen.has(p.taskRelative)) {
+        seen.add(p.taskRelative);
+        paths.push(p);
+      }
+    }
+  }
+  return paths;
+}
 
 /** System env vars that agents need to function (PATH, HOME, locale, etc.) */
 const ALLOWED_SYSTEM_VARS = [

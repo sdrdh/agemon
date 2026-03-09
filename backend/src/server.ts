@@ -5,7 +5,11 @@ import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
+import { mkdir, symlink, lstat } from 'fs/promises';
+import { join } from 'path';
 import { runMigrations, db } from './db/client.ts';
+import { AGEMON_DIR } from './lib/git.ts';
+import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -197,6 +201,57 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+
+// Ensure ~/.agemon base dirs exist before DB/migrations
+await mkdir(join(AGEMON_DIR, 'repos'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'tasks'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
+console.info(`[agemon] data directory: ${AGEMON_DIR}`);
+
+// Wire global agemon plugins into each agent's discovery path
+for (const pluginPath of getAllPluginPaths()) {
+  await mkdir(pluginPath.globalDir, { recursive: true });
+  const link = join(pluginPath.globalDir, 'agemon');
+  try {
+    await lstat(link);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      try {
+        await symlink(join(AGEMON_DIR, 'plugins'), link);
+        console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/plugins`);
+      } catch (symlinkErr) {
+        console.warn(`[agemon] could not create plugin symlink:`, (symlinkErr as Error).message);
+      }
+    } else {
+      console.warn(`[agemon] unexpected error checking plugin symlink ${link}:`, err.message);
+    }
+  }
+}
+
+// Wire global agemon skills into each agent's discovery path
+// Per Agent Skills spec (agentskills.io), agents scan ~/.agents/skills/ (cross-client)
+// and ~/.<client>/skills/ (client-specific) at user level.
+for (const skillPath of getAllSkillPaths()) {
+  if (!skillPath.globalDir) continue;
+  await mkdir(skillPath.globalDir, { recursive: true });
+  const link = join(skillPath.globalDir, 'agemon');
+  try {
+    await lstat(link);
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      try {
+        await symlink(join(AGEMON_DIR, 'skills'), link);
+        console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/skills`);
+      } catch (symlinkErr) {
+        console.warn(`[agemon] could not create skill symlink:`, (symlinkErr as Error).message);
+      }
+    } else {
+      console.warn(`[agemon] unexpected error checking skill symlink ${link}:`, err.message);
+    }
+  }
+}
+
 try {
   runMigrations();
 } catch (err) {

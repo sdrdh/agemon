@@ -130,11 +130,38 @@ Single static token via env var `AGEMON_KEY`. HTTP Bearer on all API routes. No 
 
 ## Worktree Convention
 
+Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env var).
+
 ```
-.agemon/tasks/{task-id}/{repo-name}/   # git worktree per repo per task
+~/.agemon/
+├── agemon.db                        # SQLite database
+├── CLAUDE.md                        # global instructions injected into every session
+├── plugins/                         # global plugins (symlinked into agent discovery paths)
+├── skills/                          # global skills (symlinked into agent discovery paths)
+├── repos/{org}--{repo}.git          # bare repo cache
+└── tasks/{taskId}/
+    ├── CLAUDE.md                    # generated: references global + per-repo CLAUDE.md/AGENT.md
+    ├── .agemonplugins/              # aggregated repo plugins (symlinks into each worktree)
+    ├── .agemonskills/               # aggregated repo skills (symlinks into each worktree)
+    ├── .claude/plugins/
+    │   ├── _global -> ~/.agemon/plugins/
+    │   └── _task   -> ../.agemonplugins/
+    ├── .claude/skills/
+    │   ├── _global -> ~/.agemon/skills/
+    │   └── _task   -> ../.agemonskills/
+    ├── .agents/skills/              # cross-client skill discovery (Agent Skills spec)
+    │   ├── _global -> ~/.agemon/skills/
+    │   └── _task   -> ../.agemonskills/
+    └── {org}--{repo}/               # git worktree per repo
 ```
 
-Branch naming: `{task-id}-{repo-name}`
+**Agent CWD:** always `~/.agemon/tasks/{taskId}/` — all repos accessible as subdirectories.
+
+**Branch naming:** `agemon/{taskId}-{org}--{repo}`
+
+Global agemon plugins are automatically symlinked into `~/.claude/plugins/agemon` on server startup.
+
+Global agemon skills are symlinked into `~/.claude/skills/agemon` and `~/.agents/skills/agemon` (cross-client, per [Agent Skills spec](https://agentskills.io/specification)) on server startup.
 
 ---
 
@@ -144,7 +171,8 @@ Branch naming: `{task-id}-{repo-name}`
 AGEMON_KEY        # required — static auth token
 GITHUB_PAT        # required for PR creation
 PORT              # optional, default 3000
-DB_PATH           # optional, default ./agemon.db
+DB_PATH           # optional, default ~/.agemon/agemon.db
+AGEMON_DIR        # optional, default ~/.agemon
 ```
 
 ---
