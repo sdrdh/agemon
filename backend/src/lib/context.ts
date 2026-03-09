@@ -5,7 +5,7 @@
  *   - ~/.agemon/tasks/{taskId}/CLAUDE.md          (synthesized from global + repo instructions)
  *   - ~/.agemon/tasks/{taskId}/.agemonplugins/    (symlinks to repo .claude/plugins/)
  *   - ~/.agemon/tasks/{taskId}/.agemonskills/     (symlinks to repo .claude/skills/)
- *   - ~/.agemon/tasks/{taskId}/.claude/plugins/   (wired to global + task plugins)
+ *   - ~/.agemon/tasks/{taskId}/{agent-plugin-dir}/ (wired to global + task plugins, per agent config)
  *
  * Called at session start and when repos are attached/changed on a task.
  */
@@ -13,6 +13,7 @@
 import { mkdir, writeFile, symlink, rm, access, readdir } from 'fs/promises';
 import { join } from 'path';
 import { AGEMON_DIR } from './git.ts';
+import { getAllPluginPaths } from './agents.ts';
 import type { Task } from '@agemon/shared';
 
 /** Filesystem-safe repo dir name (mirrors git.ts safeName). */
@@ -37,7 +38,7 @@ export async function refreshTaskContext(task: Task): Promise<void> {
     generateClaudeMd(task, taskDir),
     refreshPluginSymlinks(task, taskDir),
     refreshSkillSymlinks(task, taskDir),
-    wireClaudePluginsDir(taskDir),
+    wireAgentPluginDirs(taskDir),
   ]);
 }
 
@@ -131,25 +132,28 @@ async function pruneStaleSymlinks(dir: string, task: Task): Promise<void> {
   }
 }
 
-// ─── .claude/plugins wiring ──────────────────────────────────────────────────
+// ─── Agent plugin directory wiring ──────────────────────────────────────────
 
 /**
- * Wire ~/.agemon/tasks/{taskId}/.claude/plugins/ so Claude Code
- * discovers both global agemon plugins and task-level repo plugins.
+ * Wire each agent's plugin discovery directory inside the task dir.
+ * Reads pluginPaths from agent configs so adding a new agent automatically
+ * gets plugin wiring without touching this code.
  */
-async function wireClaudePluginsDir(taskDir: string): Promise<void> {
-  const claudePluginsDir = join(taskDir, '.claude', 'plugins');
-  await mkdir(claudePluginsDir, { recursive: true });
+async function wireAgentPluginDirs(taskDir: string): Promise<void> {
+  for (const pluginPath of getAllPluginPaths()) {
+    const agentPluginsDir = join(taskDir, pluginPath.taskRelative);
+    await mkdir(agentPluginsDir, { recursive: true });
 
-  // _global → ~/.agemon/plugins/
-  const globalLink = join(claudePluginsDir, '_global');
-  if (!(await exists(globalLink))) {
-    await symlink(join(AGEMON_DIR, 'plugins'), globalLink);
-  }
+    // _global → ~/.agemon/plugins/
+    const globalLink = join(agentPluginsDir, '_global');
+    if (!(await exists(globalLink))) {
+      await symlink(join(AGEMON_DIR, 'plugins'), globalLink);
+    }
 
-  // _task → ../../.agemonplugins/ (relative so it works if dir moves)
-  const taskLink = join(claudePluginsDir, '_task');
-  if (!(await exists(taskLink))) {
-    await symlink(join(taskDir, '.agemonplugins'), taskLink);
+    // _task → task-level aggregated plugins
+    const taskLink = join(agentPluginsDir, '_task');
+    if (!(await exists(taskLink))) {
+      await symlink(join(taskDir, '.agemonplugins'), taskLink);
+    }
   }
 }

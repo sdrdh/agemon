@@ -7,9 +7,9 @@ import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
 import { mkdir, symlink, lstat } from 'fs/promises';
 import { join } from 'path';
-import { homedir } from 'os';
 import { runMigrations, db } from './db/client.ts';
 import { AGEMON_DIR } from './lib/git.ts';
+import { getAllPluginPaths } from './lib/agents.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -209,18 +209,19 @@ await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
 
-// Wire global agemon plugins into Claude Code's discovery path
-const claudePluginsDir = join(homedir(), '.claude', 'plugins');
-await mkdir(claudePluginsDir, { recursive: true });
-const agemonPluginLink = join(claudePluginsDir, 'agemon');
-try {
-  await lstat(agemonPluginLink);
-} catch {
+// Wire global agemon plugins into each agent's discovery path
+for (const pluginPath of getAllPluginPaths()) {
+  await mkdir(pluginPath.globalDir, { recursive: true });
+  const link = join(pluginPath.globalDir, 'agemon');
   try {
-    await symlink(join(AGEMON_DIR, 'plugins'), agemonPluginLink);
-    console.info(`[agemon] linked ${agemonPluginLink} -> ${AGEMON_DIR}/plugins`);
-  } catch (err) {
-    console.warn(`[agemon] could not create plugin symlink:`, (err as Error).message);
+    await lstat(link);
+  } catch {
+    try {
+      await symlink(join(AGEMON_DIR, 'plugins'), link);
+      console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/plugins`);
+    } catch (err) {
+      console.warn(`[agemon] could not create plugin symlink:`, (err as Error).message);
+    }
   }
 }
 

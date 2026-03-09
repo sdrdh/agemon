@@ -6,16 +6,34 @@
  * Agemon variables before passing env to subprocesses.
  */
 
+import { join } from 'path';
+import { homedir } from 'os';
 import type { AgentType, SessionConfigOption } from '@agemon/shared';
 
 /** Strategy for parsing config options from a session/new response. */
 export type ConfigOptionParser = (result: Record<string, unknown>) => SessionConfigOption[];
+
+/**
+ * Path inside ~/.agemon/tasks/{taskId}/ where this agent discovers plugins.
+ * e.g. '.claude/plugins' → ~/.agemon/tasks/{taskId}/.claude/plugins/
+ *
+ * Also used at startup to symlink ~/.agemon/plugins into the agent's
+ * global discovery directory (e.g. ~/.claude/plugins/agemon).
+ */
+export interface AgentPluginPath {
+  /** Relative path from task dir for per-task plugin wiring */
+  taskRelative: string;
+  /** Absolute dir in user home for global plugin symlink (e.g. ~/.claude/plugins) */
+  globalDir: string;
+}
 
 export interface AgentConfig {
   command: string[];
   passEnvVars: string[];
   label: string;
   parseConfigOptions: ConfigOptionParser;
+  /** Where this agent looks for plugins. Empty array = no plugin discovery. */
+  pluginPaths: AgentPluginPath[];
 }
 
 // ─── Per-Agent Config Option Parsers ────────────────────────────────────────
@@ -89,26 +107,49 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: [],
     label: 'Claude Code (via claude-agent-acp)',
     parseConfigOptions: parseClaudeConfigOptions,
+    pluginPaths: [{
+      taskRelative: '.claude/plugins',
+      globalDir: join(homedir(), '.claude', 'plugins'),
+    }],
   },
   'opencode': {
     command: ['opencode', 'acp'],
     passEnvVars: ['OPENCODE_API_KEY'],
     label: 'OpenCode',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    pluginPaths: [],
   },
   'aider': {
     command: ['aider', '--acp'],
     passEnvVars: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'],
     label: 'Aider',
     parseConfigOptions: parseNoConfigOptions,
+    pluginPaths: [],
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
     parseConfigOptions: parseNoConfigOptions,
+    pluginPaths: [],
   },
 };
+
+/** Collect all unique plugin discovery paths across all agents. */
+export function getAllPluginPaths(): AgentPluginPath[] {
+  const seen = new Set<string>();
+  const paths: AgentPluginPath[] = [];
+  for (const config of Object.values(AGENT_CONFIGS)) {
+    for (const p of config.pluginPaths) {
+      const key = `${p.globalDir}::${p.taskRelative}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        paths.push(p);
+      }
+    }
+  }
+  return paths;
+}
 
 /** System env vars that agents need to function (PATH, HOME, locale, etc.) */
 const ALLOWED_SYSTEM_VARS = [
