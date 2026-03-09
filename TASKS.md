@@ -1256,6 +1256,56 @@ class ACPAgentManager {
 
 ---
 
+### Task 4.28: Speech-to-Text Input (Web Speech API)
+
+**Priority:** P2
+**Estimated Time:** 4 hours
+
+**Deliverables:**
+- [ ] Add mic button to session chat input (`session-chat-panel.tsx`) for voice dictation
+- [ ] Add mic button to task creation description field (`tasks.new.tsx`)
+- [ ] Use Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`) — zero external API cost
+- [ ] Feature-detect API availability; hide mic button on unsupported browsers (Firefox)
+- [ ] Show visual recording indicator (pulsing icon or border) while listening
+- [ ] Append transcribed text to existing input content (don't replace)
+- [ ] Handle microphone permission denial gracefully with user-facing message
+
+**Key Considerations:**
+- Uses native OS speech engines: Google STT on Android Chrome, Apple Siri on iOS Safari — no API keys or costs
+- Requires HTTPS (already needed for deployed web app)
+- Both input areas already have 44px touch targets; mic button should match
+- `interimResults` mode gives real-time feedback as user speaks
+- Mobile-first: tap-to-start / tap-to-stop is more natural than hold-to-talk on phone
+
+**Affected Areas:** frontend (new shared hook or util, two component updates)
+
+**Dependencies:** None
+
+---
+
+### Task 4.29: Auto-Resize Chat Input Textarea
+
+**Priority:** P1
+**Estimated Time:** 2 hours
+
+**Deliverables:**
+- [ ] Replace fixed-height input with auto-resizing textarea in session chat panel
+- [ ] Grow textarea height as user types multi-line content (up to a max height, then scroll)
+- [ ] Shrink back to single-line height when content is cleared/sent
+- [ ] Apply same auto-resize behavior to task creation description textarea if fixed
+
+**Key Considerations:**
+- Common pattern: listen to `input` event, reset height to `auto`, then set to `scrollHeight`, capped by `max-height`
+- Max height should be ~40-50% of viewport on mobile so the chat history remains visible
+- Must work with both typed text and speech-to-text insertion (Task 4.28)
+- Avoid layout shift in the chat panel when textarea grows — pin scroll to bottom
+
+**Affected Areas:** frontend (`session-chat-panel.tsx`, possibly `tasks.new.tsx`)
+
+**Dependencies:** None
+
+---
+
 ## Phase 5: Terminal PTY (Week 5-6)
 
 **Goal:** Live interactive terminal in browser
@@ -2347,4 +2397,4 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20) planned. Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20), speech-to-text input (Task 4.28), auto-resize chat textarea (Task 4.29) planned. Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.
