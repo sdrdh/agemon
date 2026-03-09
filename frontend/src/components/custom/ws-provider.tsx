@@ -49,7 +49,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: taskKeys.listsPrefix() });
           // Also invalidate session queries — task_updated is broadcast on session archive
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(task.id) });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           break;
         }
         case 'agent_thought': {
@@ -102,14 +102,14 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'session_started': {
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'session_ready': {
           store().setAgentActivity(event.session.id, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
@@ -132,7 +132,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.listsPrefix() });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }

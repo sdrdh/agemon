@@ -54,8 +54,8 @@ export function taskEventsQuery(id: string, limit = 500) {
 
 export const sessionKeys = {
   all: ['sessions'] as const,
-  listsPrefix: () => [...sessionKeys.all, 'list'] as const,
-  list: (includeArchived?: boolean) => [...sessionKeys.listsPrefix(), { includeArchived }] as const,
+  listPrefix: () => [...sessionKeys.all, 'list'] as const,
+  list: (includeArchived?: boolean) => [...sessionKeys.listPrefix(), { includeArchived }] as const,
   forTaskPrefix: (taskId: string) => [...sessionKeys.all, 'task', taskId] as const,
   forTask: (taskId: string, includeArchived?: boolean) => [...sessionKeys.forTaskPrefix(taskId), { includeArchived }] as const,
   chat: (sessionId: string) => [...sessionKeys.all, 'chat', sessionId] as const,
