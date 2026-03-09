@@ -137,7 +137,7 @@ Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env v
 ├── agemon.db                        # SQLite database
 ├── CLAUDE.md                        # global instructions injected into every session
 ├── plugins/                         # global plugins (symlinked into agent discovery paths)
-├── skills/                          # global skills
+├── skills/                          # global skills (symlinked into agent discovery paths)
 ├── repos/{org}--{repo}.git          # bare repo cache
 └── tasks/{taskId}/
     ├── CLAUDE.md                    # generated: references global + per-repo CLAUDE.md/AGENT.md
@@ -146,6 +146,12 @@ Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env v
     ├── .claude/plugins/
     │   ├── _global -> ~/.agemon/plugins/
     │   └── _task   -> ../.agemonplugins/
+    ├── .claude/skills/
+    │   ├── _global -> ~/.agemon/skills/
+    │   └── _task   -> ../.agemonskills/
+    ├── .agents/skills/              # cross-client skill discovery (Agent Skills spec)
+    │   ├── _global -> ~/.agemon/skills/
+    │   └── _task   -> ../.agemonskills/
     └── {org}--{repo}/               # git worktree per repo
 ```
 
@@ -154,6 +160,8 @@ Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env v
 **Branch naming:** `agemon/{taskId}-{org}--{repo}`
 
 Global agemon plugins are automatically symlinked into `~/.claude/plugins/agemon` on server startup.
+
+Global agemon skills are symlinked into `~/.claude/skills/agemon` and `~/.agents/skills/agemon` (cross-client, per [Agent Skills spec](https://agentskills.io/specification)) on server startup.
 
 ---
 

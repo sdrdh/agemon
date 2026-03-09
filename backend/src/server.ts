@@ -9,7 +9,7 @@ import { mkdir, symlink, lstat } from 'fs/promises';
 import { join } from 'path';
 import { runMigrations, db } from './db/client.ts';
 import { AGEMON_DIR } from './lib/git.ts';
-import { getAllPluginPaths } from './lib/agents.ts';
+import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -221,6 +221,25 @@ for (const pluginPath of getAllPluginPaths()) {
       console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/plugins`);
     } catch (err) {
       console.warn(`[agemon] could not create plugin symlink:`, (err as Error).message);
+    }
+  }
+}
+
+// Wire global agemon skills into each agent's discovery path
+// Per Agent Skills spec (agentskills.io), agents scan ~/.agents/skills/ (cross-client)
+// and ~/.<client>/skills/ (client-specific) at user level.
+for (const skillPath of getAllSkillPaths()) {
+  if (!skillPath.globalDir) continue;
+  await mkdir(skillPath.globalDir, { recursive: true });
+  const link = join(skillPath.globalDir, 'agemon');
+  try {
+    await lstat(link);
+  } catch {
+    try {
+      await symlink(join(AGEMON_DIR, 'skills'), link);
+      console.info(`[agemon] linked ${link} -> ${AGEMON_DIR}/skills`);
+    } catch (err) {
+      console.warn(`[agemon] could not create skill symlink:`, (err as Error).message);
     }
   }
 }

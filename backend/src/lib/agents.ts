@@ -31,11 +31,16 @@ export interface AgentPluginPath {
  * Path inside ~/.agemon/tasks/{taskId}/ where this agent discovers skills.
  * e.g. '.claude/skills' → ~/.agemon/tasks/{taskId}/.claude/skills/
  *
- * Skills are project-scoped (no global dir), so only taskRelative is needed.
+ * Per the Agent Skills spec (agentskills.io), agents scan both client-specific
+ * and cross-client (.agents/skills/) directories at project and user level.
+ * globalDir is optional — set it to also symlink ~/.agemon/skills into the
+ * agent's user-level discovery dir (e.g. ~/.agents/skills, ~/.claude/skills).
  */
 export interface AgentSkillPath {
   /** Relative path from task dir for per-task skill wiring */
   taskRelative: string;
+  /** Absolute dir in user home for global skill symlink (optional) */
+  globalDir?: string;
 }
 
 export interface AgentConfig {
@@ -124,9 +129,10 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
       taskRelative: '.claude/plugins',
       globalDir: join(homedir(), '.claude', 'plugins'),
     }],
-    skillPaths: [{
-      taskRelative: '.claude/skills',
-    }],
+    skillPaths: [
+      { taskRelative: '.claude/skills', globalDir: join(homedir(), '.claude', 'skills') },
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'opencode': {
     command: ['opencode', 'acp'],
@@ -134,7 +140,9 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'OpenCode',
     parseConfigOptions: parseOpenCodeConfigOptions,
     pluginPaths: [],
-    skillPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'aider': {
     command: ['aider', '--acp'],
@@ -142,7 +150,9 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'Aider',
     parseConfigOptions: parseNoConfigOptions,
     pluginPaths: [],
-    skillPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
@@ -150,7 +160,9 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'Gemini CLI',
     parseConfigOptions: parseNoConfigOptions,
     pluginPaths: [],
-    skillPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
   },
 };
 
