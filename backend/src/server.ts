@@ -5,8 +5,9 @@ import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
-import { mkdir } from 'fs/promises';
+import { mkdir, symlink, lstat } from 'fs/promises';
 import { join } from 'path';
+import { homedir } from 'os';
 import { runMigrations, db } from './db/client.ts';
 import { AGEMON_DIR } from './lib/git.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
@@ -207,6 +208,21 @@ await mkdir(join(AGEMON_DIR, 'tasks'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
+
+// Wire global agemon plugins into Claude Code's discovery path
+const claudePluginsDir = join(homedir(), '.claude', 'plugins');
+await mkdir(claudePluginsDir, { recursive: true });
+const agemonPluginLink = join(claudePluginsDir, 'agemon');
+try {
+  await lstat(agemonPluginLink);
+} catch {
+  try {
+    await symlink(join(AGEMON_DIR, 'plugins'), agemonPluginLink);
+    console.info(`[agemon] linked ${agemonPluginLink} -> ${AGEMON_DIR}/plugins`);
+  } catch (err) {
+    console.warn(`[agemon] could not create plugin symlink:`, (err as Error).message);
+  }
+}
 
 try {
   runMigrations();

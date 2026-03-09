@@ -153,7 +153,7 @@ Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env v
 
 **Branch naming:** `agemon/{taskId}-{org}--{repo}`
 
-**One-time setup:** run `scripts/setup-agemon-home.sh` after installation.
+Global agemon plugins are automatically symlinked into `~/.claude/plugins/agemon` on server startup.
 
 ---
 
