@@ -27,6 +27,17 @@ export interface AgentPluginPath {
   globalDir: string;
 }
 
+/**
+ * Path inside ~/.agemon/tasks/{taskId}/ where this agent discovers skills.
+ * e.g. '.claude/skills' → ~/.agemon/tasks/{taskId}/.claude/skills/
+ *
+ * Skills are project-scoped (no global dir), so only taskRelative is needed.
+ */
+export interface AgentSkillPath {
+  /** Relative path from task dir for per-task skill wiring */
+  taskRelative: string;
+}
+
 export interface AgentConfig {
   command: string[];
   passEnvVars: string[];
@@ -34,6 +45,8 @@ export interface AgentConfig {
   parseConfigOptions: ConfigOptionParser;
   /** Where this agent looks for plugins. Empty array = no plugin discovery. */
   pluginPaths: AgentPluginPath[];
+  /** Where this agent looks for skills. Empty array = no skill discovery. */
+  skillPaths: AgentSkillPath[];
 }
 
 // ─── Per-Agent Config Option Parsers ────────────────────────────────────────
@@ -111,6 +124,9 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
       taskRelative: '.claude/plugins',
       globalDir: join(homedir(), '.claude', 'plugins'),
     }],
+    skillPaths: [{
+      taskRelative: '.claude/skills',
+    }],
   },
   'opencode': {
     command: ['opencode', 'acp'],
@@ -118,6 +134,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'OpenCode',
     parseConfigOptions: parseOpenCodeConfigOptions,
     pluginPaths: [],
+    skillPaths: [],
   },
   'aider': {
     command: ['aider', '--acp'],
@@ -125,6 +142,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'Aider',
     parseConfigOptions: parseNoConfigOptions,
     pluginPaths: [],
+    skillPaths: [],
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
@@ -132,6 +150,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     label: 'Gemini CLI',
     parseConfigOptions: parseNoConfigOptions,
     pluginPaths: [],
+    skillPaths: [],
   },
 };
 
@@ -144,6 +163,21 @@ export function getAllPluginPaths(): AgentPluginPath[] {
       const key = `${p.globalDir}::${p.taskRelative}`;
       if (!seen.has(key)) {
         seen.add(key);
+        paths.push(p);
+      }
+    }
+  }
+  return paths;
+}
+
+/** Collect all unique skill discovery paths across all agents. */
+export function getAllSkillPaths(): AgentSkillPath[] {
+  const seen = new Set<string>();
+  const paths: AgentSkillPath[] = [];
+  for (const config of Object.values(AGENT_CONFIGS)) {
+    for (const p of config.skillPaths) {
+      if (!seen.has(p.taskRelative)) {
+        seen.add(p.taskRelative);
         paths.push(p);
       }
     }

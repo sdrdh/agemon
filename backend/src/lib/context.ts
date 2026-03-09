@@ -6,6 +6,7 @@
  *   - ~/.agemon/tasks/{taskId}/.agemonplugins/    (symlinks to repo .claude/plugins/)
  *   - ~/.agemon/tasks/{taskId}/.agemonskills/     (symlinks to repo .claude/skills/)
  *   - ~/.agemon/tasks/{taskId}/{agent-plugin-dir}/ (wired to global + task plugins, per agent config)
+ *   - ~/.agemon/tasks/{taskId}/{agent-skill-dir}/  (wired to task skills, per agent config)
  *
  * Called at session start and when repos are attached/changed on a task.
  */
@@ -13,7 +14,7 @@
 import { mkdir, writeFile, symlink, rm, access, readdir } from 'fs/promises';
 import { join } from 'path';
 import { AGEMON_DIR } from './git.ts';
-import { getAllPluginPaths } from './agents.ts';
+import { getAllPluginPaths, getAllSkillPaths } from './agents.ts';
 import type { Task } from '@agemon/shared';
 
 /** Filesystem-safe repo dir name (mirrors git.ts safeName). */
@@ -39,6 +40,7 @@ export async function refreshTaskContext(task: Task): Promise<void> {
     refreshPluginSymlinks(task, taskDir),
     refreshSkillSymlinks(task, taskDir),
     wireAgentPluginDirs(taskDir),
+    wireAgentSkillDirs(taskDir),
   ]);
 }
 
@@ -154,6 +156,32 @@ async function wireAgentPluginDirs(taskDir: string): Promise<void> {
     const taskLink = join(agentPluginsDir, '_task');
     if (!(await exists(taskLink))) {
       await symlink(join(taskDir, '.agemonplugins'), taskLink);
+    }
+  }
+}
+
+// ─── Agent skill directory wiring ───────────────────────────────────────────
+
+/**
+ * Wire each agent's skill discovery directory inside the task dir.
+ * Skills are project-scoped (no global equivalent), so we only link
+ * the aggregated .agemonskills/ into the agent's expected path.
+ */
+async function wireAgentSkillDirs(taskDir: string): Promise<void> {
+  for (const skillPath of getAllSkillPaths()) {
+    const agentSkillsDir = join(taskDir, skillPath.taskRelative);
+    await mkdir(agentSkillsDir, { recursive: true });
+
+    // _task → task-level aggregated skills
+    const taskLink = join(agentSkillsDir, '_task');
+    if (!(await exists(taskLink))) {
+      await symlink(join(taskDir, '.agemonskills'), taskLink);
+    }
+
+    // _global → ~/.agemon/skills/ (global skills shared across tasks)
+    const globalLink = join(agentSkillsDir, '_global');
+    if (!(await exists(globalLink))) {
+      await symlink(join(AGEMON_DIR, 'skills'), globalLink);
     }
   }
 }
