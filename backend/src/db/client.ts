@@ -1,15 +1,14 @@
 import { Database } from 'bun:sqlite';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { homedir } from 'os';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
 import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
-const DB_PATH = process.env.DB_PATH ?? './agemon.db';
-
-if (DB_PATH.includes('..')) {
-  throw new Error('DB_PATH must not contain ..');
-}
+const DB_PATH = process.env.DB_PATH
+  ? resolve(process.env.DB_PATH)
+  : join(homedir(), '.agemon', 'agemon.db');
 
 let _db: Database | null = null;
 

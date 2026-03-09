@@ -1,19 +1,26 @@
 import simpleGit, { type SimpleGit } from 'simple-git';
 import { mkdir, rm, access, readdir } from 'fs/promises';
 import { join, resolve } from 'path';
+import { homedir } from 'os';
 import { parseRepoName } from '../db/client.ts';
 
 /**
  * GitWorktreeManager handles bare repo caching and per-task worktree lifecycle.
  *
  * Layout:
- *   .agemon/repos/{org}--{repo}.git    — bare repo cache (shared across tasks)
- *   .agemon/tasks/{taskId}/{org}--{repo}/  — worktree per task per repo
+ *   ~/.agemon/repos/{org}--{repo}.git    — bare repo cache (shared across tasks)
+ *   ~/.agemon/tasks/{taskId}/{org}--{repo}/  — worktree per task per repo
  *
  * Branch naming: agemon/{taskId}-{org}-{repo}
+ *
+ * Override base dir with AGEMON_DIR env var (useful for testing).
  */
 
-const BASE_DIR = resolve('.agemon');
+export const AGEMON_DIR = process.env.AGEMON_DIR
+  ? resolve(process.env.AGEMON_DIR)
+  : join(homedir(), '.agemon');
+
+const BASE_DIR = AGEMON_DIR;
 const REPOS_DIR = join(BASE_DIR, 'repos');
 const TASKS_DIR = join(BASE_DIR, 'tasks');
 

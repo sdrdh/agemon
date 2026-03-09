@@ -5,7 +5,10 @@ import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
+import { mkdir } from 'fs/promises';
+import { join } from 'path';
 import { runMigrations, db } from './db/client.ts';
+import { AGEMON_DIR } from './lib/git.ts';
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
@@ -197,6 +200,14 @@ eventBus.on('ws:client_event', async (ev: ClientEvent) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+
+// Ensure ~/.agemon base dirs exist before DB/migrations
+await mkdir(join(AGEMON_DIR, 'repos'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'tasks'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
+console.info(`[agemon] data directory: ${AGEMON_DIR}`);
+
 try {
   runMigrations();
 } catch (err) {
