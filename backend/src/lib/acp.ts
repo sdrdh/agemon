@@ -433,13 +433,33 @@ function handleSessionUpdate(
       const agentType = rs?.agentType ?? 'claude-code';
       const defaultWindow = DEFAULT_CONTEXT_WINDOW[agentType] ?? 200_000;
 
+      // ACP protocol uses: used, size, inputTokens, outputTokens (may vary by agent)
+      // - claude-agent-acp uses: used, size (total tokens, context window size)
+      // - Some agents send: inputTokens, outputTokens, contextWindow
+      const used = typeof update.used === 'number' ? update.used : 0;
+      const size = typeof update.size === 'number' ? update.size 
+        : typeof update.contextWindow === 'number' ? update.contextWindow 
+        : defaultWindow;
+
+      // Some agents send detailed token breakdown
+      const inputTokens = typeof update.inputTokens === 'number' ? update.inputTokens : 0;
+      const outputTokens = typeof update.outputTokens === 'number' ? update.outputTokens : 0;
+
+      // If agent only sends used/size, estimate input/output split (rough approximation)
+      const finalInputTokens = inputTokens || Math.floor(used * 0.7);
+      const finalOutputTokens = outputTokens || Math.floor(used * 0.3);
+
       const usage: SessionUsage = {
-        inputTokens: typeof update.inputTokens === 'number' ? update.inputTokens : 0,
-        outputTokens: typeof update.outputTokens === 'number' ? update.outputTokens : 0,
-        cachedReadTokens: typeof update.cachedReadTokens === 'number' ? update.cachedReadTokens : 0,
-        cachedWriteTokens: typeof update.cachedWriteTokens === 'number' ? update.cachedWriteTokens : 0,
-        contextWindow: typeof update.contextWindow === 'number' ? update.contextWindow : defaultWindow,
+        inputTokens: finalInputTokens,
+        outputTokens: finalOutputTokens,
+        cachedReadTokens: typeof update.cachedReadTokens === 'number' ? update.cachedReadTokens
+          : typeof update.cacheReadInputTokens === 'number' ? update.cacheReadInputTokens : 0,
+        cachedWriteTokens: typeof update.cachedWriteTokens === 'number' ? update.cachedWriteTokens
+          : typeof update.cacheCreationInputTokens === 'number' ? update.cacheCreationInputTokens : 0,
+        contextWindow: size,
       };
+
+      console.info(`[acp] session ${sessionId} usage: ${used}/${size} tokens (${Math.round(used/size*100)}% ctx)`);
 
       db.updateSessionUsage(sessionId, usage);
       broadcast({ type: 'session_usage_update', sessionId, taskId, usage });
@@ -785,6 +805,47 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       console.info(`[acp] session ${sessionId} prompt turn cancelled`);
       broadcast({ type: 'turn_cancelled', sessionId, taskId });
       return;
+    }
+
+    // Extract usage from session/prompt result (guaranteed at end of turn)
+    const usageObj = resultObj?.usage as Record<string, unknown> | undefined;
+    if (usageObj) {
+      const DEFAULT_CONTEXT_WINDOW: Record<AgentType, number> = {
+        'claude-code': 200_000,
+        'opencode': 200_000,
+        'aider': 128_000,
+        'gemini': 1_000_000,
+      };
+      const agentType = entry.agentType;
+      const defaultWindow = DEFAULT_CONTEXT_WINDOW[agentType] ?? 200_000;
+
+      // ACP protocol uses: used, size (total tokens, context window size)
+      // Some agents send: totalTokens, inputTokens, outputTokens (opencode)
+      const used = typeof usageObj.used === 'number' ? usageObj.used
+        : typeof usageObj.totalTokens === 'number' ? usageObj.totalTokens
+        : 0;
+      const size = typeof usageObj.size === 'number' ? usageObj.size
+        : typeof usageObj.contextWindow === 'number' ? usageObj.contextWindow
+        : defaultWindow;
+
+      const inputTokens = typeof usageObj.inputTokens === 'number' ? usageObj.inputTokens : 0;
+      const outputTokens = typeof usageObj.outputTokens === 'number' ? usageObj.outputTokens : 0;
+
+      // If agent only sends used/size, estimate input/output split
+      const finalInputTokens = inputTokens || Math.floor(used * 0.7);
+      const finalOutputTokens = outputTokens || Math.floor(used * 0.3);
+
+      const usage: SessionUsage = {
+        inputTokens: finalInputTokens,
+        outputTokens: finalOutputTokens,
+        cachedReadTokens: typeof usageObj.cachedReadTokens === 'number' ? usageObj.cachedReadTokens
+          : typeof usageObj.cacheReadInputTokens === 'number' ? usageObj.cacheReadInputTokens : 0,
+        cachedWriteTokens: typeof usageObj.cachedWriteTokens === 'number' ? usageObj.cachedWriteTokens
+          : typeof usageObj.cacheCreationInputTokens === 'number' ? usageObj.cacheCreationInputTokens : 0,
+        contextWindow: size,
+      };
+      db.updateSessionUsage(sessionId, usage);
+      broadcast({ type: 'session_usage_update', sessionId, taskId, usage });
     }
 
     console.info(`[acp] session ${sessionId} prompt turn completed`);

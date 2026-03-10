@@ -70,7 +70,7 @@ async function readOutput() {
             const updateType = msg.params?.update?.sessionUpdate;
             if (updateType) {
               console.log(`[probe] ← session/update: ${updateType}`);
-              if (updateType.includes('config')) {
+              if (updateType.includes('config') || updateType.includes('usage')) {
                 console.log(JSON.stringify(msg.params, null, 2));
               }
             } else {
@@ -135,6 +135,17 @@ if (sessionResult?.code) {
   const retry = await sendRequest('session/new', { cwd: process.cwd() });
   console.log(`[probe] retry result:`, JSON.stringify(retry, null, 2));
 }
+
+// Send a simple prompt to trigger usage_update
+console.log('[probe] Sending a prompt to trigger usage_update...');
+const promptResult = await sendRequest('session/prompt', {
+  sessionId: sessionResult.sessionId,
+  prompt: [
+    { type: 'text', text: 'Say "hello" and nothing else.' }
+  ],
+});
+
+console.log('[probe] Prompt result:', JSON.stringify(promptResult, null, 2));
 
 console.log(`[probe] Waiting ${TIMEOUT_MS / 1000}s for notifications...`);
 await Bun.sleep(TIMEOUT_MS);
