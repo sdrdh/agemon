@@ -56,6 +56,8 @@ interface RunningSession {
   currentMessageType: 'thought' | 'action';
   /** Config options advertised by the agent (model, mode, etc.) */
   configOptions: SessionConfigOption[];
+  /** Available slash commands advertised by the agent */
+  availableCommands: AgentCommand[];
 }
 
 const sessions = new Map<string, RunningSession>();
@@ -411,6 +413,10 @@ function handleSessionUpdate(
 
     case 'available_commands_update': {
       const commands = (update.availableCommands as AgentCommand[]) ?? [];
+      if (rs) {
+        rs.availableCommands = commands;
+        db.updateSessionAvailableCommands(sessionId, commands);
+      }
       broadcast({ type: 'available_commands', sessionId, taskId, commands });
       console.info(`[acp] session ${sessionId} available commands: ${commands.map(c => c.name).join(', ')}`);
       break;
@@ -549,7 +555,7 @@ function spawnProcess(
   const rs: RunningSession = {
     proc, transport, sessionId, taskId, agentType, acpSessionId: null, turnInFlight: false,
     currentMessageId: null, currentMessageText: '', currentMessageType: 'action',
-    configOptions: [],
+    configOptions: [], availableCommands: [],
   };
 
   sessions.set(sessionId, rs);
@@ -923,6 +929,15 @@ export function getSessionConfigOptions(sessionId: string): SessionConfigOption[
   const entry = sessions.get(sessionId);
   if (entry) return entry.configOptions;
   return db.getSessionConfigOptions(sessionId) ?? [];
+}
+
+/**
+ * Get available commands for a running session (from memory) or from DB for stopped sessions.
+ */
+export function getSessionAvailableCommands(sessionId: string): AgentCommand[] {
+  const entry = sessions.get(sessionId);
+  if (entry) return entry.availableCommands;
+  return db.getSessionAvailableCommands(sessionId) ?? [];
 }
 
 /**

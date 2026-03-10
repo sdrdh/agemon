@@ -1309,10 +1309,12 @@ class ACPAgentManager {
 **Priority:** P1
 **Estimated Time:** 30 min
 
+**Status:** Done
+
 **Deliverables:**
-- [ ] Store available commands on RunningSession in acp.ts (same pattern as configOptions)
-- [ ] Add REST endpoint `GET /sessions/:id/commands` to retrieve stored commands
-- [ ] Frontend: re-fetch commands on mount when store is empty (same useEffect pattern as configOptions)
+- [x] Store available commands on RunningSession in acp.ts (same pattern as configOptions)
+- [x] Add REST endpoint `GET /sessions/:id/commands` to retrieve stored commands
+- [x] Frontend: re-fetch commands on mount when store is empty (same useEffect pattern as configOptions)
 
 **Key Considerations:**
 - Mirrors the exact pattern used for configOptions (stored on RunningSession, persisted to DB column, REST fallback on reconnect)

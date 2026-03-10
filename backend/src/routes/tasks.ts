@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { db, generateTaskId } from '../db/client.ts';
 import { broadcast } from '../server.ts';
-import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions } from '../lib/acp.ts';
+import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions, getSessionAvailableCommands } from '../lib/acp.ts';
 import { gitManager } from '../lib/git.ts';
 import { refreshTaskContext } from '../lib/context.ts';
 import type { CreateTaskBody, UpdateTaskBody, CreateSessionBody, AgentType, Task, TaskStatus } from '@agemon/shared';
@@ -330,6 +330,18 @@ tasksRoutes.get('/sessions/:id/config', (c) => {
 
   const configOptions = getSessionConfigOptions(sessionId);
   return c.json(configOptions);
+});
+
+/**
+ * GET /sessions/:id/commands — get available slash commands for a session.
+ */
+tasksRoutes.get('/sessions/:id/commands', (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+
+  const commands = getSessionAvailableCommands(sessionId);
+  return c.json(commands);
 });
 
 /**

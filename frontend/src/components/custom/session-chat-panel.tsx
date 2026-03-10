@@ -111,6 +111,17 @@ export function SessionChatPanel({
 
   // ── Slash command autocomplete ─────────────────────────────────────────
   const availableCommands = useWsStore((s) => s.availableCommands[session.id]) ?? [];
+  const setAvailableCommands = useWsStore((s) => s.setAvailableCommands);
+
+  // Fetch available commands on mount if not already in store (page refresh case)
+  useEffect(() => {
+    if (availableCommands.length === 0 && sessionRunning) {
+      api.getSessionCommands(session.id).then((cmds) => {
+        if (cmds && cmds.length > 0) setAvailableCommands(session.id, cmds);
+      }).catch(() => {});
+    }
+  }, [session.id, sessionRunning, availableCommands.length, setAvailableCommands]);
+
   const [selectedCommandIdx, setSelectedCommandIdx] = useState(-1);
   const hasNavigatedRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);

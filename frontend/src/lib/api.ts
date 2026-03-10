@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -84,6 +84,8 @@ export const api = {
   // Config options
   getSessionConfig: (sessionId: string) =>
     request<SessionConfigOption[]>(`/sessions/${sessionId}/config`),
+  getSessionCommands: (sessionId: string) =>
+    request<AgentCommand[]>(`/sessions/${sessionId}/commands`),
   setSessionConfig: (sessionId: string, configId: string, value: string) =>
     request<{ message: string }>(`/sessions/${sessionId}/config`, {
       method: 'POST',

@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry, AgentCommand } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH
@@ -23,7 +23,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /**
  * Extract a display name from a repo URL.
@@ -240,6 +240,16 @@ export function runMigrations() {
         ).all();
         if (!sessionCols.some(c => c.name === 'archived')) {
           db.run('ALTER TABLE agent_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0');
+        }
+      }
+
+      // ── v11 migration: add available_commands column to agent_sessions ──
+      if (current < 11) {
+        const cols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        if (!cols.some(c => c.name === 'available_commands')) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN available_commands TEXT DEFAULT NULL');
         }
       }
 
@@ -650,6 +660,20 @@ export const db = {
     ).get(id);
     if (!row?.config_options) return null;
     try { return JSON.parse(row.config_options); } catch { return null; }
+  },
+
+  updateSessionAvailableCommands(id: string, commands: AgentCommand[]): void {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET available_commands = ? WHERE id = ?', [JSON.stringify(commands), id]);
+  },
+
+  getSessionAvailableCommands(id: string): AgentCommand[] | null {
+    const db = getDb();
+    const row = db.query<{ available_commands: string | null }, [string]>(
+      'SELECT available_commands FROM agent_sessions WHERE id = ?'
+    ).get(id);
+    if (!row?.available_commands) return null;
+    try { return JSON.parse(row.available_commands); } catch { return null; }
   },
 
   // ── ACP Events ──
