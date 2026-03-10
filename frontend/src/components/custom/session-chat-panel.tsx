@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { ArrowLeft, Send, Ban, RotateCcw, ChevronsDown } from 'lucide-react';
+import { ArrowLeft, Send, Ban, Square, RotateCcw, ChevronsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
@@ -248,7 +248,7 @@ export function SessionChatPanel({
               disabled={actionLoading}
               className="gap-1.5"
             >
-              <Ban className="h-3.5 w-3.5 text-red-500" />
+              <Square className="h-3.5 w-3.5 fill-current" style={{ color: 'var(--stop-color)' }} />
               Stop
             </Button>
           )}

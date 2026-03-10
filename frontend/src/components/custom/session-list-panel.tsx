@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, RotateCcw, CheckCircle2, Ban, Archive } from 'lucide-react';
+import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType, AgentSession } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
@@ -138,7 +138,7 @@ export function SessionListPanel({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    className="h-8 w-8 p-0 shrink-0 hover:bg-accent/50"
                     aria-label={`Stop ${label}`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -146,7 +146,7 @@ export function SessionListPanel({
                     }}
                     disabled={actionLoading}
                   >
-                    <Ban className="h-3.5 w-3.5 text-red-500" />
+                    <Square className="h-3.5 w-3.5 fill-current" style={{ color: 'var(--stop-color)' }} />
                   </Button>
                 )}
                 {canResume && (

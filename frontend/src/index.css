@@ -27,6 +27,7 @@
     --input: 240 5.9% 90%;
     --ring: 240 5.9% 10%;
     --radius: 0.5rem;
+    --stop-color: #ef4444; /* red-500 */
   }
 
   .dark {
@@ -49,6 +50,7 @@
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
+    --stop-color: #f87171; /* red-400 */
   }
 
   /* ── Cyber Indigo ─────────────────────────────────────────────────────── */
@@ -72,6 +74,7 @@
     --border: 226 20% 88%;
     --input: 226 20% 88%;
     --ring: 234 89% 74%;
+    --stop-color: #8b5cf6; /* violet-500 */
   }
   [data-theme="cyber-indigo"].dark {
     --background: 222 47% 11%;
@@ -93,6 +96,7 @@
     --border: 222 30% 20%;
     --input: 222 30% 20%;
     --ring: 234 89% 74%;
+    --stop-color: #a78bfa; /* violet-400 */
   }
 
   /* ── Terminal Green (dark only) ──────────────────────────────────────── */
@@ -116,6 +120,7 @@
     --border: 160 10% 15%;
     --input: 160 10% 15%;
     --ring: 160 84% 39%;
+    --stop-color: #34d399; /* emerald-400 */
   }
 
   /* ── Graphite Line Indigo ────────────────────────────────────────────── */
@@ -139,6 +144,7 @@
     --border: 240 15% 88%;
     --input: 240 15% 88%;
     --ring: 244 76% 53%;
+    --stop-color: #6366f1; /* indigo-500 */
   }
   [data-theme="graphite-line-indigo"].dark {
     --background: 240 33% 3%;
@@ -160,6 +166,7 @@
     --border: 240 15% 15%;
     --input: 240 15% 15%;
     --ring: 244 76% 53%;
+    --stop-color: #818cf8; /* indigo-400 */
   }
 
   /* ── Dracula (dark only) ─────────────────────────────────────────────── */
@@ -183,6 +190,7 @@
     --border: 232 14% 28%;
     --input: 232 14% 28%;
     --ring: 191 97% 77%;
+    --stop-color: #ff79c6; /* Dracula pink */
   }
 
   /* ── One Dark Pro (dark only) ────────────────────────────────────────── */
@@ -206,6 +214,7 @@
     --border: 220 13% 26%;
     --input: 220 13% 26%;
     --ring: 207 82% 66%;
+    --stop-color: #e06c75; /* One Dark red */
   }
 }
 
