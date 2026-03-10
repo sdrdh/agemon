@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   archived            INTEGER NOT NULL DEFAULT 0,
   ended_at            TEXT,          -- NULL while running
-  exit_code           INTEGER        -- NULL while running; 0=clean exit; non-zero=error
+  exit_code           INTEGER,       -- NULL while running; 0=clean exit; non-zero=error
+  usage_json          TEXT DEFAULT NULL  -- JSON: SessionUsage latest snapshot
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id);

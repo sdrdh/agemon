@@ -90,6 +90,8 @@ export default function TaskDetailView() {
     selectedSessionId ? (s.turnsInFlight[selectedSessionId] ?? false) : false
   );
   const setTurnInFlight = useWsStore((s) => s.setTurnInFlight);
+  const allSessionUsage = useWsStore((s) => s.sessionUsage);
+  const activeSessionUsage = selectedSessionId ? allSessionUsage[selectedSessionId] : undefined;
 
   const pendingInputs = useMemo(
     () => selectedSessionId
@@ -365,6 +367,7 @@ export default function TaskDetailView() {
             unreadSessions={unreadSessions}
             pendingInputSessionIds={pendingInputSessionIds}
             sessionLabels={sessionLabels}
+            sessionUsage={allSessionUsage}
           />
         )}
 
@@ -389,6 +392,7 @@ export default function TaskDetailView() {
             onBack={handleBackToList}
             isDesktop={isDesktop}
             chatEndRef={chatEndRef}
+            usage={activeSessionUsage}
           />
         )}
 

@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry, AgentCommand } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry, AgentCommand, SessionUsage } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH
@@ -23,7 +23,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 /**
  * Extract a display name from a repo URL.
@@ -250,6 +250,16 @@ export function runMigrations() {
         ).all();
         if (!cols.some(c => c.name === 'available_commands')) {
           db.run('ALTER TABLE agent_sessions ADD COLUMN available_commands TEXT DEFAULT NULL');
+        }
+      }
+
+      // ── v12 migration: add usage_json column to agent_sessions ──
+      if (current < 12) {
+        const sessionCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        if (!sessionCols.some(c => c.name === 'usage_json')) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN usage_json TEXT DEFAULT NULL');
         }
       }
 
@@ -644,6 +654,11 @@ export const db = {
   updateSessionConfigOptions(id: string, options: SessionConfigOption[]): void {
     const db = getDb();
     db.run('UPDATE agent_sessions SET config_options = ? WHERE id = ?', [JSON.stringify(options), id]);
+  },
+
+  updateSessionUsage(id: string, usage: SessionUsage): void {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET usage_json = ? WHERE id = ?', [JSON.stringify(usage), id]);
   },
 
   updateSessionArchived(id: string, archived: boolean): AgentSession | null {

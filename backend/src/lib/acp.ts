@@ -14,7 +14,7 @@
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { randomUUID } from 'crypto';
-import type { AgentCommand, AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption, ToolCallEvent, ToolCallStatus, ToolCallUpdateEvent } from '@agemon/shared';
+import type { AgentCommand, AgentSession, AgentSessionState, AgentType, ApprovalDecision, ApprovalOption, PendingApproval, SessionConfigOption, SessionUsage, ToolCallEvent, ToolCallStatus, ToolCallUpdateEvent } from '@agemon/shared';
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
@@ -422,8 +422,32 @@ function handleSessionUpdate(
       break;
     }
 
+    case 'usage_update': {
+      const DEFAULT_CONTEXT_WINDOW: Record<AgentType, number> = {
+        'claude-code': 200_000,
+        'opencode': 200_000,
+        'aider': 128_000,
+        'gemini': 1_000_000,
+      };
+
+      const agentType = rs?.agentType ?? 'claude-code';
+      const defaultWindow = DEFAULT_CONTEXT_WINDOW[agentType] ?? 200_000;
+
+      const usage: SessionUsage = {
+        inputTokens: typeof update.inputTokens === 'number' ? update.inputTokens : 0,
+        outputTokens: typeof update.outputTokens === 'number' ? update.outputTokens : 0,
+        cachedReadTokens: typeof update.cachedReadTokens === 'number' ? update.cachedReadTokens : 0,
+        cachedWriteTokens: typeof update.cachedWriteTokens === 'number' ? update.cachedWriteTokens : 0,
+        contextWindow: typeof update.contextWindow === 'number' ? update.contextWindow : defaultWindow,
+      };
+
+      db.updateSessionUsage(sessionId, usage);
+      broadcast({ type: 'session_usage_update', sessionId, taskId, usage });
+      break;
+    }
+
     default: {
-      // Other update types (usage_update, etc.) — ignore silently
+      // Unknown update types — ignore silently
       break;
     }
   }
