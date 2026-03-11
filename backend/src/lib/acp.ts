@@ -261,14 +261,19 @@ function flushCurrentMessage(sessionId: string, taskId: string): void {
   const rs = sessions.get(sessionId);
   if (!rs || !rs.currentMessageId || !rs.currentMessageText) return;
 
-  db.insertEvent({
-    id: rs.currentMessageId,
-    task_id: taskId,
-    session_id: sessionId,
-    type: rs.currentMessageType,
-    content: rs.currentMessageText,
-  });
+  try {
+    db.insertEvent({
+      id: rs.currentMessageId,
+      task_id: taskId,
+      session_id: sessionId,
+      type: rs.currentMessageType,
+      content: rs.currentMessageText,
+    });
+  } catch (err) {
+    console.error(`[acp] failed to persist message ${rs.currentMessageId} for session ${sessionId}:`, err);
+  }
 
+  // Always reset buffer so subsequent flushes don't cascade-fail with duplicate IDs
   rs.currentMessageId = null;
   rs.currentMessageText = '';
 }
@@ -423,6 +428,7 @@ function handleSessionUpdate(
     }
 
     case 'usage_update': {
+      flushCurrentMessage(sessionId, taskId);
       const DEFAULT_CONTEXT_WINDOW: Record<AgentType, number> = {
         'claude-code': 200_000,
         'opencode': 200_000,
@@ -449,6 +455,10 @@ function handleSessionUpdate(
       const finalInputTokens = inputTokens || Math.floor(used * 0.7);
       const finalOutputTokens = outputTokens || Math.floor(used * 0.3);
 
+      // Extract cost if reported (e.g. OpenCode sends { cost: { amount, currency } })
+      const costObj = update.cost as { amount?: number } | undefined;
+      const cost = typeof costObj?.amount === 'number' ? costObj.amount : undefined;
+
       const usage: SessionUsage = {
         inputTokens: finalInputTokens,
         outputTokens: finalOutputTokens,
@@ -457,9 +467,10 @@ function handleSessionUpdate(
         cachedWriteTokens: typeof update.cachedWriteTokens === 'number' ? update.cachedWriteTokens
           : typeof update.cacheCreationInputTokens === 'number' ? update.cacheCreationInputTokens : 0,
         contextWindow: size,
+        ...(cost !== undefined ? { cost } : {}),
       };
 
-      console.info(`[acp] session ${sessionId} usage: ${used}/${size} tokens (${Math.round(used/size*100)}% ctx)`);
+      console.info(`[acp] session ${sessionId} usage: ${used}/${size} tokens (${Math.round(used/size*100)}% ctx)${cost !== undefined ? ` $${cost.toFixed(4)}` : ''}`);
 
       db.updateSessionUsage(sessionId, usage);
       broadcast({ type: 'session_usage_update', sessionId, taskId, usage });
@@ -634,15 +645,24 @@ function extractToolContext(toolCall: Record<string, unknown> | undefined): Reco
   if (!toolCall) return {};
   const ctx: Record<string, string> = {};
   const input = toolCall.rawInput as Record<string, unknown> | undefined;
+  // Claude uses snake_case (file_path), OpenCode uses camelCase (filePath)
   if (input?.file_path) ctx.filePath = String(input.file_path);
+  else if (input?.filePath) ctx.filePath = String(input.filePath);
   if (input?.command) ctx.command = String(input.command);
   if (input?.pattern) ctx.pattern = String(input.pattern);
   if (input?.path) ctx.path = String(input.path);
   if (input?.url) ctx.url = String(input.url);
   if (input?.content) ctx.preview = String(input.content).slice(0, 200);
   if (input?.old_string) ctx.oldString = String(input.old_string).slice(0, 200);
+  else if (input?.oldString) ctx.oldString = String(input.oldString).slice(0, 200);
   if (input?.new_string) ctx.newString = String(input.new_string).slice(0, 200);
+  else if (input?.newString) ctx.newString = String(input.newString).slice(0, 200);
   if (toolCall.title) ctx.title = String(toolCall.title);
+  // Gemini/OpenCode send locations array (sometimes on tool_call_update, not tool_call)
+  const locations = toolCall.locations as Array<{ path?: string }> | undefined;
+  if (Array.isArray(locations) && locations.length > 0 && locations[0].path) {
+    if (!ctx.filePath && !ctx.path) ctx.filePath = locations[0].path;
+  }
   return ctx;
 }
 

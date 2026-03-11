@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   pid                 INTEGER,       -- OS process ID; NULL if not running
   state               TEXT NOT NULL DEFAULT 'starting'
                         CHECK (state IN ('starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted')),
+  config_options      TEXT DEFAULT NULL,  -- JSON: SessionConfigOption[]
+  available_commands  TEXT DEFAULT NULL,  -- JSON: AgentCommand[]
   started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   archived            INTEGER NOT NULL DEFAULT 0,
   ended_at            TEXT,          -- NULL while running

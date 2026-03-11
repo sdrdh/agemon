@@ -8,7 +8,8 @@ import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/a
 import { SESSION_STATE_DOT, SESSION_STATE_LABEL, isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
 
 function contextFillPct(usage: SessionUsage): number {
-  return Math.min(100, Math.round((usage.inputTokens / usage.contextWindow) * 100));
+  const total = usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens;
+  return Math.min(100, Math.round((total / usage.contextWindow) * 100));
 }
 
 function AgentTypeSelector({ value, onValueChange }: { value: AgentType; onValueChange: (v: AgentType) => void }) {

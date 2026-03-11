@@ -1,18 +1,20 @@
 #!/usr/bin/env bun
 /**
- * Probe the real claude-agent-acp binary to see what notifications it sends,
- * specifically looking for config_options_update.
+ * ACP Event Probe — exercises a real ACP agent binary and validates all
+ * session/update notification types that agemon parses, plus the data
+ * returned by session/new and session/prompt.
  *
- * Usage: bun run scripts/test-acp-config.ts
+ * Usage:
+ *   bun run scripts/test-acp-config.ts                           # claude-code (default)
+ *   bun run scripts/test-acp-config.ts opencode acp              # opencode
+ *   bun run scripts/test-acp-config.ts gemini --experimental-acp # gemini
  */
 
-// Usage:
-//   bun run scripts/test-acp-config.ts                           # claude-code (default)
-//   bun run scripts/test-acp-config.ts opencode acp              # opencode
-//   bun run scripts/test-acp-config.ts gemini --experimental-acp # gemini
 const BINARY = process.argv[2] || 'claude-agent-acp';
 const ARGS = process.argv.length > 3 ? process.argv.slice(3) : ['--agent', 'claude-code'];
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS = 15_000;
+
+// ─── JSON-RPC Transport ──────────────────────────────────────────────────────
 
 let nextId = 1;
 const decoder = new TextDecoder();
@@ -36,7 +38,39 @@ function sendRequest(method: string, params: unknown): Promise<any> {
   });
 }
 
-const allNotifications: any[] = [];
+// ─── Event Collection ────────────────────────────────────────────────────────
+
+/** All session/update types we expect to parse in acp.ts handleSessionUpdate */
+const EXPECTED_UPDATE_TYPES = [
+  'agent_message_chunk',
+  'agent_thought_chunk',
+  'tool_call',
+  'tool_call_update',
+  'config_options_update',
+  'available_commands_update',
+  'usage_update',
+] as const;
+
+/** Fields we expect to extract from session/new result */
+const SESSION_NEW_FIELDS = ['sessionId', 'configOptions', 'model'] as const;
+
+/** Fields we expect to extract from session/prompt result */
+const PROMPT_RESULT_FIELDS = ['stopReason', 'usage'] as const;
+
+interface CollectedEvent {
+  method: string;
+  updateType?: string;
+  params: unknown;
+  timestamp: number;
+}
+
+const events: CollectedEvent[] = [];
+const stderrLines: string[] = [];
+let sessionNewResult: Record<string, unknown> | null = null;
+let promptResult: Record<string, unknown> | null = null;
+
+// ─── stdout reader ───────────────────────────────────────────────────────────
+
 let buffer = '';
 
 async function readOutput() {
@@ -54,7 +88,7 @@ async function readOutput() {
         try {
           const msg = JSON.parse(trimmed);
 
-          // Response to a request
+          // Response to a pending request
           if (msg.id !== undefined && !msg.method) {
             const p = pending.get(msg.id);
             if (p) {
@@ -64,21 +98,21 @@ async function readOutput() {
             continue;
           }
 
-          // Notification
+          // Notification or agent→client request
           if (msg.method) {
-            allNotifications.push(msg);
-            const updateType = msg.params?.update?.sessionUpdate;
+            const updateType = msg.params?.update?.sessionUpdate as string | undefined;
+            events.push({
+              method: msg.method,
+              updateType,
+              params: msg.params,
+              timestamp: Date.now(),
+            });
+
             if (updateType) {
-              console.log(`[probe] ← session/update: ${updateType}`);
-              if (updateType.includes('config') || updateType.includes('usage')) {
-                console.log(JSON.stringify(msg.params, null, 2));
-              }
+              const short = truncate(JSON.stringify(msg.params?.update), 200);
+              console.log(`[probe] ← session/update: ${updateType}  ${short}`);
             } else {
               console.log(`[probe] ← ${msg.method}`);
-              // Print incoming requests (agent -> client) in full
-              if (msg.id !== undefined) {
-                console.log(`  (agent request, id=${msg.id})`, JSON.stringify(msg.params).slice(0, 300));
-              }
             }
           }
         } catch {
@@ -97,18 +131,28 @@ async function readStderr() {
       if (done) break;
       const text = decoder.decode(value);
       for (const line of text.split('\n')) {
-        if (line.trim()) console.log(`[probe] stderr: ${line.trim()}`);
+        if (line.trim()) {
+          stderrLines.push(line.trim());
+          console.log(`[probe] stderr: ${line.trim()}`);
+        }
       }
     }
   } catch {}
 }
 
+function truncate(s: string, n: number) {
+  return s.length > n ? s.slice(0, n - 3) + '...' : s;
+}
+
 readOutput();
 readStderr();
+
+// ─── Test Flow ───────────────────────────────────────────────────────────────
 
 await Bun.sleep(500);
 
 // Step 1: Initialize
+console.log('\n── Step 1: initialize ──');
 const initResult = await sendRequest('initialize', {
   protocolVersion: 1,
   clientInfo: { name: 'agemon-probe', version: '1.0.0' },
@@ -118,69 +162,180 @@ const initResult = await sendRequest('initialize', {
   },
 });
 
-console.log(`[probe] initialize result:`, JSON.stringify(initResult, null, 2));
+const capabilities = initResult?.capabilities as Record<string, unknown> | undefined;
+console.log(`[probe] initialize result: supportsLoadSession=${!!capabilities?.loadSession}`);
+console.log(`[probe] Full capabilities:`, JSON.stringify(capabilities, null, 2));
 
 await Bun.sleep(1000);
 
 // Step 2: session/new
-const sessionResult = await sendRequest('session/new', {
+console.log('\n── Step 2: session/new ──');
+let sessionResult = await sendRequest('session/new', {
   cwd: process.cwd(),
   mcpServers: [],
 });
 
-console.log(`[probe] session/new result:`, JSON.stringify(sessionResult, null, 2));
-
 if (sessionResult?.code) {
-  console.log('[probe] session/new failed, trying without mcpServers...');
-  const retry = await sendRequest('session/new', { cwd: process.cwd() });
-  console.log(`[probe] retry result:`, JSON.stringify(retry, null, 2));
+  console.log('[probe] session/new failed, retrying without mcpServers...');
+  sessionResult = await sendRequest('session/new', { cwd: process.cwd() });
 }
 
-// Send a simple prompt to trigger usage_update
-console.log('[probe] Sending a prompt to trigger usage_update...');
-const promptResult = await sendRequest('session/prompt', {
-  sessionId: sessionResult.sessionId,
+sessionNewResult = sessionResult as Record<string, unknown>;
+console.log(`[probe] session/new result keys: ${Object.keys(sessionNewResult ?? {}).join(', ')}`);
+console.log(`[probe] session/new full result:`, JSON.stringify(sessionNewResult, null, 2));
+
+const acpSessionId = sessionNewResult?.sessionId as string | undefined;
+if (!acpSessionId) {
+  console.error('[probe] FATAL: no sessionId in session/new result');
+  proc.kill('SIGTERM');
+  process.exit(1);
+}
+
+// Collect notifications that arrived during handshake (config_options, commands, etc.)
+console.log(`[probe] Notifications so far: ${events.length}`);
+await Bun.sleep(2000);
+console.log(`[probe] Notifications after 2s wait: ${events.length}`);
+
+// Step 3: session/prompt — triggers agent_message_chunk, tool_call, usage_update, etc.
+console.log('\n── Step 3: session/prompt ──');
+console.log('[probe] Sending prompt to exercise all event types...');
+promptResult = await sendRequest('session/prompt', {
+  sessionId: acpSessionId,
   prompt: [
-    { type: 'text', text: 'Say "hello" and nothing else.' }
+    { type: 'text', text: 'Read the file "package.json" in the current directory and tell me the project name. Be brief.' },
   ],
-});
+}) as Record<string, unknown>;
 
-console.log('[probe] Prompt result:', JSON.stringify(promptResult, null, 2));
+console.log(`[probe] session/prompt result keys: ${Object.keys(promptResult ?? {}).join(', ')}`);
+console.log(`[probe] session/prompt full result:`, JSON.stringify(promptResult, null, 2));
 
-console.log(`[probe] Waiting ${TIMEOUT_MS / 1000}s for notifications...`);
-await Bun.sleep(TIMEOUT_MS);
+// Wait for any trailing notifications
+console.log(`\n[probe] Waiting 5s for trailing notifications...`);
+await Bun.sleep(5000);
 
-// Summary
-console.log('\n========== SUMMARY ==========');
-console.log(`Total notifications: ${allNotifications.length}`);
+// ─── Summary Report ──────────────────────────────────────────────────────────
 
-const updateTypes = allNotifications
-  .filter((m: any) => m.method === 'session/update')
-  .map((m: any) => m.params?.update?.sessionUpdate)
-  .filter(Boolean);
+console.log('\n' + '='.repeat(70));
+console.log('  ACP EVENT PROBE SUMMARY');
+console.log('='.repeat(70));
 
-const methods = [...new Set(allNotifications.map((m: any) => m.method))];
-console.log(`Notification methods: ${methods.join(', ') || '(none)'}`);
-console.log(`session/update types: ${[...new Set(updateTypes)].join(', ') || '(none)'}`);
+// 1. Notification methods seen
+const methodCounts = new Map<string, number>();
+for (const e of events) {
+  methodCounts.set(e.method, (methodCounts.get(e.method) ?? 0) + 1);
+}
+console.log(`\n── Notification methods (${events.length} total) ──`);
+for (const [method, count] of [...methodCounts].sort()) {
+  console.log(`  ${method}: ${count}`);
+}
 
-const configRelated = allNotifications.filter((m: any) => {
-  const str = JSON.stringify(m).toLowerCase();
-  return str.includes('config') || str.includes('model');
-});
+// 2. session/update types seen
+const updateTypeCounts = new Map<string, number>();
+for (const e of events) {
+  if (e.updateType) {
+    updateTypeCounts.set(e.updateType, (updateTypeCounts.get(e.updateType) ?? 0) + 1);
+  }
+}
+console.log(`\n── session/update types ──`);
+for (const [type, count] of [...updateTypeCounts].sort()) {
+  const expected = EXPECTED_UPDATE_TYPES.includes(type as any);
+  console.log(`  ${expected ? '✓' : '?'} ${type}: ${count}`);
+}
 
-if (configRelated.length > 0) {
-  console.log(`\nConfig/model-related messages (${configRelated.length}):`);
-  for (const m of configRelated) {
-    console.log(JSON.stringify(m, null, 2));
+// 3. Check for missing expected types
+const missing = EXPECTED_UPDATE_TYPES.filter(t => !updateTypeCounts.has(t));
+if (missing.length > 0) {
+  console.log(`\n── Missing expected update types ──`);
+  for (const t of missing) {
+    console.log(`  ✗ ${t} — never received`);
   }
 } else {
-  console.log('\nNo config or model-related messages found.');
-  console.log('\nAll notifications:');
-  for (const m of allNotifications) {
-    console.log(JSON.stringify(m, null, 2).slice(0, 500));
+  console.log(`\n  ✓ All expected update types received!`);
+}
+
+// 4. Unexpected update types
+const unexpected = [...updateTypeCounts.keys()].filter(
+  t => !EXPECTED_UPDATE_TYPES.includes(t as any)
+);
+if (unexpected.length > 0) {
+  console.log(`\n── Unexpected update types (not parsed by agemon) ──`);
+  for (const t of unexpected) {
+    console.log(`  ! ${t}: ${updateTypeCounts.get(t)}`);
+    // Print first example
+    const example = events.find(e => e.updateType === t);
+    if (example) {
+      console.log(`    Example: ${truncate(JSON.stringify(example.params), 500)}`);
+    }
   }
 }
 
+// 5. session/new result analysis
+console.log(`\n── session/new result fields ──`);
+if (sessionNewResult) {
+  for (const key of Object.keys(sessionNewResult)) {
+    const val = sessionNewResult[key];
+    const expected = SESSION_NEW_FIELDS.includes(key as any);
+    const display = typeof val === 'object' ? truncate(JSON.stringify(val), 120) : String(val);
+    console.log(`  ${expected ? '✓' : '·'} ${key}: ${display}`);
+  }
+  const missingNew = SESSION_NEW_FIELDS.filter(f => !(f in sessionNewResult!));
+  for (const f of missingNew) {
+    console.log(`  ✗ ${f} — not present`);
+  }
+}
+
+// 6. session/prompt result analysis
+console.log(`\n── session/prompt result fields ──`);
+if (promptResult) {
+  for (const key of Object.keys(promptResult)) {
+    const val = promptResult[key];
+    const expected = PROMPT_RESULT_FIELDS.includes(key as any);
+    const display = typeof val === 'object' ? truncate(JSON.stringify(val), 200) : String(val);
+    console.log(`  ${expected ? '✓' : '·'} ${key}: ${display}`);
+  }
+  const missingPrompt = PROMPT_RESULT_FIELDS.filter(f => !(f in promptResult!));
+  for (const f of missingPrompt) {
+    console.log(`  ✗ ${f} — not present`);
+  }
+
+  // Detailed usage breakdown from prompt result
+  const usage = promptResult.usage as Record<string, unknown> | undefined;
+  if (usage) {
+    console.log(`\n── session/prompt usage breakdown ──`);
+    for (const [k, v] of Object.entries(usage)) {
+      console.log(`    ${k}: ${v}`);
+    }
+  }
+}
+
+// 7. Sample events for each update type
+console.log(`\n── Sample payloads (first of each type) ──`);
+const seen = new Set<string>();
+for (const e of events) {
+  const key = e.updateType ?? e.method;
+  if (seen.has(key)) continue;
+  seen.add(key);
+  const payload = e.updateType
+    ? (e.params as any)?.update
+    : e.params;
+  console.log(`\n  [${key}]`);
+  console.log(`  ${truncate(JSON.stringify(payload, null, 2), 600)}`);
+}
+
+// 8. Stderr summary
+if (stderrLines.length > 0) {
+  console.log(`\n── stderr (${stderrLines.length} lines) ──`);
+  for (const line of stderrLines.slice(0, 10)) {
+    console.log(`  ${line}`);
+  }
+  if (stderrLines.length > 10) {
+    console.log(`  ... and ${stderrLines.length - 10} more`);
+  }
+}
+
+console.log('\n' + '='.repeat(70));
+
+// Cleanup
 proc.kill('SIGTERM');
 await Bun.sleep(500);
 proc.kill('SIGKILL');

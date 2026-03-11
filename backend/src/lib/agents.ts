@@ -158,7 +158,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     command: ['gemini', '--experimental-acp'],
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
-    parseConfigOptions: parseNoConfigOptions,
+    parseConfigOptions: parseOpenCodeConfigOptions,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },

@@ -243,7 +243,8 @@ export function SessionChatPanel({
     return 'Send a message...';
   }, [isDone, sessionStopped, sessionReady, turnInFlight, pendingInputs]);
 
-  const contextPct = usage ? Math.min(100, Math.round((usage.inputTokens / usage.contextWindow) * 100)) : null;
+  const totalUsed = usage ? usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens : 0;
+  const contextPct = usage ? Math.min(100, Math.round((totalUsed / usage.contextWindow) * 100)) : null;
   const contextBarColor = contextPct !== null
     ? contextPct >= 70 ? 'bg-red-500' : contextPct >= 50 ? 'bg-amber-400' : 'bg-emerald-500'
     : 'bg-emerald-500';

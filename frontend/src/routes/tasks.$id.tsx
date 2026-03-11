@@ -96,12 +96,14 @@ export default function TaskDetailView() {
 
   // Seed sessionUsage store from initial sessions data (covers page-reload case)
   useEffect(() => {
+    const current = useWsStore.getState().sessionUsage;
     for (const s of sessions) {
-      if (s.usage && !allSessionUsage[s.id]) {
+      if (s.usage && !current[s.id]) {
         setSessionUsage(s.id, s.usage);
       }
     }
-  }, [sessions, setSessionUsage, allSessionUsage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, setSessionUsage]);
 
   const pendingInputs = useMemo(
     () => selectedSessionId

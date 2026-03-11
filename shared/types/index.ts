@@ -127,6 +127,8 @@ export interface SessionUsage {
   cachedWriteTokens: number;
   /** Max context window size in tokens (agent-reported or default) */
   contextWindow: number;
+  /** Cost in USD (if reported by agent, e.g. OpenCode) */
+  cost?: number;
 }
 
 // ─── Agent Commands (Slash Commands) ────────────────────────────────────────
