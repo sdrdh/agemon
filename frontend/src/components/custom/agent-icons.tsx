@@ -6,8 +6,8 @@ export const AGENT_DISPLAY_NAMES: Record<string, string> = {
   'claude-code': 'Claude',
   'opencode': 'OpenCode',
   'gemini': 'Gemini',
-  'aider': 'Aider',
   'codex': 'Codex',
+  'pi': 'Pi',
 };
 
 export function agentDisplayName(agentType: string): string {
@@ -18,8 +18,8 @@ export const AGENT_COLORS: Record<string, string> = {
   'claude-code': 'text-[#D97757]',
   'opencode': 'text-foreground',
   'gemini': 'text-[#4285F4]',
-  'aider': 'text-[#14b8a6]',
-  'codex': 'text-[#10A37F]',
+  'codex': 'text-[#7A9DFF]',
+  'pi': 'text-[#E85D3A]',
 };
 
 // ─── Individual brand icons ─────────────────────────────────────────────────
@@ -52,21 +52,29 @@ function OpenCodeIcon({ className }: { className?: string }) {
   );
 }
 
-/** OpenAI flower/knot mark (for Codex) */
+/** Codex brand mark (terminal prompt + chevron with gradient) */
 function CodexIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-      <path d="M22.282 9.821a6 6 0 0 0-.516-4.91 6.05 6.05 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a6 6 0 0 0-3.998 2.9 6.05 6.05 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.05 6.05 0 0 0 6.515 2.9A6 6 0 0 0 13.26 24a6.06 6.06 0 0 0 5.772-4.206 6 6 0 0 0 3.997-2.9 6.06 6.06 0 0 0-.747-7.073M13.26 22.43a4.48 4.48 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.8.8 0 0 0 .392-.681v-6.737l2.02 1.168a.07.07 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494M3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.77.77 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646M2.34 7.896a4.5 4.5 0 0 1 2.366-1.973V11.6a.77.77 0 0 0 .388.677l5.815 3.354-2.02 1.168a.08.08 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.08.08 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667m2.01-3.023-.141-.085-4.774-2.782a.78.78 0 0 0-.785 0L9.409 9.23V6.897a.07.07 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.8.8 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5Z" />
+    <svg viewBox="0 0 24 24" className={className}>
+      <path d="M19.503 0H4.496A4.496 4.496 0 000 4.496v15.007A4.496 4.496 0 004.496 24h15.007A4.496 4.496 0 0024 19.503V4.496A4.496 4.496 0 0019.503 0z" fill="#fff" />
+      <path d="M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z" fill="url(#codex-grad)" />
+      <defs>
+        <linearGradient gradientUnits="userSpaceOnUse" id="codex-grad" x1="12" x2="12" y1="3" y2="21">
+          <stop stopColor="#B1A7FF" />
+          <stop offset=".5" stopColor="#7A9DFF" />
+          <stop offset="1" stopColor="#3941FF" />
+        </linearGradient>
+      </defs>
     </svg>
   );
 }
 
-/** Aider stylized "A" mark */
-function AiderIcon({ className }: { className?: string }) {
+/** Pi pixelated "Pi" mark */
+function PiIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 13L8 3L13 13" />
-      <line x1="5.5" y1="9" x2="10.5" y2="9" />
+    <svg viewBox="0 0 800 800" fill="currentColor" className={className}>
+      <path fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
+      <path d="M517.36 400H634.72V634.72H517.36Z" />
     </svg>
   );
 }
@@ -80,7 +88,7 @@ export function AgentIcon({ agentType, className }: { agentType: string; classNa
     case 'gemini': return <GeminiIcon className={cn} />;
     case 'opencode': return <OpenCodeIcon className={cn} />;
     case 'codex': return <CodexIcon className={cn} />;
-    case 'aider': return <AiderIcon className={cn} />;
+    case 'pi': return <PiIcon className={cn} />;
     default: return <Bot className={cn} />;
   }
 }

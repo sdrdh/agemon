@@ -2445,6 +2445,17 @@ Any delay in Track A tasks will delay the entire project. Tracks B, C, and D pro
 
 ---
 
+## Settings: Agent Detection & Configuration Page
+
+**Goal:** A settings page that shows all supported CLI agents, whether their required binaries are detected on PATH, and install commands for missing ones.
+
+- [ ] Add `requiredBinaries` and `installCommands` to `AgentConfig` in `agents.ts` (e.g. claude-code needs `claude` + `claude-agent-acp`, codex needs `codex` + `codex-acp` via `@zed-industries/codex-acp`, pi needs `pi-acp` via `npm install -g pi-acp`, gemini needs `gemini` via `gemini-cli`, opencode just needs `opencode`)
+- [ ] Add `GET /api/agents/status` backend endpoint that checks each agent's binaries on PATH and returns detected/not-detected status
+- [ ] Build frontend settings page with agent list: icon, name, detected/not-detected badge, copy-to-clipboard install command for missing agents
+- [ ] Add default agent selector to settings page
+
+---
+
 ## Phase 10: Memory CMS
 
 **Goal:** Persistent memory system that distills task activity into markdown files — per task, per project, per day, per week — readable from a frontend viewer and injectable into new agent sessions as context.

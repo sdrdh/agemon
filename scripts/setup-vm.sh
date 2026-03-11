@@ -2,20 +2,17 @@
 #
 # Agemon VM Setup Script
 # ──────────────────────────────────────────────────────────────────────
-# Reproduces the full agemon dev environment on a fresh exe.dev VM.
+# Reproduces the full agemon dev environment on a fresh VM.
 # Points to the 'develop' branch.
 #
 # Usage:
 #   chmod +x scripts/setup-vm.sh && ./scripts/setup-vm.sh
 #
-# Prerequisites: exe.dev VM with git, node (v22+), SSH key added to GitHub.
+# Prerequisites: VM with git, node (v22+).
 # ──────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-EXE_HOST="${EXE_HOST:-agemon.exe.xyz}"   # Change if your exe.dev subdomain differs
-AGEMON_KEY="${AGEMON_KEY:-test}"          # Auth token for dev
-GITHUB_PAT="${GITHUB_PAT:-ghp_your_token_here}"
 REPO_URL="git@github.com:sdrdh/agemon.git"
 BRANCH="develop"
 
@@ -23,17 +20,62 @@ echo "════════════════════════�
 echo "  Agemon VM Setup — targeting branch: $BRANCH"
 echo "══════════════════════════════════════════════════════════"
 
+# ── 0. Prompt for configuration ──────────────────────────────────────
+
+# Git user
+DEFAULT_GIT_NAME="$(git config --global user.name 2>/dev/null || echo "")"
+DEFAULT_GIT_EMAIL="$(git config --global user.email 2>/dev/null || echo "")"
+
+read -rp "Git name [${DEFAULT_GIT_NAME:-your name}]: " GIT_NAME
+GIT_NAME="${GIT_NAME:-$DEFAULT_GIT_NAME}"
+
+read -rp "Git email [${DEFAULT_GIT_EMAIL:-you@example.com}]: " GIT_EMAIL
+GIT_EMAIL="${GIT_EMAIL:-$DEFAULT_GIT_EMAIL}"
+
+if [ -z "$GIT_NAME" ] || [ -z "$GIT_EMAIL" ]; then
+  echo "ERROR: Git name and email are required."
+  exit 1
+fi
+
+# Agemon auth key
+DEFAULT_AGEMON_KEY="${AGEMON_KEY:-test}"
+read -rp "Agemon auth key [$DEFAULT_AGEMON_KEY]: " AGEMON_KEY_INPUT
+AGEMON_KEY="${AGEMON_KEY_INPUT:-$DEFAULT_AGEMON_KEY}"
+
+# GitHub PAT
+DEFAULT_GITHUB_PAT="${GITHUB_PAT:-}"
+read -rp "GitHub PAT (for PR creation, optional) [${DEFAULT_GITHUB_PAT:+****${DEFAULT_GITHUB_PAT: -4}}]: " GITHUB_PAT_INPUT
+GITHUB_PAT="${GITHUB_PAT_INPUT:-$DEFAULT_GITHUB_PAT}"
+
+# Host
+DEFAULT_HOST="${EXE_HOST:-localhost}"
+read -rp "Hostname (for VITE_ALLOWED_HOSTS) [$DEFAULT_HOST]: " EXE_HOST_INPUT
+EXE_HOST="${EXE_HOST_INPUT:-$DEFAULT_HOST}"
+
+echo ""
+echo "── Configuration ──"
+echo "  Git:       $GIT_NAME <$GIT_EMAIL>"
+echo "  Auth key:  $AGEMON_KEY"
+echo "  GitHub PAT:${GITHUB_PAT:+ ****${GITHUB_PAT: -4}}"
+echo "  Hostname:  $EXE_HOST"
+echo ""
+read -rp "Continue? [Y/n] " CONFIRM
+if [[ "${CONFIRM,,}" == "n" ]]; then
+  echo "Aborted."
+  exit 0
+fi
+
 # ── 1. Git config ──────────────────────────────────────────────────────
 echo -e "\n→ Configuring git..."
-git config --global user.email "hello@sdrdh.io"
-git config --global user.name "Siddardh Padyala"
+git config --global user.email "$GIT_EMAIL"
+git config --global user.name "$GIT_NAME"
 git config --global init.defaultBranch main
 
 # ── 1b. SSH key ────────────────────────────────────────────────
 if [ ! -f ~/.ssh/id_ed25519 ]; then
   echo -e "\n→ Generating SSH key..."
   mkdir -p ~/.ssh && chmod 700 ~/.ssh
-  ssh-keygen -t ed25519 -C "hello@sdrdh.io" -f ~/.ssh/id_ed25519 -N ""
+  ssh-keygen -t ed25519 -C "$GIT_EMAIL" -f ~/.ssh/id_ed25519 -N ""
   # Add GitHub to known_hosts to avoid interactive prompt
   ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
   echo ""
@@ -168,12 +210,12 @@ tmux send-keys -t agemon:frontend "cd $PROJECT_DIR/frontend && bun run dev" Ente
 # ── 9. Summary ───────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════════════════════"
-echo "  ✅ Agemon dev environment ready!"
+echo "  Agemon dev environment ready!"
 echo "══════════════════════════════════════════════════════════"
 echo ""
 echo "  Branch:    $BRANCH"
-echo "  Backend:   https://$EXE_HOST:3000/"
-echo "  Frontend:  https://$EXE_HOST:5173/"
+echo "  Backend:   http://$EXE_HOST:3000/"
+echo "  Frontend:  http://$EXE_HOST:5173/"
 echo "  Auth key:  $AGEMON_KEY"
 echo ""
 echo "  tmux session: agemon (2 windows: backend, frontend)"
@@ -184,6 +226,7 @@ echo ""
 echo "  Smoke tests:"
 echo "    ./scripts/test-api.sh"
 echo ""
-echo "  ⚠️  Don't forget to run 'set-public' in the exe.dev"
-echo "     dashboard to expose ports 3000 and 5173."
+if [ "$EXE_HOST" != "localhost" ]; then
+  echo "  Don't forget to expose ports 3000 and 5173 on your VM."
+fi
 echo "══════════════════════════════════════════════════════════"

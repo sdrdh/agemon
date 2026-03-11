@@ -114,11 +114,6 @@ function parseOpenCodeConfigOptions(result: Record<string, unknown>): SessionCon
   return options;
 }
 
-/** No-op parser for agents that don't advertise config options yet. */
-function parseNoConfigOptions(_result: Record<string, unknown>): SessionConfigOption[] {
-  return [];
-}
-
 export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
   'claude-code': {
     command: ['claude-agent-acp', '--agent', 'claude-code'],
@@ -144,21 +139,31 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
   },
-  'aider': {
-    command: ['aider', '--acp'],
-    passEnvVars: ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'],
-    label: 'Aider',
-    parseConfigOptions: parseNoConfigOptions,
-    pluginPaths: [],
-    skillPaths: [
-      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
-    ],
-  },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    pluginPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
+  },
+  'pi': {
+    command: ['pi-acp'],
+    passEnvVars: ['ANTHROPIC_API_KEY'],
+    label: 'Pi',
+    parseConfigOptions: parseOpenCodeConfigOptions,
+    pluginPaths: [],
+    skillPaths: [
+      { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
+    ],
+  },
+  'codex': {
+    command: ['codex-acp'],
+    passEnvVars: ['OPENAI_API_KEY'],
+    label: 'Codex',
+    parseConfigOptions: parseClaudeConfigOptions,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },

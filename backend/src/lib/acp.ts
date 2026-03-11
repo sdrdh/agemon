@@ -432,8 +432,9 @@ function handleSessionUpdate(
       const DEFAULT_CONTEXT_WINDOW: Record<AgentType, number> = {
         'claude-code': 200_000,
         'opencode': 200_000,
-        'aider': 128_000,
         'gemini': 1_000_000,
+        'pi': 200_000,
+        'codex': 258_400,
       };
 
       const agentType = rs?.agentType ?? 'claude-code';
@@ -833,8 +834,9 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       const DEFAULT_CONTEXT_WINDOW: Record<AgentType, number> = {
         'claude-code': 200_000,
         'opencode': 200_000,
-        'aider': 128_000,
         'gemini': 1_000_000,
+        'pi': 200_000,
+        'codex': 258_400,
       };
       const agentType = entry.agentType;
       const defaultWindow = DEFAULT_CONTEXT_WINDOW[agentType] ?? 200_000;

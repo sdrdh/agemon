@@ -11,7 +11,7 @@
  */
 
 const BINARY = process.argv[2] || 'claude-agent-acp';
-const ARGS = process.argv.length > 3 ? process.argv.slice(3) : ['--agent', 'claude-code'];
+const ARGS = process.argv.slice(3);
 const TIMEOUT_MS = 15_000;
 
 // ─── JSON-RPC Transport ──────────────────────────────────────────────────────

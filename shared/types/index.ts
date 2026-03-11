@@ -2,7 +2,7 @@
 
 export type TaskStatus = 'todo' | 'working' | 'awaiting_input' | 'done';
 
-export const AGENT_TYPES = ['claude-code', 'opencode', 'aider', 'gemini'] as const;
+export const AGENT_TYPES = ['claude-code', 'opencode', 'gemini', 'pi', 'codex'] as const;
 export type AgentType = typeof AGENT_TYPES[number];
 
 export type AgentSessionState = 'starting' | 'ready' | 'running' | 'stopped' | 'crashed' | 'interrupted';
