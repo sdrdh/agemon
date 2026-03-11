@@ -29,6 +29,29 @@ git config --global user.email "hello@sdrdh.io"
 git config --global user.name "Siddardh Padyala"
 git config --global init.defaultBranch main
 
+# ── 1b. SSH key ────────────────────────────────────────────────
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+  echo -e "\n→ Generating SSH key..."
+  mkdir -p ~/.ssh && chmod 700 ~/.ssh
+  ssh-keygen -t ed25519 -C "hello@sdrdh.io" -f ~/.ssh/id_ed25519 -N ""
+  # Add GitHub to known_hosts to avoid interactive prompt
+  ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+  echo ""
+  echo "════════════════════════════════════════════════════════════"
+  echo "  WARNING: Add this SSH key to GitHub before continuing!"
+  echo "════════════════════════════════════════════════════════════"
+  echo ""
+  cat ~/.ssh/id_ed25519.pub
+  echo ""
+  read -rp "Press Enter after adding the key to GitHub..."
+else
+  echo -e "\n→ SSH key already exists at ~/.ssh/id_ed25519"
+  # Ensure GitHub is in known_hosts
+  if ! grep -q 'github.com' ~/.ssh/known_hosts 2>/dev/null; then
+    ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+  fi
+fi
+
 # ── 2. Install Bun ────────────────────────────────────────────────────
 if ! command -v bun &>/dev/null && [ ! -f "$HOME/.bun/bin/bun" ]; then
   echo -e "\n→ Installing Bun..."
