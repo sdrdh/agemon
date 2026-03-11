@@ -331,7 +331,12 @@ function parseSession(row: AgentSession): AgentSession {
     throw new Error(`[db] unexpected agent type: ${row.agent_type}`);
   }
   // SQLite returns 0/1 for boolean columns
-  return { ...row, archived: !!(row as any).archived };
+  const session: AgentSession = { ...row, archived: !!(row as any).archived };
+  const usageJson = (row as any).usage_json;
+  if (usageJson) {
+    try { session.usage = JSON.parse(usageJson); } catch { /* ignore malformed */ }
+  }
+  return session;
 }
 
 // ── Shared MCP server helpers ────────────────────────────────────────────────

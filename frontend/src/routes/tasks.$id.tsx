@@ -91,7 +91,17 @@ export default function TaskDetailView() {
   );
   const setTurnInFlight = useWsStore((s) => s.setTurnInFlight);
   const allSessionUsage = useWsStore((s) => s.sessionUsage);
+  const setSessionUsage = useWsStore((s) => s.setSessionUsage);
   const activeSessionUsage = selectedSessionId ? allSessionUsage[selectedSessionId] : undefined;
+
+  // Seed sessionUsage store from initial sessions data (covers page-reload case)
+  useEffect(() => {
+    for (const s of sessions) {
+      if (s.usage && !allSessionUsage[s.id]) {
+        setSessionUsage(s.id, s.usage);
+      }
+    }
+  }, [sessions, setSessionUsage, allSessionUsage]);
 
   const pendingInputs = useMemo(
     () => selectedSessionId

@@ -37,6 +37,7 @@ export interface AgentSession {
   started_at: string;   // ISO 8601
   ended_at: string | null;
   exit_code: number | null;
+  usage?: SessionUsage; // Latest token usage snapshot; undefined until first usage_update
 }
 
 export interface ACPEvent {
