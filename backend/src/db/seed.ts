@@ -35,7 +35,7 @@ db.createTask({
   title: 'Write mobile layout tests',
   description: 'Add Playwright tests for mobile viewport on key user flows.',
   status: 'done',
-  agent: 'aider',
+  agent: 'claude-code',
   repos: ['git@github.com:example/frontend.git'],
 });
 
@@ -55,7 +55,7 @@ const sessionId3 = randomUUID();
 db.insertSession({
   id: sessionId3,
   task_id: taskId3,
-  agent_type: 'aider',
+  agent_type: 'claude-code',
   pid: null,
 });
 db.updateSessionState(sessionId3, 'stopped', { exit_code: 0 });

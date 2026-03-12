@@ -444,9 +444,9 @@ function handleSessionUpdate(
       // - claude-agent-acp uses: used, size (total tokens, context window size)
       // - Some agents send: inputTokens, outputTokens, contextWindow
       const used = typeof update.used === 'number' ? update.used : 0;
-      const size = typeof update.size === 'number' ? update.size 
-        : typeof update.contextWindow === 'number' ? update.contextWindow 
-        : defaultWindow;
+      const size = (typeof update.size === 'number' ? update.size
+        : typeof update.contextWindow === 'number' ? update.contextWindow
+        : defaultWindow) || defaultWindow;
 
       // Some agents send detailed token breakdown
       const inputTokens = typeof update.inputTokens === 'number' ? update.inputTokens : 0;
@@ -846,9 +846,9 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       const used = typeof usageObj.used === 'number' ? usageObj.used
         : typeof usageObj.totalTokens === 'number' ? usageObj.totalTokens
         : 0;
-      const size = typeof usageObj.size === 'number' ? usageObj.size
+      const size = (typeof usageObj.size === 'number' ? usageObj.size
         : typeof usageObj.contextWindow === 'number' ? usageObj.contextWindow
-        : defaultWindow;
+        : defaultWindow) || defaultWindow;
 
       const inputTokens = typeof usageObj.inputTokens === 'number' ? usageObj.inputTokens : 0;
       const outputTokens = typeof usageObj.outputTokens === 'number' ? usageObj.outputTokens : 0;
