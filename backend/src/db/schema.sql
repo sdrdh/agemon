@@ -9,8 +9,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   description TEXT CHECK (description IS NULL OR length(description) <= 10000),
   status      TEXT NOT NULL DEFAULT 'todo'
                 CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
-  agent       TEXT NOT NULL DEFAULT 'claude-code'
-                CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
+  agent       TEXT NOT NULL DEFAULT 'claude-code',
   archived    INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
@@ -19,8 +18,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS agent_sessions (
   id                  TEXT PRIMARY KEY,
   task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  agent_type          TEXT NOT NULL
-                        CHECK (agent_type IN ('claude-code', 'opencode', 'aider', 'gemini')),
+  agent_type          TEXT NOT NULL,
   name                TEXT DEFAULT NULL,  -- Human-readable label derived from first prompt
   external_session_id TEXT,          -- Provider session ID for --resume (set after first output)
   pid                 INTEGER,       -- OS process ID; NULL if not running
