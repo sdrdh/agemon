@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
-import type { AgentType, AgentSession } from '@agemon/shared';
+import type { AgentType, AgentSession, SessionUsage } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { SESSION_STATE_DOT, SESSION_STATE_LABEL, isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
+
+function contextFillPct(usage: SessionUsage): number {
+  const total = usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens;
+  return Math.min(100, Math.round((total / usage.contextWindow) * 100));
+}
 
 function AgentTypeSelector({ value, onValueChange }: { value: AgentType; onValueChange: (v: AgentType) => void }) {
   return (
@@ -43,6 +48,7 @@ export function SessionListPanel({
   unreadSessions,
   pendingInputSessionIds,
   sessionLabels,
+  sessionUsage,
 }: {
   sessions: AgentSession[];
   activeSessionId: string | null;
@@ -59,6 +65,7 @@ export function SessionListPanel({
   unreadSessions: Record<string, boolean>;
   pendingInputSessionIds: Set<string>;
   sessionLabels: string[];
+  sessionUsage: Record<string, SessionUsage>;
 }) {
   const [selectedAgent, setSelectedAgent] = useState<AgentType>('claude-code');
 
@@ -97,26 +104,46 @@ export function SessionListPanel({
             const needsAttention = !isActiveItem && pendingInputSessionIds.has(session.id);
             const canStop = isSessionActive(session.state);
             const canResume = isSessionTerminal(session.state) && !isDone;
+            const usage = sessionUsage[session.id];
+            const ctxPct = usage ? contextFillPct(usage) : null;
+            const ctxBg = ctxPct !== null
+              ? ctxPct >= 70 ? 'bg-red-500/15' : ctxPct >= 50 ? 'bg-amber-400/15' : 'bg-primary/5'
+              : null;
 
             return (
               <button
                 key={session.id}
                 type="button"
                 onClick={() => onSelect(session.id)}
-                className={`relative w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left transition-colors border-b ${
+                className={`relative w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left transition-colors border-b overflow-hidden ${
                   isActiveItem
-                    ? 'bg-primary/5 border-l-2 border-l-primary'
+                    ? 'border-l-2 border-l-primary'
                     : 'hover:bg-accent/50 border-l-2 border-l-transparent'
                 }`}
               >
+                {/* Context fill background */}
+                {ctxPct !== null && (
+                  <span
+                    aria-hidden="true"
+                    className={`absolute inset-y-0 left-0 transition-all ${ctxBg ?? ''}`}
+                    style={{ width: `${ctxPct}%` }}
+                  />
+                )}
                 <span className="relative shrink-0">
                   <AgentIcon agentType={session.agent_type} className={`h-5 w-5 ${AGENT_COLORS[session.agent_type] ?? 'text-muted-foreground'}`} />
                   <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ${dotColor} ring-1 ring-background`} />
                 </span>
 
-                <div className="flex-1 min-w-0">
+                <div className="relative flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{label}</div>
-                  <div className="text-xs text-muted-foreground">{stateLabel}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {stateLabel}
+                    {ctxPct !== null && (
+                      <span className={`ml-1.5 tabular-nums ${ctxPct >= 70 ? 'text-red-500 font-medium' : ''}`}>
+                        · {ctxPct}% ctx
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {needsAttention && (

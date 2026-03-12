@@ -2,7 +2,7 @@
 
 export type TaskStatus = 'todo' | 'working' | 'awaiting_input' | 'done';
 
-export const AGENT_TYPES = ['claude-code', 'opencode', 'aider', 'gemini'] as const;
+export const AGENT_TYPES = ['claude-code', 'opencode', 'gemini', 'pi', 'codex'] as const;
 export type AgentType = typeof AGENT_TYPES[number];
 
 export type AgentSessionState = 'starting' | 'ready' | 'running' | 'stopped' | 'crashed' | 'interrupted';
@@ -37,6 +37,7 @@ export interface AgentSession {
   started_at: string;   // ISO 8601
   ended_at: string | null;
   exit_code: number | null;
+  usage?: SessionUsage; // Latest token usage snapshot; undefined until first usage_update
 }
 
 export interface ACPEvent {
@@ -117,6 +118,19 @@ export interface ToolCallUpdateEvent {
   args?: Record<string, string>;      // Tool-specific params from rawInput
 }
 
+// ─── Session Usage ───────────────────────────────────────────────────────────
+
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens: number;
+  /** Max context window size in tokens (agent-reported or default) */
+  contextWindow: number;
+  /** Cost in USD (if reported by agent, e.g. OpenCode) */
+  cost?: number;
+}
+
 // ─── Agent Commands (Slash Commands) ────────────────────────────────────────
 
 export interface AgentCommand {
@@ -158,7 +172,8 @@ export type ServerEvent =
   | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] }
   | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] }
   | { type: 'turn_cancelled'; sessionId: string; taskId: string }
-  | { type: 'turn_completed'; sessionId: string; taskId: string };
+  | { type: 'turn_completed'; sessionId: string; taskId: string }
+  | { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage };
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }

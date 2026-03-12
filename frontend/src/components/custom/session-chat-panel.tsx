@@ -9,7 +9,7 @@ import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
 import type { ChatItem } from '@/lib/chat-utils';
-import type { AgentCommand, AgentSession, PendingApproval, ApprovalDecision } from '@agemon/shared';
+import type { AgentCommand, AgentSession, PendingApproval, ApprovalDecision, SessionUsage } from '@agemon/shared';
 
 const NEAR_BOTTOM_THRESHOLD = 150;
 
@@ -51,6 +51,7 @@ export function SessionChatPanel({
   onBack,
   isDesktop,
   chatEndRef,
+  usage,
 }: {
   session: AgentSession;
   sessionLabel: string;
@@ -71,6 +72,7 @@ export function SessionChatPanel({
   onBack: () => void;
   isDesktop: boolean;
   chatEndRef: React.RefObject<HTMLDivElement>;
+  usage?: SessionUsage;
 }) {
   const sessionRunning = isSessionActive(session.state);
   const sessionStopped = isSessionTerminal(session.state);
@@ -241,6 +243,12 @@ export function SessionChatPanel({
     return 'Send a message...';
   }, [isDone, sessionStopped, sessionReady, turnInFlight, pendingInputs]);
 
+  const totalUsed = usage ? usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens : 0;
+  const contextPct = usage ? Math.min(100, Math.round((totalUsed / usage.contextWindow) * 100)) : null;
+  const contextBarColor = contextPct !== null
+    ? contextPct >= 70 ? 'bg-red-500' : contextPct >= 50 ? 'bg-amber-400' : 'bg-emerald-500'
+    : 'bg-emerald-500';
+
   return (
     <div className="flex flex-col flex-1 min-w-0">
       {!isDesktop && (
@@ -324,7 +332,18 @@ export function SessionChatPanel({
         )}
       </div>
 
-      <div className="border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-background">
+      <div className="border-t bg-background">
+        {contextPct !== null && (
+          <div className="flex items-center gap-2 px-4 pt-2">
+            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${contextBarColor}`} style={{ width: `${contextPct}%` }} />
+            </div>
+            <span className={`text-[11px] tabular-nums shrink-0 ${contextPct >= 70 ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+              {contextPct}% ctx
+            </span>
+          </div>
+        )}
+        <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {sessionStopped && !isDone ? (
           <Button
             className="w-full gap-2 min-h-[44px]"
@@ -421,6 +440,7 @@ export function SessionChatPanel({
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   );

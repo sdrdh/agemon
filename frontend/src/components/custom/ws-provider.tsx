@@ -186,6 +186,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAgentActivity(event.sessionId, null);
           break;
         }
+        case 'session_usage_update': {
+          store().setSessionUsage(event.sessionId, event.usage);
+          break;
+        }
       }
     });
 
