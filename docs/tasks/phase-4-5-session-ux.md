@@ -148,16 +148,16 @@
 
 ---
 
-### Task 4.20: Context Window Utilization Monitor
+### Task 4.20: Context Window Utilization Monitor ✅
 
-**Priority:** P1
-**Estimated Time:** 4 hours
+**Priority:** P1  
+**Status:** Done (with minor bugs)
 
 **Deliverables:**
-- [ ] Derive context window fill percentage from token usage data (used tokens / max context window)
-- [ ] Display a context window % progress bar prominently in the session chat header
-- [ ] Show a warning indicator when context usage exceeds a threshold (e.g., 80%)
-- [ ] Show context % per session tab so users can see utilization for each active session
+- [x] Derive context window fill percentage from token usage data (used tokens / max context window)
+- [x] Display a context window % progress bar prominently in the session chat header
+- [x] Show a warning indicator when context usage exceeds a threshold (e.g., 80%)
+- [x] Show context % per session tab so users can see utilization for each active session
 
 **Key Considerations:**
 - Context window max varies by agent/model — may need a configurable default or agent-reported value
@@ -211,7 +211,7 @@
 
 ---
 
-### Task 4.27: Copy Chat Message Content
+### Task 4.27: Copy Chat Message Content ✅
 
 **Priority:** P2
 **Estimated Time:** 2 hours

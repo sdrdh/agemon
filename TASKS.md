@@ -36,9 +36,9 @@ For any phase, read its file or `grep -r "keyword" docs/tasks/` to find relevant
 | Phase 1: Core Infrastructure | ✅ Done | 0 | [docs/tasks/archive.md](docs/tasks/archive.md) |
 | Phase 2: Frontend Foundation | ✅ Done | 0 | [docs/tasks/archive.md](docs/tasks/archive.md) |
 | Phase 3: Git Integration | 🔲 Active | 6 | [docs/tasks/phase-3-git.md](docs/tasks/phase-3-git.md) |
-| Phase 3.5: Agent Context Harness | 🔲 Active | 30 | [docs/tasks/phase-3-5-agent-context.md](docs/tasks/phase-3-5-agent-context.md) |
+| Phase 3.5: Agent Context Harness | 🔲 Active | 2 | [docs/tasks/phase-3-5-agent-context.md](docs/tasks/phase-3-5-agent-context.md) |
 | Phase 4: ACP Integration | ✅ Done | 3 | [docs/tasks/archive.md](docs/tasks/archive.md) |
-| Phase 4.5: Session-Centric UX | 🔲 Active | 74 | [docs/tasks/phase-4-5-session-ux.md](docs/tasks/phase-4-5-session-ux.md) |
+| Phase 4.5: Session-Centric UX | 🔲 Active | 72 | [docs/tasks/phase-4-5-session-ux.md](docs/tasks/phase-4-5-session-ux.md) |
 | Phase 5: Terminal PTY | 🔲 Pending | 17 | [docs/tasks/phase-5-terminal.md](docs/tasks/phase-5-terminal.md) |
 | Phase 6: Diff Viewer | 🔲 Pending | 5 | [docs/tasks/phase-6-diff.md](docs/tasks/phase-6-diff.md) |
 | Phase 7: Build & Distribution | 🔲 Pending | 34 | [docs/tasks/phase-7-build.md](docs/tasks/phase-7-build.md) |
@@ -47,7 +47,7 @@ For any phase, read its file or `grep -r "keyword" docs/tasks/` to find relevant
 | Phase 10: Memory CMS | 🔲 Pending | 21 | [docs/tasks/misc.md](docs/tasks/misc.md) |
 | Success Criteria | 🔲 Pending | 21 | [docs/tasks/success-criteria.md](docs/tasks/success-criteria.md) |
 
-**Total pending:** ~270 items across all phases.
+**Total pending:** ~268 items across all phases.
 
 > Tip: `grep -r "Task 4\." docs/tasks/` to find a specific task number.
 > New tasks go in the appropriate phase file, not directly in TASKS.md.
