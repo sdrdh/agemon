@@ -90,6 +90,20 @@ export default function TaskDetailView() {
     selectedSessionId ? (s.turnsInFlight[selectedSessionId] ?? false) : false
   );
   const setTurnInFlight = useWsStore((s) => s.setTurnInFlight);
+  const allSessionUsage = useWsStore((s) => s.sessionUsage);
+  const setSessionUsage = useWsStore((s) => s.setSessionUsage);
+  const activeSessionUsage = selectedSessionId ? allSessionUsage[selectedSessionId] : undefined;
+
+  // Seed sessionUsage store from initial sessions data (covers page-reload case)
+  useEffect(() => {
+    const current = useWsStore.getState().sessionUsage;
+    for (const s of sessions) {
+      if (s.usage && !current[s.id]) {
+        setSessionUsage(s.id, s.usage);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, setSessionUsage]);
 
   const pendingInputs = useMemo(
     () => selectedSessionId
@@ -365,6 +379,7 @@ export default function TaskDetailView() {
             unreadSessions={unreadSessions}
             pendingInputSessionIds={pendingInputSessionIds}
             sessionLabels={sessionLabels}
+            sessionUsage={allSessionUsage}
           />
         )}
 
@@ -389,6 +404,7 @@ export default function TaskDetailView() {
             onBack={handleBackToList}
             isDesktop={isDesktop}
             chatEndRef={chatEndRef}
+            usage={activeSessionUsage}
           />
         )}
 

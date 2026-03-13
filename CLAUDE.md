@@ -1,7 +1,8 @@
 # Agemon — Agent Working Context
 
-> Read `PRD.md` for product spec and `TASKS.md` for the full task breakdown.
 > The current task will be provided in the prompt.
+
+@TASKS.md
 
 ---
 
@@ -33,45 +34,7 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 
 ## Project Structure (target)
 
-```
-agemon/
-├── backend/
-│   ├── src/
-│   │   ├── server.ts
-│   │   ├── db/          # schema, client, migrations
-│   │   ├── routes/      # REST endpoints
-│   │   └── lib/         # pty, git, acp, github managers
-│   ├── package.json
-│   └── tsconfig.json
-├── frontend/
-│   ├── src/
-│   │   ├── main.tsx
-│   │   ├── App.tsx
-│   │   ├── routes/      # TanStack Router routes
-│   │   ├── components/
-│   │   │   ├── ui/      # shadcn/ui components (auto-generated)
-│   │   │   └── custom/  # custom app components
-│   │   └── lib/         # api client, websocket, utils
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tsconfig.json
-├── website/
-│   ├── src/
-│   │   ├── pages/       # Astro routes (landing + docs)
-│   │   ├── content/     # Markdown docs
-│   │   ├── components/  # Astro + React components
-│   │   └── layouts/     # Page layouts
-│   ├── package.json
-│   └── astro.config.mjs
-├── shared/
-│   └── types/           # shared TS types (events, tasks, diffs)
-├── scripts/
-│   └── test-api.sh      # backend API smoke tests
-├── CLAUDE.md
-├── PRD.md
-├── TASKS.md
-└── package.json         # bun workspace root
-```
+`backend/src/` — server, db/, routes/, lib/ | `frontend/src/` — routes/, components/ui/ (shadcn), components/custom/, lib/ | `shared/types/` — shared TS types | `website/` — Astro static site | `scripts/test-api.sh` — smoke tests
 
 ---
 
@@ -205,3 +168,20 @@ Claude Code may be running inside a git worktree (e.g. `.claude/worktrees/<name>
 ## Non-Goals (v1)
 
 No multi-user, no cloud SaaS, no desktop native app, no CI/CD integration, no project management tool integrations.
+
+---
+
+## References
+
+Read these when you need deeper context — don't load them upfront unless directly relevant:
+
+| Doc | Read when |
+|-----|-----------|
+| `PRD.md` | Need product requirements or user stories |
+| `TASKS.md` | Phase index and status overview — links to per-phase files in `docs/tasks/` |
+| `docs/tasks/<phase>.md` | Full task detail, acceptance criteria — grep `docs/tasks/` to find specific tasks |
+| `docs/acp-agents.md` | Working on agent spawning, ACP protocol, or session lifecycle |
+| `docs/architecture.md` | Need system-level architecture decisions |
+| `docs/api-reference.md` | Need REST endpoint signatures |
+| `docs/reference-repo-analysis.md` | Looking for patterns from Shelley/Pi/OpenClaw to adopt — has a TL;DR table at the top |
+| `docs/plans/` | Design docs for specific features — filenames are dated and descriptive |

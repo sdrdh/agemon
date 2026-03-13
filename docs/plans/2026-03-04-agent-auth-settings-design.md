@@ -1,113 +1,180 @@
-# Agent Authentication & Configuration Settings — Design
+# Agent Settings: Detection, Login Status, and Flat-File Defaults
 
 **Date:** 2026-03-04
 **Status:** Approved
 
 ## Problem
 
-Agemon currently requires all agent API keys to be set as env vars before starting the server, and Claude Code / Gemini login must be run from a terminal. There is no way to configure agents from the mobile UI — defeating the mobile-first philosophy.
+Agemon has a basic settings page, but it does not yet expose agent-specific status or defaults. Users need to know:
+
+- whether each supported agent exists on the machine
+- whether the agent appears logged in or otherwise usable
+- what command to run next if the agent is missing or not authenticated
+- which agent/model/mode Agemon should prefer by default for new work
+
+The earlier `.env`-writing and proxy-login concept is no longer the right direction. This work should stay read-only with respect to external agent authentication and should use a small Agemon-owned flat file for Agemon defaults only.
 
 ## Decisions
 
-- **Key storage:** `.env` file (UI writes, server reads, hot-reloads)
-- **CLI auth:** Proxy login flow (backend drives `claude /login` / `gemini login`, streams prompts to UI)
-- **Detection:** Auto-detect binaries on PATH via `Bun.which()`
-- **Default agent:** Configurable in Settings, stored in `.env`
+- **Detection:** Detect agent binaries on PATH via `Bun.which()` using the same expanded PATH logic already used for agent launch
+- **Login/auth state:** Use read-only readiness checks only; do not attempt login from the UI
+- **Defaults storage:** Store Agemon-owned defaults in a flat file under `~/.agemon/`
+- **UI behavior:** Settings reports status and instructions; users complete install/login in their own terminal
+
+## Goals
+
+- Show install and login/readiness status for each supported agent in Settings
+- Give users copyable install/auth instructions per agent
+- Let users set Agemon defaults for agent/model/mode without touching `.env`
+- Apply those defaults automatically to new sessions unless the user overrides them
+
+## Non-Goals
+
+- No API key entry UI
+- No `.env` editor in Settings
+- No proxy login flow driven through Agemon
+- No persisted cache of machine-derived status beyond transient request-time computation
 
 ## Storage
 
-The project-root `.env` file stores all agent config:
+Agemon should own a small JSON settings file under `~/.agemon/`, for example:
 
-```
-OPENCODE_API_KEY=sk-...
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-...
-GOOGLE_API_KEY=AIza...
-DEFAULT_AGENT=claude-code
+```json
+{
+  "defaultAgent": "claude-code",
+  "agentDefaults": {
+    "claude-code": {
+      "model": "sonnet",
+      "mode": "default"
+    },
+    "opencode": {
+      "model": "gpt-5",
+      "mode": "build"
+    }
+  }
+}
 ```
 
-- Backend reads `.env` on startup
-- Settings UI writes via `POST /api/agents/config` — backend writes `.env` and hot-reloads `process.env`
-- API keys are never sent to the frontend in full — only masked (`sk-...xxxx`)
-- No DB schema changes
+- This file stores Agemon preferences only
+- It does not store API keys or login tokens for external tools
+- Missing file should be treated as "use built-in defaults"
+- Invalid values should be ignored with a safe fallback rather than breaking session creation
+
+Recommended path:
+
+- `~/.agemon/settings.json`
 
 ## Backend API
 
 ### `GET /api/agents/status`
 
-Returns all supported agents with detection and auth status:
+Returns supported agents with live install and readiness status, plus the current Agemon defaults:
 
 ```typescript
 interface AgentStatusResponse {
   defaultAgent: AgentType;
+  agentDefaults: Partial<Record<AgentType, {
+    model?: string;
+    mode?: string;
+  }>>;
   agents: Array<{
     type: AgentType;
     label: string;
     detected: boolean;
-    authMethod: 'login' | 'api_key';
-    authStatus: 'authenticated' | 'configured' | 'not_configured' | 'unknown';
-    requiredEnvVars: string[];
-    configuredVars?: Record<string, string>; // masked values
-    installUrl: string;
+    missingBinaries: string[];
+    loginStatus: 'logged_in' | 'not_logged_in' | 'unknown';
+    authCheckKind: 'env' | 'cli' | 'hybrid';
+    installInstructions: string[];
+    authInstructions: string[];
+    notes?: string[];
   }>;
 }
 ```
 
-**Auth status logic:**
-- `api_key` agents: check env vars non-empty → `configured` / `not_configured`
-- `login` agents: lightweight health-check (e.g. `claude --version`) → `authenticated` / `not_authenticated` / `unknown`
+Detection logic:
 
-### `POST /api/agents/config`
+- installation status is derived from required binaries present on PATH
+- login status is derived from agent-specific read-only checks
+- if detection is ambiguous, return `unknown` instead of guessing
 
-Save API keys and default agent. Writes to `.env`, hot-reloads.
+Suggested read-only login/readiness checks:
+
+- `claude-code`: detect required launch binary plus a Claude CLI login/readiness signal if available
+- `opencode`: env-based readiness check for required API key
+- `aider`: env-based readiness check for supported API key presence
+- `gemini`: CLI or env-based readiness check depending on supported local auth flow
+
+### `PUT /api/settings/agents`
+
+Persist Agemon-owned defaults to the flat-file settings store.
 
 ```typescript
-interface AgentConfigRequest {
+interface UpdateAgentSettingsRequest {
   defaultAgent?: AgentType;
-  envVars?: Record<string, string>; // e.g. { OPENAI_API_KEY: "sk-..." }
+  agentDefaults?: Partial<Record<AgentType, {
+    model?: string;
+    mode?: string;
+  }>>;
 }
 ```
 
-### `POST /api/agents/:type/login`
+Behavior:
 
-Start proxy login flow for Claude Code or Gemini.
+- validate agent type keys
+- store only Agemon preferences
+- do not echo or mutate external secrets
 
-## Proxy Login Flow
+## Backend Implementation Notes
 
-For agents requiring interactive login (`claude /login`, `gemini login`):
-
-1. Frontend sends `POST /api/agents/claude-code/login`
-2. Backend spawns login command with `stdin: 'pipe'`
-3. Backend parses stdout, extracts URLs and prompts
-4. Backend streams to frontend via WebSocket as `agent_login` events:
-   ```typescript
-   { type: "agent_login", agentType: "claude-code", step: "url", content: "https://..." }
-   { type: "agent_login", agentType: "claude-code", step: "prompt", content: "Enter the code:" }
-   { type: "agent_login", agentType: "claude-code", step: "success", content: "Logged in successfully" }
-   ```
-5. Frontend renders guided card flow: tappable URL, prompt input, sends response via WS
-6. On success, backend re-checks auth status
-
-Scope: Claude Code and Gemini only. OpenCode/Aider use API key inputs.
+- Extend `AgentConfig` with metadata needed for detection and instructions:
+  - `requiredBinaries`
+  - `installInstructions`
+  - `authCheckKind`
+  - `authInstructions`
+- Keep the detection logic close to existing agent-launch configuration so status and spawn behavior do not drift apart
+- Reuse the existing expanded PATH logic from `backend/src/lib/agents.ts`
+- Flat-file read/write should be encapsulated in a small backend settings helper rather than scattered through routes
+- If the settings file is missing or malformed, log a warning and continue with defaults
 
 ## Frontend — Settings → Agents
 
-Extends the existing Settings page with an "Agents" section:
+Settings should be restructured into:
 
-**Layout:**
+- Appearance
+- Agents
+- Updates
+- About
+
+The Agents section should include:
+
 - Default agent dropdown at top
+- Optional default model/mode controls for agents that expose those options
 - Agent list as cards:
-  - Icon + name + external link
-  - Status badge: green "Detected" / red "Not detected"
-  - Auth badge: green "Authenticated" / amber "Key set" / red "Not configured"
-  - Configure button → expands inline config panel
+  - icon + name
+  - install badge: "Installed" / "Missing"
+  - login badge: "Logged in" / "Not logged in" / "Unknown"
+  - short explanation if status is unknown
+  - install/auth instructions
 
-**Agent config panel (expanded):**
-- API key agents: masked input field with show/hide toggle, save button
-- Login agents: "Login" button → inline guided card flow (no modal)
-- Undetected agents: install command + docs link
+Mobile requirements:
 
-**Mobile:**
 - Full-width cards, 44px touch targets
-- `type="password"` inputs with toggle
-- Login flow cards inline, scroll naturally
+- avoid modal-heavy flows
+- keep instructions copyable and readable on narrow screens
+
+## Session and Task Behavior
+
+- New sessions should inherit the configured default agent/model/mode when the user has not specified an override
+- Existing per-task or per-session explicit choices should continue to win over global defaults
+- If a saved default is not valid for the selected agent, fall back safely and surface the current available options in the UI
+
+## Testing
+
+- Backend tests for:
+  - binary detection and missing-binary reporting
+  - login status mapping for env-based and CLI-based checks
+  - settings file read/write and malformed-file fallback
+- Frontend tests for:
+  - installed/missing status cards
+  - logged-in/not-logged-in/unknown badge states
+  - default selection save/load behavior

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption } from '@agemon/shared';
+import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption, SessionUsage } from '@agemon/shared';
 
 interface PendingInput {
   inputId: string;
@@ -26,6 +26,8 @@ interface WsState {
   availableCommands: Record<string, AgentCommand[]>;
   /** Sessions with a turn currently in flight */
   turnsInFlight: Record<string, boolean>;
+  /** Latest usage snapshot keyed by sessionId */
+  sessionUsage: Record<string, SessionUsage>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -41,6 +43,7 @@ interface WsState {
   setConfigOptions: (sessionId: string, options: SessionConfigOption[]) => void;
   setAvailableCommands: (sessionId: string, commands: AgentCommand[]) => void;
   setTurnInFlight: (sessionId: string, inFlight: boolean) => void;
+  setSessionUsage: (sessionId: string, usage: SessionUsage) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -56,6 +59,7 @@ export const useWsStore = create<WsState>((set) => ({
   configOptions: {},
   availableCommands: {},
   turnsInFlight: {},
+  sessionUsage: {},
 
   setConnected: (connected) => set({ connected }),
 
@@ -165,4 +169,9 @@ export const useWsStore = create<WsState>((set) => ({
       }
       return { turnsInFlight };
     }),
+
+  setSessionUsage: (sessionId, usage) =>
+    set((state) => ({
+      sessionUsage: { ...state.sessionUsage, [sessionId]: usage },
+    })),
 }));

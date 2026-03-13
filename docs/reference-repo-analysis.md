@@ -2,6 +2,22 @@
 
 Analysis of [Shelley](https://github.com/boldsoftware/shelley), [Pi-mono](https://github.com/badlogic/pi-mono), and [OpenClaw](https://github.com/openclaw/openclaw) — compared against Agemon's architecture to identify integration opportunities and harness patterns worth adopting.
 
+## TL;DR — Harness Patterns
+
+| # | Pattern | Action | Priority |
+|---|---------|--------|----------|
+| 1 | **LF-only JSONL framing** | Audit `backend/src/lib/jsonrpc.ts` — replace readline with LF-only buffer split | P2 |
+| 2 | **WS event sequencing & replay** | Add `seq` to `ServerEvent`, ring buffer on server, `resume` client event — see `docs/plans/2026-03-12-offline-behaviour-design.md` | P1 |
+| 3 | **Steering & follow-up queues** | Add `steer` / `follow_up` ClientEvent types; steer = cancel + new prompt via ACP | P2 |
+| 4 | **Distillation / context compaction** | Track token usage per session; auto-compact on overflow using Shelley's operational briefing format | P2 |
+| 5 | **Mock ACP agent for testing** | Build `scripts/mock-acp-agent.ts` implementing ACP handshake + scripted responses | P2 |
+| 6 | **Agent type registry** | Create `backend/src/lib/agents/registry.ts` with `AgentDriver` interface; makes `agent` DB field functional | P2 |
+| 7 | **In-memory session cache** | Cache hot session data in front of `db/client.ts`; write-through to SQLite | P3 |
+| 8 | **Separated tool output** | Extend `acp_events` with `display_content`; prefer it in UI over raw LLM content | P3 |
+| 9 | **Per-tool UI components** | Add `ToolCallCard` + specialized `BashTool`/`PatchTool` components to chat UI; two-state (running/complete) collapsible cards with execution time — see "UI Patterns" section below | P2 |
+
+Full details for each pattern below.
+
 ---
 
 ## Repo Overview
@@ -666,6 +682,83 @@ disable-model-invocation: false
 
 ---
 
+## UI Patterns: Shelley Tool Call Rendering
+
+**Source:** `ui/src/components/` — `Message.tsx`, `GenericTool.tsx`, `BashTool.tsx`, `PatchTool.tsx`, `ThinkingContent.tsx`, `AGENTS.md`
+
+Shelley has a mature, mobile-aware tool call UI worth adopting for Agemon's chat interface.
+
+### Pattern: Per-tool Specialized Components with Shared Interface
+
+Every tool gets its own React component. All share the same props contract:
+
+```typescript
+interface ToolProps {
+  toolInput?: unknown;      // LLM-facing input (shown during tool_use / running phase)
+  isRunning?: boolean;      // true = still executing, false = complete
+  toolResult?: LLMContent[]; // result content (tool_result phase)
+  hasError?: boolean;
+  executionTime?: string;   // e.g. "1.2s" or "340ms"
+  display?: unknown;        // rich UI-specific data (separate from LLM content — Pattern 8)
+}
+```
+
+Falls back to `GenericTool` for unknown tool names. `GenericTool` shows `toolName`, input JSON, output text, and error state — a sensible baseline.
+
+**Registration rule (from `AGENTS.md`):** Each tool component must be registered in **two places**:
+1. `ChatInterface.tsx` (`TOOL_COMPONENTS` map) — for real-time streaming rendering
+2. `Message.tsx` (`renderContent()` switch) — for stored message rendering
+
+Missing either causes inconsistent rendering (generic during stream, specialized after reload, or vice versa).
+
+### Pattern: Two-State Collapsible Cards
+
+Each tool renders a clickable header + collapsible detail panel:
+
+- **Header (always visible):** emoji icon, primary info (command or filename truncated to ~300 chars), working dir, `✓` / `✗` / `✗ cancelled` status indicator, execution time
+- **Detail (collapsed by default):** full input, full output, error text
+- `isRunning=true` → emoji animates, detail shows "running...", no result yet
+- `isRunning=false` → result shown, timing shown, errors highlighted
+
+Special case: `PatchTool` defaults to **expanded** on success (diff is the main thing to see), collapsed on error (agent typically self-recovers).
+
+### Pattern: Execution Time from Timestamps
+
+Execution time is calculated from `ToolUseStartTime` / `ToolUseEndTime` on the `tool_result` content block:
+
+```typescript
+const diffMs = new Date(endTime).getTime() - new Date(startTime).getTime();
+executionTime = diffMs < 1000 ? `${diffMs}ms` : `${(diffMs / 1000).toFixed(1)}s`;
+```
+
+### Pattern: Rich Diff Viewer in PatchTool
+
+`PatchTool` uses `@pierre/diffs` for syntax-highlighted side-by-side / unified diff rendering:
+- Desktop default: side-by-side; mobile forced to unified (detects `window.innerWidth < 768`)
+- Preference saved to localStorage
+- `DiffErrorBoundary` catches crashes and falls back to `<pre>` raw diff
+- Supports two payload formats: `{path, diff}` (new) and `{path, oldContent, newContent}` (legacy)
+
+### Pattern: Thinking Content
+
+`ThinkingContent` component — expand/collapse, defaults **expanded**, header shows first 80 chars when collapsed. `💭` emoji indicator.
+
+### How This Maps to Agemon
+
+| Shelley | Agemon today | Gap |
+|---------|-------------|-----|
+| Per-tool components (`BashTool`, `PatchTool`, etc.) | Generic activity text in `session-chat-panel.tsx` | No per-tool rendering |
+| Two-state (running / complete) card | `turnsInFlight` in store, activity string | No visual tool card |
+| `display` field (rich UI data) | `acp_events.content` only (LLM-facing) | Pattern 8 not yet implemented |
+| Execution time | Not tracked | ACP events have timestamps — could derive |
+| Thinking content component | Thought type in activity | No expand/collapse |
+
+**Action:** Add a `ToolCallCard` component to Agemon's chat UI. Start with `GenericTool`-equivalent (collapsible header + input/output), then specialize for `bash` (show command + cwd) and file edits (diff viewer). Requires Pattern 8 (`display_content` on `acp_events`) for rich display data.
+
+**Reference files:** `.reference_repos/shelley/ui/src/components/` — all files listed above are shallow-cloned and readable locally.
+
+---
+
 ## Priority Order
 
 | # | Improvement | Effort | Impact | Risk if Skipped |
@@ -683,7 +776,7 @@ disable-model-invocation: false
 
 ## Reference Files
 
-### Shelley
+### Shelley (shallow clone at `.reference_repos/shelley/`)
 - `server/convo.go` — ConversationManager lifecycle
 - `loop/loop.go` — Agent loop state machine
 - `loop/predictable.go` — Mock LLM for testing

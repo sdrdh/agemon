@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
-import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry, AgentCommand } from '@agemon/shared';
+import type { Task, ACPEvent, AwaitingInput, Diff, AgentSession, AgentSessionState, AgentType, Repo, TasksByProject, TaskStatus, ChatMessage, PendingApproval, ApprovalDecision, ApprovalOption, ApprovalRule, SessionConfigOption, McpServerConfig, McpServerEntry, AgentCommand, SessionUsage } from '@agemon/shared';
 import { slugify } from '../lib/slugify.ts';
 
 const DB_PATH = process.env.DB_PATH
@@ -23,7 +23,7 @@ export function getDb(): Database {
 
 // ─── Migration ────────────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 13;
 
 /**
  * Extract a display name from a repo URL.
@@ -113,8 +113,7 @@ export function runMigrations() {
               description TEXT CHECK (description IS NULL OR length(description) <= 10000),
               status      TEXT NOT NULL DEFAULT 'todo'
                             CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
-              agent       TEXT NOT NULL DEFAULT 'claude-code'
-                            CHECK (agent IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              agent       TEXT NOT NULL DEFAULT 'claude-code',
               created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             )
           `);
@@ -172,8 +171,7 @@ export function runMigrations() {
             CREATE TABLE agent_sessions_new (
               id                  TEXT PRIMARY KEY,
               task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-              agent_type          TEXT NOT NULL
-                                    CHECK (agent_type IN ('claude-code', 'opencode', 'aider', 'gemini')),
+              agent_type          TEXT NOT NULL,
               name                TEXT DEFAULT NULL,
               external_session_id TEXT,
               pid                 INTEGER,
@@ -253,6 +251,79 @@ export function runMigrations() {
         }
       }
 
+      // ── v12 migration: add usage_json column to agent_sessions ──
+      if (current < 12) {
+        const sessionCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        if (!sessionCols.some(c => c.name === 'usage_json')) {
+          db.run('ALTER TABLE agent_sessions ADD COLUMN usage_json TEXT DEFAULT NULL');
+        }
+      }
+
+      // ── v13 migration: remove CHECK constraints on agent/agent_type to allow new agent types ──
+      if (current < 13) {
+        // Recreate tasks without agent CHECK constraint
+        const taskCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('tasks')"
+        ).all();
+        const taskColNames = taskCols.map(c => c.name);
+        if (taskColNames.includes('agent')) {
+          const archivedCol = taskColNames.includes('archived') ? ', archived' : '';
+          const archivedDefault = taskColNames.includes('archived') ? ', archived INTEGER NOT NULL DEFAULT 0' : '';
+          db.run(`
+            CREATE TABLE tasks_v13 (
+              id          TEXT PRIMARY KEY,
+              title       TEXT NOT NULL CHECK (length(title) <= 500),
+              description TEXT CHECK (description IS NULL OR length(description) <= 10000),
+              status      TEXT NOT NULL DEFAULT 'todo'
+                            CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
+              agent       TEXT NOT NULL DEFAULT 'claude-code'${archivedDefault},
+              created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            )
+          `);
+          db.run(`INSERT INTO tasks_v13 (id, title, description, status, agent${archivedCol}, created_at)
+                  SELECT id, title, description, status, agent${archivedCol}, created_at FROM tasks`);
+          db.run('DROP TABLE tasks');
+          db.run('ALTER TABLE tasks_v13 RENAME TO tasks');
+        }
+
+        // Recreate agent_sessions without agent_type CHECK constraint
+        const sessCols = db.query<{ name: string }, []>(
+          "SELECT name FROM pragma_table_info('agent_sessions')"
+        ).all();
+        const sessColNames = sessCols.map(c => c.name);
+        db.run(`
+          CREATE TABLE agent_sessions_v13 (
+            id                  TEXT PRIMARY KEY,
+            task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            agent_type          TEXT NOT NULL,
+            name                TEXT DEFAULT NULL,
+            external_session_id TEXT,
+            pid                 INTEGER,
+            state               TEXT NOT NULL DEFAULT 'starting'
+                                  CHECK (state IN ('starting', 'ready', 'running', 'stopped', 'crashed', 'interrupted')),
+            config_options      TEXT DEFAULT NULL,
+            available_commands  TEXT DEFAULT NULL,
+            started_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            archived            INTEGER NOT NULL DEFAULT 0,
+            ended_at            TEXT,
+            exit_code           INTEGER,
+            usage_json          TEXT DEFAULT NULL
+          )
+        `);
+        // Copy all rows — only include columns that exist in the old table
+        const copyColsList = ['id','task_id','agent_type','name','external_session_id','pid','state',
+          'config_options','available_commands','started_at','archived','ended_at','exit_code','usage_json']
+          .filter(c => sessColNames.includes(c));
+        const copyCols = copyColsList.join(', ');
+        db.run(`INSERT INTO agent_sessions_v13 (${copyCols}) SELECT ${copyCols} FROM agent_sessions`);
+        db.run('DROP TABLE agent_sessions');
+        db.run('ALTER TABLE agent_sessions_v13 RENAME TO agent_sessions');
+        db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state)');
+      }
+
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();
     console.log(`[db] migrated to schema version ${SCHEMA_VERSION}`);
@@ -321,7 +392,12 @@ function parseSession(row: AgentSession): AgentSession {
     throw new Error(`[db] unexpected agent type: ${row.agent_type}`);
   }
   // SQLite returns 0/1 for boolean columns
-  return { ...row, archived: !!(row as any).archived };
+  const session: AgentSession = { ...row, archived: !!(row as any).archived };
+  const usageJson = (row as any).usage_json;
+  if (usageJson) {
+    try { session.usage = JSON.parse(usageJson); } catch { /* ignore malformed */ }
+  }
+  return session;
 }
 
 // ── Shared MCP server helpers ────────────────────────────────────────────────
@@ -644,6 +720,11 @@ export const db = {
   updateSessionConfigOptions(id: string, options: SessionConfigOption[]): void {
     const db = getDb();
     db.run('UPDATE agent_sessions SET config_options = ? WHERE id = ?', [JSON.stringify(options), id]);
+  },
+
+  updateSessionUsage(id: string, usage: SessionUsage): void {
+    const db = getDb();
+    db.run('UPDATE agent_sessions SET usage_json = ? WHERE id = ?', [JSON.stringify(usage), id]);
   },
 
   updateSessionArchived(id: string, archived: boolean): AgentSession | null {
