@@ -18,7 +18,7 @@ import type { AgentCommand, AgentSession, AgentSessionState, AgentType, Approval
 import { JsonRpcTransport } from './jsonrpc.ts';
 import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from './agents.ts';
 import { gitManager } from './git.ts';
-import { refreshTaskContext, getTaskDir } from './context.ts';
+import { refreshTaskContext, getTaskDir, buildFirstPromptContext } from './context.ts';
 import { mkdir } from 'fs/promises';
 import type { Task } from '@agemon/shared';
 
@@ -50,6 +50,8 @@ interface RunningSession {
   agentType: AgentType;
   acpSessionId: string | null;
   turnInFlight: boolean;
+  /** Number of prompts sent to this session. Used to detect the first prompt. */
+  promptsSent: number;
   /** Stable ID for the current streaming message (accumulates chunks). */
   currentMessageId: string | null;
   currentMessageText: string;
@@ -610,6 +612,7 @@ function spawnProcess(
 
   const rs: RunningSession = {
     proc, transport, sessionId, taskId, agentType, acpSessionId: null, turnInFlight: false,
+    promptsSent: 0,
     currentMessageId: null, currentMessageText: '', currentMessageType: 'action',
     configOptions: [], availableCommands: [],
   };
@@ -814,10 +817,26 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     db.updateSessionName(sessionId, name);
   }
 
+  // On the first prompt, inject task context for agents that don't auto-load CLAUDE.md
+  let promptContent = content;
+  const isFirstPrompt = entry.promptsSent === 0;
+  if (isFirstPrompt && !AGENT_CONFIGS[entry.agentType].autoLoadsContextFile) {
+    try {
+      const task = db.getTask(taskId);
+      if (task) {
+        const contextBlock = await buildFirstPromptContext(task);
+        promptContent = `${contextBlock}\n\n${content}`;
+      }
+    } catch (err) {
+      console.warn(`[acp] failed to build first-prompt context for session ${sessionId}:`, err);
+    }
+  }
+  entry.promptsSent += 1;
+
   try {
     const result = await entry.transport.request('session/prompt', {
       sessionId: entry.acpSessionId,
-      prompt: [{ type: 'text', text: content }],
+      prompt: [{ type: 'text', text: promptContent }],
     });
 
     // Check for cancelled stop reason — cleanup handled by finally block

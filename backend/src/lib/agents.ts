@@ -52,6 +52,12 @@ export interface AgentConfig {
   pluginPaths: AgentPluginPath[];
   /** Where this agent looks for skills. Empty array = no skill discovery. */
   skillPaths: AgentSkillPath[];
+  /**
+   * True if the agent automatically reads CLAUDE.md / AGENTS.md from cwd.
+   * When true, first-prompt context injection is skipped (context arrives via file).
+   * When false, context is prepended to the first user prompt.
+   */
+  autoLoadsContextFile: boolean;
 }
 
 // ─── Per-Agent Config Option Parsers ────────────────────────────────────────
@@ -128,6 +134,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
       { taskRelative: '.claude/skills', globalDir: join(homedir(), '.claude', 'skills') },
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
+    autoLoadsContextFile: true,  // reads CLAUDE.md from cwd automatically
   },
   'opencode': {
     command: ['opencode', 'acp'],
@@ -138,6 +145,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
+    autoLoadsContextFile: false,
   },
   'gemini': {
     command: ['gemini', '--experimental-acp'],
@@ -148,6 +156,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
+    autoLoadsContextFile: false,
   },
   'pi': {
     command: ['pi-acp'],
@@ -158,6 +167,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
+    autoLoadsContextFile: false,
   },
   'codex': {
     command: ['codex-acp'],
@@ -168,6 +178,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
     ],
+    autoLoadsContextFile: true,  // reads AGENTS.md from cwd automatically
   },
 };
 

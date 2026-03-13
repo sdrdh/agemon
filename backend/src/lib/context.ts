@@ -11,7 +11,7 @@
  * Called at session start and when repos are attached/changed on a task.
  */
 
-import { mkdir, writeFile, symlink, rm, access, readdir, lstat, stat, readlink } from 'fs/promises';
+import { mkdir, writeFile, readFile, symlink, rm, access, readdir, lstat, stat, readlink } from 'fs/promises';
 import type { Dirent } from 'fs';
 import { join, resolve } from 'path';
 import { AGEMON_DIR } from './git.ts';
@@ -38,6 +38,7 @@ export async function refreshTaskContext(task: Task): Promise<void> {
 
   await Promise.all([
     generateClaudeMd(task, taskDir),
+    generateAgentsMd(task, taskDir),
     refreshPluginSymlinks(task, taskDir),
     refreshSkillSymlinks(task, taskDir),
     wireAgentPluginDirs(taskDir),
@@ -50,30 +51,95 @@ export function getTaskDir(taskId: string): string {
   return join(AGEMON_DIR, 'tasks', taskId);
 }
 
-// ─── CLAUDE.md ───────────────────────────────────────────────────────────────
+// ─── CLAUDE.md / AGENTS.md ───────────────────────────────────────────────────
 
-async function generateClaudeMd(task: Task, taskDir: string): Promise<void> {
-  // Sanitize user inputs to prevent prompt injection / markdown abuse
+/** Derive the worktree branch name for a repo on a task (mirrors git.ts convention). */
+function worktreeBranch(taskId: string, repoName: string): string {
+  return `agemon/${taskId}-${safeName(repoName)}`;
+}
+
+/** Build task header lines (title + description). Sanitized against injection. */
+function buildTaskHeader(task: Task): string[] {
   const safeTitle = task.title.replace(/\n/g, ' ').replace(/^#+\s*/g, '').slice(0, 500);
-  const lines: string[] = [
-    `# Task: ${safeTitle}`,
-    '',
-  ];
+  const lines: string[] = [`# Task: ${safeTitle}`, ''];
 
   if (task.description) {
-    // Escape markdown headings and @ file references in description
     const safeDesc = task.description
       .replace(/^(#+)/gm, '\\$1')   // escape # headings
       .replace(/@/g, '\\@');         // escape @ file references
     lines.push(safeDesc, '');
   }
+  return lines;
+}
 
-  lines.push('---', '', '## Global Instructions', '');
+/** Explain the Agemon environment and git worktree mechanics. */
+function buildEnvironmentContext(): string[] {
+  return [
+    '## Environment',
+    '',
+    'You are running as an AI agent inside **Agemon** — a self-hosted, headless agent',
+    'orchestration platform. The user queues tasks, monitors your output in real time,',
+    'and may send follow-up messages or respond to blockers via the Agemon mobile UI.',
+    '',
+    '**Git worktrees:** Each repo subdirectory is a git worktree — a lightweight linked',
+    'checkout sharing a bare repo cache. All standard git commands (`git add`, `git commit`,',
+    '`git status`, `git log`, `git diff`) work normally.',
+    '',
+    '- Do **not** run `git clone` — repos are already checked out as worktrees',
+    '- Do **not** run `git checkout` to switch branches — your worktree branch is',
+    '  pre-configured and isolated; switching would break the worktree setup',
+    '- The `.git` entry in each repo subdir is a file (not a directory) — this is normal',
+    '  for git worktrees and does not indicate a problem',
+    '',
+  ];
+}
+
+/** Build the workspace layout section (repo subdirs + branch names). */
+function buildWorkspaceLayout(task: Task): string[] {
+  if (task.repos.length === 0) return [];
+  const lines: string[] = ['## Workspace Layout', ''];
+  lines.push(`Working directory: \`~/.agemon/tasks/${task.id}/\``, '');
+  lines.push('Each repo is a git worktree subdirectory on its own isolated branch:', '');
+  lines.push('| Directory | Branch |');
+  lines.push('|-----------|--------|');
+  for (const repo of task.repos) {
+    const dir = safeName(repo.name);
+    const branch = worktreeBranch(task.id, repo.name);
+    lines.push(`| \`${dir}/\` | \`${branch}\` |`);
+  }
+  lines.push('');
+  return lines;
+}
+
+/** Build the agent guidelines section. */
+function buildAgentGuidelines(): string[] {
+  return [
+    '## Agent Guidelines',
+    '',
+    '- **Commit to your worktree branch** — never commit to `main` or `master`',
+    '- **Do not push** without explicit user approval',
+    '- **Do not open PRs** without explicit user approval',
+    '- Work within the repo subdirectory relevant to your task',
+    '- **Task Memory:** Maintain `MEMORY.md` in this task directory. As you work,',
+    '  append important discoveries, decisions made, dead ends hit, and context',
+    '  future sessions will need. Read it at session start if it exists.',
+    '',
+  ];
+}
+
+async function generateClaudeMd(task: Task, taskDir: string): Promise<void> {
+  const lines: string[] = [
+    ...buildTaskHeader(task),
+    '---', '',
+    ...buildEnvironmentContext(),
+    ...buildWorkspaceLayout(task),
+    ...buildAgentGuidelines(),
+    '## Global Instructions', '',
+  ];
 
   const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
   if (await exists(globalClaudeMd)) {
-    lines.push(`@${globalClaudeMd}`);
-    lines.push('');
+    lines.push(`@${globalClaudeMd}`, '');
   }
 
   if (task.repos.length > 0) {
@@ -91,6 +157,85 @@ async function generateClaudeMd(task: Task, taskDir: string): Promise<void> {
   }
 
   await writeFile(join(taskDir, 'CLAUDE.md'), lines.join('\n'));
+}
+
+/**
+ * Generate AGENTS.md — same structure as CLAUDE.md but with no `@filepath`
+ * directives. Used by agents (e.g. codex) that don't support the `@` syntax.
+ * Referenced file paths are listed as plain text so the agent can read them.
+ */
+async function generateAgentsMd(task: Task, taskDir: string): Promise<void> {
+  const lines: string[] = [
+    ...buildTaskHeader(task),
+    '---', '',
+    ...buildEnvironmentContext(),
+    ...buildWorkspaceLayout(task),
+    ...buildAgentGuidelines(),
+    '## Global Instructions', '',
+  ];
+
+  const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
+  if (await exists(globalClaudeMd)) {
+    lines.push(`See: ${globalClaudeMd}`, '');
+  }
+
+  if (task.repos.length > 0) {
+    lines.push('## Repo Instructions', '');
+    for (const repo of task.repos) {
+      const repoDir = join(taskDir, safeName(repo.name));
+      for (const filename of ['CLAUDE.md', 'AGENT.md']) {
+        const candidate = join(repoDir, filename);
+        if (await exists(candidate)) {
+          lines.push(`See: ${candidate}`);
+          break; // only include first found per repo
+        }
+      }
+    }
+    lines.push('');
+  }
+
+  await writeFile(join(taskDir, 'AGENTS.md'), lines.join('\n'));
+}
+
+/**
+ * Build a first-prompt context block for agents that don't auto-load CLAUDE.md.
+ * Inlines the task header, workspace layout, and guidelines without @filepath refs.
+ * Wrapped in XML tags to separate it from the user's actual message.
+ */
+export async function buildFirstPromptContext(task: Task): Promise<string> {
+  const taskDir = join(AGEMON_DIR, 'tasks', task.id);
+  const sections: string[] = [
+    ...buildTaskHeader(task),
+    ...buildWorkspaceLayout(task),
+    ...buildAgentGuidelines(),
+  ];
+
+  const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
+  if (await exists(globalClaudeMd)) {
+    try {
+      const content = await readFile(globalClaudeMd, 'utf8');
+      sections.push('## Global Instructions', '', content.trim(), '');
+    } catch { /* skip if unreadable */ }
+  }
+
+  if (task.repos.length > 0) {
+    sections.push('## Repo Instructions', '');
+    for (const repo of task.repos) {
+      const repoDir = join(taskDir, safeName(repo.name));
+      for (const filename of ['CLAUDE.md', 'AGENT.md']) {
+        const candidate = join(repoDir, filename);
+        if (await exists(candidate)) {
+          try {
+            const content = await readFile(candidate, 'utf8');
+            sections.push(`### ${repo.name}`, '', content.trim(), '');
+            break; // only include first found per repo
+          } catch { /* skip */ }
+        }
+      }
+    }
+  }
+
+  return `<agemon_task_context>\n${sections.join('\n').trim()}\n</agemon_task_context>`;
 }
 
 // ─── Plugin symlinks ─────────────────────────────────────────────────────────

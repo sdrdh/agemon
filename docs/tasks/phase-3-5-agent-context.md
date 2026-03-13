@@ -10,10 +10,10 @@
 **Estimated Time:** 2 hours
 
 **Deliverables:**
-- [ ] Change agent spawn cwd from first repo worktree to the task folder (`.agemon/tasks/{task-id}/`)
-- [ ] Update `spawnAndHandshake()` and `resumeSession()` in `lib/acp.ts` to use task folder as cwd
-- [ ] Handle edge case: task folder doesn't exist yet (create it, or fall back to `process.cwd()`)
-- [ ] Verify all agent types (claude-code, opencode, aider, gemini) work with task folder as cwd
+- [x] Change agent spawn cwd from first repo worktree to the task folder (`.agemon/tasks/{task-id}/`)
+- [x] Update `spawnAndHandshake()` and `resumeSession()` in `lib/acp.ts` to use task folder as cwd
+- [x] Handle edge case: task folder doesn't exist yet (create it, or fall back to `process.cwd()`)
+- [x] Verify all agent types (claude-code, opencode, aider, gemini) work with task folder as cwd
 
 **Key Considerations:**
 - Task folder is the natural root when a task spans multiple repos — agent sees all worktrees as subdirectories
@@ -32,14 +32,14 @@
 **Estimated Time:** 4 hours
 
 **Deliverables:**
-- [ ] Generate a `CLAUDE.md` at the task folder (`.agemon/tasks/{task-id}/CLAUDE.md`) when a session starts
-- [ ] Include task context: title, description, status, attached repos
-- [ ] Include worktree layout: list each repo with its subdirectory name and branch
-- [ ] Include behavioral guidelines: commit to worktree branch, don't modify main, don't push without approval
-- [ ] Reference each repo's own CLAUDE.md path so the agent knows to read them (Claude Code walks up, not down)
-- [ ] Regenerate on session resume and when repos are attached/detached from a task
-- [ ] Skip generation when no worktree exists (fallback cwd mode)
-- [ ] Keep generated content concise — agents have context limits
+- [x] Generate a `CLAUDE.md` at the task folder (`.agemon/tasks/{task-id}/CLAUDE.md`) when a session starts
+- [x] Include task context: title, description, status, attached repos
+- [x] Include worktree layout: list each repo with its subdirectory name and branch
+- [x] Include behavioral guidelines: commit to worktree branch, don't modify main, don't push without approval
+- [x] Reference each repo's own CLAUDE.md path so the agent knows to read them (Claude Code walks up, not down)
+- [x] Regenerate on session resume and when repos are attached/detached from a task
+- [x] Skip generation when no worktree exists (fallback cwd mode)
+- [x] Keep generated content concise — agents have context limits
 
 **Key Considerations:**
 - Template should be a simple function in a new `lib/context.ts` module
@@ -59,11 +59,11 @@
 **Estimated Time:** 3 hours
 
 **Deliverables:**
-- [ ] On session start, symlink each repo's `.claude/skills/*` into `.agemon/tasks/{task-id}/.claude/skills/`
-- [ ] Use flat structure (no namespace prefixes) so Claude's skill matching works naturally
-- [ ] Handle collisions: first-repo-wins, log warning on skip
-- [ ] Re-symlink on session resume and when repos are attached/detached
-- [ ] Clean up stale symlinks when repos are detached
+- [x] On session start, symlink each repo's `.claude/skills/*` into `.agemon/tasks/{task-id}/.claude/skills/`
+- [x] Use flat structure (no namespace prefixes) so Claude's skill matching works naturally
+- [x] Handle collisions: first-repo-wins, log warning on skip
+- [x] Re-symlink on session resume and when repos are attached/detached
+- [x] Clean up stale symlinks when repos are detached
 
 **Key Considerations:**
 - Skills are Claude Code specific — other agents don't use this convention
@@ -83,11 +83,11 @@
 **Estimated Time:** 3 hours
 
 **Deliverables:**
-- [ ] Prepend task context to the user's first message sent to any agent session
-- [ ] Context block includes: task title, description, repo list with paths, branch conventions
-- [ ] Format as a clear system-style preamble (e.g. wrapped in XML tags or markdown section) before the user's actual message
-- [ ] Apply to all agent types universally (claude-code, opencode, aider, gemini)
-- [ ] Only inject on the first `session/prompt` — subsequent messages pass through unmodified
+- [x] Prepend task context to the user's first message sent to any agent session
+- [x] Context block includes: task title, description, repo list with paths, branch conventions
+- [x] Format as a clear system-style preamble (e.g. wrapped in XML tags or markdown section) before the user's actual message
+- [x] Apply to non-auto-loading agents (opencode, gemini, pi); skipped for claude-code + codex which read CLAUDE.md/AGENTS.md
+- [x] Only inject on the first `session/prompt` — subsequent messages pass through unmodified
 
 **Key Considerations:**
 - This is the universal context mechanism — works for every agent regardless of whether they read CLAUDE.md
