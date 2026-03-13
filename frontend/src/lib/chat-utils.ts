@@ -12,7 +12,13 @@ export interface ActivityGroupItem {
   messages: ChatMessage[];
 }
 
-export type ChatItem = ChatBubbleItem | ActivityGroupItem;
+export interface ToolCallItem {
+  kind: 'tool-call';
+  toolCallId: string;
+  sessionId: string;
+}
+
+export type ChatItem = ChatBubbleItem | ActivityGroupItem | ToolCallItem;
 
 // ─── Tool call types ──────────────────────────────────────────────────
 
@@ -93,20 +99,56 @@ export function isCollapsibleActivity(msg: ChatMessage): boolean {
   return false;
 }
 
-export function groupMessages(messages: ChatMessage[]): ChatItem[] {
+export function groupMessages(messages: ChatMessage[], sessionId?: string): ChatItem[] {
   const items: ChatItem[] = [];
   let currentGroup: ChatMessage[] = [];
+  // Pre-parsed tool call IDs for the current group (avoids double-parse)
+  let groupToolCallIds = new Set<string>();
+  let groupThoughts: ChatMessage[] = [];
+  // Maps each message index in currentGroup to its toolCallId (or null)
+  let groupMsgToolIds: (string | null)[] = [];
 
   function flushGroup() {
-    if (currentGroup.length > 0) {
+    if (currentGroup.length === 0) return;
+
+    // 1-3 unique tool calls → emit individual ToolCallItems + remaining as activity group
+    if (sessionId && groupToolCallIds.size >= 1 && groupToolCallIds.size <= 3) {
+      const emittedIds = new Set<string>();
+      for (let i = 0; i < currentGroup.length; i++) {
+        const tcId = groupMsgToolIds[i];
+        if (tcId && !emittedIds.has(tcId)) {
+          emittedIds.add(tcId);
+          items.push({ kind: 'tool-call', toolCallId: tcId, sessionId });
+        }
+      }
+      if (groupThoughts.length > 0) {
+        items.push({ kind: 'activity-group', messages: groupThoughts });
+      }
+    } else {
+      // 0 or 4+ tool calls → standard activity group
       items.push({ kind: 'activity-group', messages: [...currentGroup] });
-      currentGroup = [];
     }
+    currentGroup = [];
+    groupToolCallIds = new Set();
+    groupThoughts = [];
+    groupMsgToolIds = [];
   }
 
   for (const msg of messages) {
     if (isCollapsibleActivity(msg)) {
       currentGroup.push(msg);
+      // Track toolCallId in a single pass (no separate extractToolCallIds)
+      let tcId: string | null = null;
+      try {
+        const obj = JSON.parse(msg.content);
+        if (obj && typeof obj.toolCallId === 'string') tcId = obj.toolCallId;
+      } catch { /* not JSON */ }
+      groupMsgToolIds.push(tcId);
+      if (tcId) {
+        groupToolCallIds.add(tcId);
+      } else {
+        groupThoughts.push(msg);
+      }
     } else {
       flushGroup();
       items.push({ kind: 'bubble', message: msg });

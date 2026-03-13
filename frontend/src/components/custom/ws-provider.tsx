@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { onServerEvent, onConnectionChange } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
 import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
+import { applyToolCallEvent } from '@/lib/tool-call-helpers';
 import type { ServerEvent } from '@agemon/shared';
 
 /** Extract a short activity label from a tool-call content string. */
@@ -63,6 +64,15 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           store().markUnread(event.sessionId);
 
+          // Parse structured JSON once for both toolCalls store and activity label
+          let parsed: Record<string, unknown> | null = null;
+          if (event.eventType === 'action') {
+            try { parsed = JSON.parse(event.content); } catch { /* not JSON */ }
+            if (parsed && typeof parsed.toolCallId === 'string') {
+              applyToolCallEvent(parsed, event.sessionId, store().upsertToolCall);
+            }
+          }
+
           if (event.eventType === 'thought') {
             store().setAgentActivity(event.sessionId, 'Thinking...');
           } else if (event.eventType === 'action') {
@@ -71,8 +81,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
               if (label) store().setAgentActivity(event.sessionId, label);
             } else if (event.content.startsWith('[tool update]')) {
               store().setAgentActivity(event.sessionId, null);
-            } else {
-              // Regular text — the chat bubble itself is the indicator
+            } else if (parsed?.toolCallId && !parsed.isUpdate) {
+              const label = parseToolActivity(`[tool] ${parsed.kind} ${parsed.title}`);
+              if (label) store().setAgentActivity(event.sessionId, label);
+            } else if (!parsed?.toolCallId) {
               store().setAgentActivity(event.sessionId, null);
             }
           }

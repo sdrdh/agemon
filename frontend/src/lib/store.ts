@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption, SessionUsage } from '@agemon/shared';
+import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption, SessionUsage, ToolCallStatus, ToolCallDisplay } from '@agemon/shared';
 
 interface PendingInput {
   inputId: string;
@@ -7,6 +7,19 @@ interface PendingInput {
   sessionId: string;
   question: string;
   receivedAt: number;
+}
+
+export interface ToolCall {
+  toolCallId: string;
+  kind: string;
+  title: string;
+  args: Record<string, string>;
+  status: ToolCallStatus;
+  output?: string;
+  error?: string;
+  display?: ToolCallDisplay;
+  startedAt: string;
+  completedAt?: string;
 }
 
 interface WsState {
@@ -28,6 +41,8 @@ interface WsState {
   turnsInFlight: Record<string, boolean>;
   /** Latest usage snapshot keyed by sessionId */
   sessionUsage: Record<string, SessionUsage>;
+  /** Tool calls keyed by sessionId */
+  toolCalls: Record<string, ToolCall[]>;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -44,10 +59,13 @@ interface WsState {
   setAvailableCommands: (sessionId: string, commands: AgentCommand[]) => void;
   setTurnInFlight: (sessionId: string, inFlight: boolean) => void;
   setSessionUsage: (sessionId: string, usage: SessionUsage) => void;
+  upsertToolCall: (sessionId: string, toolCallId: string, patch: Partial<ToolCall>) => void;
+  clearToolCalls: (sessionId: string) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
 const MAX_APPROVALS = 200;
+const MAX_TOOL_CALLS_PER_SESSION = 200;
 
 export const useWsStore = create<WsState>((set) => ({
   connected: false,
@@ -60,6 +78,7 @@ export const useWsStore = create<WsState>((set) => ({
   availableCommands: {},
   turnsInFlight: {},
   sessionUsage: {},
+  toolCalls: {},
 
   setConnected: (connected) => set({ connected }),
 
@@ -174,4 +193,36 @@ export const useWsStore = create<WsState>((set) => ({
     set((state) => ({
       sessionUsage: { ...state.sessionUsage, [sessionId]: usage },
     })),
+
+  upsertToolCall: (sessionId, toolCallId, patch) =>
+    set((state) => {
+      const existing = state.toolCalls[sessionId] ?? [];
+      const idx = existing.findIndex((tc) => tc.toolCallId === toolCallId);
+      if (idx >= 0) {
+        const updated = [...existing];
+        updated[idx] = { ...updated[idx], ...patch };
+        return { toolCalls: { ...state.toolCalls, [sessionId]: updated } };
+      }
+      // New entry — requires at least kind, title, args, status, startedAt
+      const entry: ToolCall = {
+        toolCallId,
+        kind: patch.kind ?? 'unknown',
+        title: patch.title ?? 'Tool',
+        args: patch.args ?? {},
+        status: patch.status ?? 'pending',
+        startedAt: patch.startedAt ?? new Date().toISOString(),
+        ...patch,
+      };
+      const updated = [...existing, entry];
+      const trimmed = updated.length > MAX_TOOL_CALLS_PER_SESSION
+        ? updated.slice(updated.length - MAX_TOOL_CALLS_PER_SESSION)
+        : updated;
+      return { toolCalls: { ...state.toolCalls, [sessionId]: trimmed } };
+    }),
+
+  clearToolCalls: (sessionId) =>
+    set((state) => {
+      const { [sessionId]: _removed, ...rest } = state.toolCalls;
+      return { toolCalls: rest };
+    }),
 }));

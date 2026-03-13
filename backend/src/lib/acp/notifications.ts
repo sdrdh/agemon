@@ -157,7 +157,8 @@ export function handleSessionUpdate(
       const kind = extractToolName(toolCall);
       const args = extractToolContext(toolCall);
 
-      const event: ToolCallEvent = { toolCallId, kind, title, status, args };
+      const startedAt = new Date().toISOString();
+      const event: ToolCallEvent = { toolCallId, kind, title, status, args, startedAt };
       const content = JSON.stringify(event);
 
       db.insertEvent({
@@ -181,8 +182,16 @@ export function handleSessionUpdate(
       const args = extractToolContext(update as Record<string, unknown>);
       const hasArgs = Object.keys(args).length > 0;
 
+      // Extract output/display using agent-specific parser
+      const agentType = rs?.agentType ?? 'claude-code';
+      const { output, error, display } = AGENT_CONFIGS[agentType].parseToolDisplay(update as Record<string, unknown>);
+      const hasDisplayData = !!(output || error || display);
+
+      // Add completedAt when status is completed or failed
+      const completedAt = (status === 'completed' || status === 'failed') ? new Date().toISOString() : undefined;
+
       // Skip if there's nothing useful to report
-      if (!status && !title && !hasArgs) return;
+      if (!status && !title && !hasArgs && !hasDisplayData) return;
 
       const event: ToolCallUpdateEvent = {
         toolCallId,
@@ -191,6 +200,10 @@ export function handleSessionUpdate(
         ...(title ? { title } : {}),
         ...(kind && kind !== 'unknown' ? { kind } : {}),
         ...(hasArgs ? { args } : {}),
+        ...(output ? { output } : {}),
+        ...(error ? { error } : {}),
+        ...(display ? { display } : {}),
+        ...(completedAt ? { completedAt } : {}),
       };
       const content = JSON.stringify(event);
 

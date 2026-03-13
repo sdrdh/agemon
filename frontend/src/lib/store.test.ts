@@ -16,6 +16,7 @@ describe('WsStore', () => {
       availableCommands: {},
       turnsInFlight: {},
       sessionUsage: {},
+      toolCalls: {},
     });
   });
 
@@ -39,16 +40,16 @@ describe('WsStore', () => {
     it('should accumulate content for streaming chunks with same ID', () => {
       const msg1: ChatMessage = {
         id: 'msg-1',
-        role: 'assistant',
+        role: 'agent',
         content: 'Hello',
-        eventType: 'result',
+        eventType: 'thought',
         timestamp: new Date().toISOString(),
       };
       const msg2: ChatMessage = {
         id: 'msg-1',
-        role: 'assistant',
+        role: 'agent',
         content: ' world',
-        eventType: 'result',
+        eventType: 'thought',
         timestamp: new Date().toISOString(),
       };
 
@@ -87,7 +88,7 @@ describe('WsStore', () => {
     it('should set messages for a session', () => {
       const msgs: ChatMessage[] = [
         { id: 'msg-1', role: 'user', content: 'Hi', eventType: 'prompt', timestamp: new Date().toISOString() },
-        { id: 'msg-2', role: 'assistant', content: 'Hello', eventType: 'result', timestamp: new Date().toISOString() },
+        { id: 'msg-2', role: 'agent', content: 'Hello', eventType: 'thought', timestamp: new Date().toISOString() },
       ];
 
       useWsStore.getState().setChatMessages('session-1', msgs);
@@ -142,16 +143,21 @@ describe('WsStore', () => {
   });
 
   describe('pendingApprovals', () => {
+    const makeApproval = (overrides: Partial<PendingApproval> = {}): PendingApproval => ({
+      id: 'approval-1',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      toolName: 'Bash',
+      toolTitle: 'Bash: rm -rf /',
+      context: { command: 'rm -rf /' },
+      options: [{ kind: 'allow_once', optionId: 'opt-1', label: 'Allow once' }],
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      ...overrides,
+    });
+
     it('should add a pending approval', () => {
-      const approval: PendingApproval = {
-        id: 'approval-1',
-        taskId: 'task-1',
-        sessionId: 'session-1',
-        toolName: 'bash',
-        context: 'rm -rf /',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
+      const approval = makeApproval();
 
       useWsStore.getState().addPendingApproval(approval);
 
@@ -160,43 +166,19 @@ describe('WsStore', () => {
     });
 
     it('should resolve a pending approval', () => {
-      const approval: PendingApproval = {
-        id: 'approval-1',
-        taskId: 'task-1',
-        sessionId: 'session-1',
-        toolName: 'bash',
-        context: 'ls',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
+      const approval = makeApproval({ context: { command: 'ls' } });
 
       useWsStore.setState({ pendingApprovals: [approval] });
-      useWsStore.getState().resolvePendingApproval('approval-1', 'approved');
+      useWsStore.getState().resolvePendingApproval('approval-1', 'allow_once');
 
       const resolved = useWsStore.getState().pendingApprovals[0];
       expect(resolved.status).toBe('resolved');
-      expect(resolved.decision).toBe('approved');
+      expect(resolved.decision).toBe('allow_once');
     });
 
     it('should merge approvals from server with client state', () => {
-      const clientApproval: PendingApproval = {
-        id: 'client-1',
-        taskId: 'task-1',
-        sessionId: 'session-1',
-        toolName: 'bash',
-        context: 'echo',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      const serverApproval: PendingApproval = {
-        id: 'server-1',
-        taskId: 'task-1',
-        sessionId: 'session-1',
-        toolName: 'bash',
-        context: 'ls',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
+      const clientApproval = makeApproval({ id: 'client-1', context: { command: 'echo' } });
+      const serverApproval = makeApproval({ id: 'server-1', context: { command: 'ls' } });
 
       useWsStore.setState({ pendingApprovals: [clientApproval] });
       useWsStore.getState().mergePendingApprovals('task-1', [serverApproval]);
@@ -212,27 +194,21 @@ describe('WsStore', () => {
       const approvals: PendingApproval[] = [];
       // Create 100 pending and 150 resolved (total 250)
       for (let i = 0; i < 100; i++) {
-        approvals.push({
+        approvals.push(makeApproval({
           id: `pending-${i}`,
-          taskId: 'task-1',
-          sessionId: 'session-1',
-          toolName: 'bash',
-          context: `cmd-${i}`,
+          context: { command: `cmd-${i}` },
           status: 'pending',
           createdAt: new Date(Date.now() - 100000 + i).toISOString(),
-        });
+        }));
       }
       for (let i = 0; i < 150; i++) {
-        approvals.push({
+        approvals.push(makeApproval({
           id: `resolved-${i}`,
-          taskId: 'task-1',
-          sessionId: 'session-1',
-          toolName: 'bash',
-          context: `cmd-${i}`,
+          context: { command: `cmd-${i}` },
           status: 'resolved',
-          decision: 'approved',
+          decision: 'allow_once',
           createdAt: new Date(Date.now() - 100000 + i).toISOString(),
-        });
+        }));
       }
 
       useWsStore.getState().mergePendingApprovals('task-1', approvals);

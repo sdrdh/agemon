@@ -1,15 +1,28 @@
-import { useMemo } from 'react';
 import { ChevronsDown } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
+import { ToolCardShell } from '@/components/custom/tool-cards/tool-card-shell';
 import { isSessionActive } from '@/lib/chat-utils';
+import { useWsStore } from '@/lib/store';
+import { EMPTY_TOOL_CALLS } from '@/lib/tool-call-helpers';
 import type { ChatItem } from '@/lib/chat-utils';
-import type { PendingApproval, ApprovalDecision } from '@agemon/shared';
+import type { AgentSessionState, PendingApproval, ApprovalDecision } from '@agemon/shared';
+
+/** Subscribes to a single tool call by ID — only re-renders when that entry changes. */
+function ToolCallCardItem({ toolCallId, sessionId }: { toolCallId: string; sessionId: string }) {
+  const toolCall = useWsStore((s) => {
+    const list = s.toolCalls[sessionId] ?? EMPTY_TOOL_CALLS;
+    return list.find((tc) => tc.toolCallId === toolCallId) ?? null;
+  });
+  if (!toolCall) return null;
+  return <ToolCardShell toolCall={toolCall} />;
+}
 
 export function ChatMessagesArea({
   sessionReady,
   sessionRunning,
   sessionState,
+  selectedSessionId,
   groupedItems,
   agentActivity,
   showNewMessages,
@@ -22,7 +35,8 @@ export function ChatMessagesArea({
 }: {
   sessionReady: boolean;
   sessionRunning: boolean;
-  sessionState: string;
+  sessionState: AgentSessionState;
+  selectedSessionId: string | null;
   groupedItems: ChatItem[];
   agentActivity: string | null;
   showNewMessages: boolean;
@@ -54,7 +68,10 @@ export function ChatMessagesArea({
 
         {groupedItems.map((item, idx) => {
           if (item.kind === 'activity-group') {
-            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} />;
+            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} sessionId={selectedSessionId} />;
+          }
+          if (item.kind === 'tool-call') {
+            return <ToolCallCardItem key={`tc-${item.toolCallId}`} toolCallId={item.toolCallId} sessionId={item.sessionId} />;
           }
           return (
             <ChatBubble

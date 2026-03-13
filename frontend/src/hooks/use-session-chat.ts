@@ -1,14 +1,30 @@
 import { useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useWsStore } from '@/lib/store';
+import { useWsStore, type ToolCall } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { sessionChatQuery } from '@/lib/query';
 import { groupMessages, isSessionTerminal } from '@/lib/chat-utils';
-import type { ChatMessage, ApprovalDecision, PendingApproval } from '@agemon/shared';
+import { applyToolCallEvent } from '@/lib/tool-call-helpers';
+import type { AgentSessionState, ChatMessage, ApprovalDecision, PendingApproval } from '@agemon/shared';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
-export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: string) {
+/** Rebuild toolCalls store from persisted chat messages (page reload rehydration). */
+function rehydrateToolCalls(
+  messages: ChatMessage[],
+  sessionId: string,
+  upsertToolCall: (sessionId: string, toolCallId: string, patch: Partial<ToolCall>) => void,
+): void {
+  for (const msg of messages) {
+    if (msg.eventType !== 'action') continue;
+    try {
+      const obj = JSON.parse(msg.content);
+      applyToolCallEvent(obj, sessionId, upsertToolCall);
+    } catch { /* not JSON */ }
+  }
+}
+
+export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: AgentSessionState) {
   // ── Per-session chat history from server ──────────────────────────────
   const { data: sessionChatHistory } = useQuery(
     sessionChatQuery(selectedSessionId ?? '', 500),
@@ -75,11 +91,15 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   }, [selectedSessionId, chatMessages, clearUnread]);
 
   // ── Seed store from server chat history ───────────────────────────────
+  const upsertToolCall = useWsStore((s) => s.upsertToolCall);
+
   useEffect(() => {
     if (selectedSessionId && sessionChatHistory && sessionChatHistory.length > 0) {
       setChatMessages(selectedSessionId, sessionChatHistory);
+      // Rehydrate tool calls from persisted chat messages
+      rehydrateToolCalls(sessionChatHistory, selectedSessionId, upsertToolCall);
     }
-  }, [sessionChatHistory, selectedSessionId, setChatMessages]);
+  }, [sessionChatHistory, selectedSessionId, setChatMessages, upsertToolCall]);
 
   // ── Clear turn-in-flight when session terminates ────────────────────
   useEffect(() => {
@@ -89,7 +109,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   }, [selectedSessionId, sessionState, setTurnInFlight]);
 
   // ── Grouped items ─────────────────────────────────────────────────────
-  const groupedItems = useMemo(() => groupMessages(chatMessages), [chatMessages]);
+  const groupedItems = useMemo(() => groupMessages(chatMessages, selectedSessionId ?? undefined), [chatMessages, selectedSessionId]);
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleSend = useCallback((inputText: string) => {

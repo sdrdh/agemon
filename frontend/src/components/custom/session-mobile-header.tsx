@@ -1,6 +1,7 @@
 import { ArrowLeft, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SESSION_STATE_DOT } from '@/lib/chat-utils';
+import type { AgentSessionState } from '@agemon/shared';
 
 export function SessionMobileHeader({
   sessionLabel,
@@ -11,7 +12,7 @@ export function SessionMobileHeader({
   onStop,
 }: {
   sessionLabel: string;
-  sessionState: string;
+  sessionState: AgentSessionState;
   sessionRunning: boolean;
   actionLoading: boolean;
   onBack: () => void;

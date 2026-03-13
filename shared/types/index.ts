@@ -101,12 +101,19 @@ export interface Diff {
 
 export type ToolCallStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
+export interface ToolCallDisplay {
+  type: string;
+  file?: { filePath: string; content: string };
+  [key: string]: unknown;
+}
+
 export interface ToolCallEvent {
   toolCallId: string;
   kind: string;           // Tool type: "Bash", "Read", "Edit", "Write", "Grep", "Glob", "WebSearch", "Agent", etc.
   title: string;          // Display title from ACP
   status: ToolCallStatus;
   args: Record<string, string>; // Tool-specific params (command, filePath, pattern, etc.)
+  startedAt: string;      // ISO timestamp when tool call began
 }
 
 export interface ToolCallUpdateEvent {
@@ -116,6 +123,10 @@ export interface ToolCallUpdateEvent {
   title?: string;                     // Updated display title (e.g. "Read /etc/hostname")
   kind?: string;                      // Tool kind if changed
   args?: Record<string, string>;      // Tool-specific params from rawInput
+  output?: string;                    // Tool output text (truncated)
+  error?: string;                     // Error message if tool failed
+  display?: ToolCallDisplay;          // Structured UI data (agent-specific)
+  completedAt?: string;               // ISO timestamp when tool completed
 }
 
 // ─── Session Usage ───────────────────────────────────────────────────────────

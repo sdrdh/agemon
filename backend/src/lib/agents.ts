@@ -8,7 +8,7 @@
 
 import { join } from 'path';
 import { homedir } from 'os';
-import type { AgentType, SessionConfigOption } from '@agemon/shared';
+import type { AgentType, SessionConfigOption, ToolCallDisplay } from '@agemon/shared';
 
 /** Strategy for parsing config options from a session/new response. */
 export type ConfigOptionParser = (result: Record<string, unknown>) => SessionConfigOption[];
@@ -43,11 +43,19 @@ export interface AgentSkillPath {
   globalDir?: string;
 }
 
+export interface ToolDisplayResult {
+  output?: string;
+  error?: string;
+  display?: ToolCallDisplay;
+}
+
 export interface AgentConfig {
   command: string[];
   passEnvVars: string[];
   label: string;
   parseConfigOptions: ConfigOptionParser;
+  /** Extract display data + output from a tool_call_update. Agent-specific metadata handling. */
+  parseToolDisplay: (update: Record<string, unknown>) => ToolDisplayResult;
   /** Where this agent looks for plugins. Empty array = no plugin discovery. */
   pluginPaths: AgentPluginPath[];
   /** Where this agent looks for skills. Empty array = no skill discovery. */
@@ -120,12 +128,35 @@ function parseOpenCodeConfigOptions(result: Record<string, unknown>): SessionCon
   return options;
 }
 
+// ─── Per-Agent Tool Display Extractors ────────────────────────────────────
+
+/** Claude Code: extract toolResponse from _meta.claudeCode + rawOutput */
+function parseClaudeToolDisplay(update: Record<string, unknown>): ToolDisplayResult {
+  const meta = (update as Record<string, unknown>)?._meta as Record<string, unknown> | undefined;
+  const claudeCode = meta?.claudeCode as Record<string, unknown> | undefined;
+  const rawOutput = typeof update.rawOutput === 'string' ? update.rawOutput.slice(0, 2000) : undefined;
+  const toolResponse = claudeCode?.toolResponse;
+  const display = toolResponse && typeof toolResponse === 'object'
+    ? { ...toolResponse } as ToolCallDisplay
+    : undefined;
+  const error = typeof update.error === 'string' ? update.error : undefined;
+  return { output: rawOutput, error, display };
+}
+
+/** Generic: extract rawOutput and error only (no agent-specific _meta) */
+function parseGenericToolDisplay(update: Record<string, unknown>): ToolDisplayResult {
+  const rawOutput = typeof update.rawOutput === 'string' ? update.rawOutput.slice(0, 2000) : undefined;
+  const error = typeof update.error === 'string' ? update.error : undefined;
+  return { output: rawOutput, error };
+}
+
 export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
   'claude-code': {
     command: ['claude-agent-acp', '--agent', 'claude-code'],
     passEnvVars: [],
     label: 'Claude Code (via claude-agent-acp)',
     parseConfigOptions: parseClaudeConfigOptions,
+    parseToolDisplay: parseClaudeToolDisplay,
     pluginPaths: [{
       taskRelative: '.claude/plugins',
       globalDir: join(homedir(), '.claude', 'plugins'),
@@ -141,6 +172,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: ['OPENCODE_API_KEY'],
     label: 'OpenCode',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    parseToolDisplay: parseGenericToolDisplay,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
@@ -152,6 +184,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: ['GOOGLE_API_KEY'],
     label: 'Gemini CLI',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    parseToolDisplay: parseGenericToolDisplay,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
@@ -163,6 +196,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: ['ANTHROPIC_API_KEY'],
     label: 'Pi',
     parseConfigOptions: parseOpenCodeConfigOptions,
+    parseToolDisplay: parseGenericToolDisplay,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },
@@ -174,6 +208,7 @@ export const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     passEnvVars: ['OPENAI_API_KEY'],
     label: 'Codex',
     parseConfigOptions: parseClaudeConfigOptions,
+    parseToolDisplay: parseGenericToolDisplay,
     pluginPaths: [],
     skillPaths: [
       { taskRelative: '.agents/skills', globalDir: join(homedir(), '.agents', 'skills') },

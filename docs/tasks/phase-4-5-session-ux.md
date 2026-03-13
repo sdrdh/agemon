@@ -104,13 +104,7 @@
 
 ### Task 4.17: Cancel Agent Turn (Escape Key Equivalent) ✅
 
-### Task 4.18: Fix Tool Call Approval Dialog Persistence
-
-**Priority:** P1
-**Status:** Done
-
-**Deliverables:**
-- [ ] Add a global indicator (e.g., badge on task card or nav) showing tasks with unresolved approvals
+### Task 4.18: Fix Tool Call Approval Dialog Persistence ✅
 
 **Key Considerations:**
 - Approval state already persists in Zustand store and backend DB — the issue is purely a rendering/routing problem
@@ -257,22 +251,7 @@
 
 ---
 
-### Task 4.29: Auto-Resize Chat Input Textarea
-
-**Priority:** P1
-**Estimated Time:** 2 hours
-
-**Deliverables:**
-
-**Key Considerations:**
-- Common pattern: listen to `input` event, reset height to `auto`, then set to `scrollHeight`, capped by `max-height`
-- Max height should be ~40-50% of viewport on mobile so the chat history remains visible
-- Must work with both typed text and speech-to-text insertion (Task 4.28)
-- Avoid layout shift in the chat panel when textarea grows — pin scroll to bottom
-
-**Affected Areas:** frontend (`session-chat-panel.tsx`, possibly `tasks.new.tsx`)
-
-**Dependencies:** None
+### Task 4.29: Auto-Resize Chat Input Textarea ✅
 
 ### Task 4.30: Persist Slash Commands Across Page Refresh ✅
 
@@ -311,23 +290,19 @@
 **Design Doc:** [`docs/plans/2026-03-12-tool-call-ui-design.md`](docs/plans/2026-03-12-tool-call-ui-design.md)
 
 **Deliverables:**
-- [ ] Add `tool_call` / `tool_call_update` to `ServerEvent` union in `shared/types/index.ts`
-- [ ] Backend: emit structured tool call events from ACP handler (id, kind, title, args, status, timestamps)
-- [ ] Frontend: add `toolCalls: Record<string, ToolCall[]>` to Zustand store
-- [ ] Frontend: handle `tool_call` / `tool_call_update` events in `ws-provider.tsx`
-- [ ] Frontend: add `tool-call` kind to `ChatItem` union; interleave by timestamp in `chat-utils.ts`
-- [ ] Frontend: build `tool-call-card.tsx` — collapsible, status icon, kind label, title, execution time, args + output in detail panel
-- [ ] Frontend: kind-specific header summaries for Bash (show command), Edit/Write (show filepath), others generic
-- [ ] Remove or demote activity spinner to fallback for unknown event types
-- [ ] Mobile: tap to expand/collapse, min 44px touch targets
+- [x] Add `ToolCallDisplay`, `startedAt`, `output`, `error`, `display`, `completedAt` to shared types
+- [x] Backend: pluggable `parseToolDisplay` per agent (Claude Code extracts `_meta.claudeCode.toolResponse`; generic for others)
+- [x] Backend: emit structured tool call events with output/display/timing from ACP notifications
+- [x] Frontend: add `toolCalls: Record<string, ToolCall[]>` to Zustand store with `upsertToolCall`/`clearToolCalls`
+- [x] Frontend: populate toolCalls store from WS events in `ws-provider.tsx`
+- [x] Frontend: hybrid grouping — 1-3 tool calls as individual `ToolCallItem`; 4+ as `ActivityGroupItem`
+- [x] Frontend: specialized tool card components — `BashToolCard`, `FileToolCard` (with unified diff), `SearchToolCard`, `GenericToolCard`
+- [x] Frontend: `ToolStatusIcon` — tool-specific icons (Terminal, FileText, PenLine, etc.) colored by status
+- [x] Frontend: `InlineDiff` — LCS-based unified diff view with line numbers and +/- markers
+- [x] Frontend: page reload rehydration via `rehydrateToolCalls` from persisted chat history
+- [x] Mobile: tap to expand/collapse, min 44px touch targets
 
-**Key Considerations:**
-- Tool calls are ephemeral — not persisted to DB, cleared on page reload
-- One `ToolCallCard` component with `switch(kind)` for summary line; no separate BashCard/EditCard etc.
-- Diff viewer for Edit/Write deferred to Pattern 8 (`display_content` on `acp_events`)
-- Keep existing `agentActivity` string as fallback for agents that don't emit structured tool events
-
-**Affected Areas:** `shared/types/`, `backend/src/lib/acp.ts`, `frontend/src/lib/store.ts`, `ws-provider.tsx`, `chat-utils.ts`, `tool-call-card.tsx` (new), `session-chat-panel.tsx`
+**Affected Areas:** `shared/types/`, `backend/src/lib/agents.ts`, `backend/src/lib/acp/notifications.ts`, `frontend/src/lib/store.ts`, `frontend/src/lib/chat-utils.ts`, `frontend/src/lib/tool-call-helpers.ts` (new), `frontend/src/components/custom/tool-cards/` (new), `ws-provider.tsx`, `chat-messages-area.tsx`, `activity-group.tsx`, `use-session-chat.ts`
 
 **Dependencies:** Task 4.x (ACP integration)
 

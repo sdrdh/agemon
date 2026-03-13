@@ -1,4 +1,4 @@
-import { Plus, X, Globe, Terminal } from 'lucide-react';
+import { X, Globe, Terminal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { McpServerEntry } from '@agemon/shared';
 

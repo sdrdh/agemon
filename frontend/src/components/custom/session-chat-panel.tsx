@@ -201,6 +201,7 @@ export function SessionChatPanel({
         sessionReady={sessionReady}
         sessionRunning={sessionRunning}
         sessionState={session.state}
+        selectedSessionId={session.id}
         groupedItems={groupedItems}
         agentActivity={agentActivity}
         showNewMessages={showNewMessages}

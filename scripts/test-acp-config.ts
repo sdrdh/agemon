@@ -170,14 +170,15 @@ await Bun.sleep(1000);
 
 // Step 2: session/new
 console.log('\n── Step 2: session/new ──');
-let sessionResult = await sendRequest('session/new', {
-  cwd: process.cwd(),
-  mcpServers: [],
-});
-
-if (sessionResult?.code) {
-  console.log('[probe] session/new failed, retrying without mcpServers...');
-  sessionResult = await sendRequest('session/new', { cwd: process.cwd() });
+let sessionResult: any = null;
+for (let attempt = 1; attempt <= 5; attempt++) {
+  sessionResult = await sendRequest('session/new', {
+    cwd: process.cwd(),
+    mcpServers: [],
+  });
+  if (sessionResult?.sessionId) break;
+  console.log(`[probe] session/new attempt ${attempt} failed (${sessionResult?.message ?? 'unknown'}), retrying in 3s...`);
+  await Bun.sleep(3000);
 }
 
 sessionNewResult = sessionResult as Record<string, unknown>;
