@@ -133,7 +133,7 @@ TASK_AGENT=$(jq_field "['id']")
 
 # If claude-agent-acp is on PATH, start succeeds (202); otherwise 500
 if command -v claude-agent-acp &>/dev/null; then
-  check "start agent (binary on PATH)" 202 POST "/api/tasks/$TASK_AGENT/start"
+  check "start agent (binary on PATH)" 202 POST "/api/tasks/$TASK_AGENT/sessions"
   # Agent may exit quickly if not configured — stop may find it already gone
   sleep 1
   STOP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "$AUTH" "$BASE/api/tasks/$TASK_AGENT/stop")
@@ -145,7 +145,7 @@ if command -v claude-agent-acp &>/dev/null; then
     FAIL=$((FAIL+1))
   fi
 else
-  check "start agent (no binary on PATH)" 500 POST "/api/tasks/$TASK_AGENT/start"
+  check "start agent (no binary on PATH)" 500 POST "/api/tasks/$TASK_AGENT/sessions"
   check "stop agent (no running session)" 404 POST "/api/tasks/$TASK_AGENT/stop"
 fi
 

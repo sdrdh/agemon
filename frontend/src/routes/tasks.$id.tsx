@@ -1,313 +1,87 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/custom/status-badge';
-import { agentDisplayName } from '@/components/custom/agent-icons';
 import { TaskInfoDrawer } from '@/components/custom/task-info-drawer';
 import { SessionListPanel } from '@/components/custom/session-list-panel';
 import { SessionChatPanel } from '@/components/custom/session-chat-panel';
-import { groupMessages, isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
-import { api } from '@/lib/api';
-import { showToast } from '@/lib/toast';
-import { sendClientEvent } from '@/lib/ws';
-import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, sessionKeys } from '@/lib/query';
+import { useTaskDetail } from '@/hooks/use-task-detail';
+import { useSessionSelection } from '@/hooks/use-session-selection';
+import { useSessionChat } from '@/hooks/use-session-chat';
 import { useWsStore } from '@/lib/store';
 import { friendlyError } from '@/lib/errors';
-import type { ChatMessage, ApprovalDecision, PendingApproval, AgentType } from '@agemon/shared';
-
-const EMPTY_MESSAGES: ChatMessage[] = [];
 
 export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const isDesktop = useIsDesktop();
 
   const taskId = id ?? '';
 
-  // ── Data queries ──────────────────────────────────────────────────────
-  const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
-  const { data: sessions = [] } = useQuery(taskSessionsQuery(taskId));
+  // ── Custom hooks ──────────────────────────────────────────────────────
+  const {
+    task,
+    sessions,
+    isLoading,
+    error,
+    isDone,
+    hasSessions,
+    hasActiveSessions,
+    actionLoading,
+    createSessionMutation,
+    stopMutation,
+    resumeMutation,
+    markDoneMutation,
+    archiveTaskMutation,
+    archiveSessionMutation,
+  } = useTaskDetail(taskId);
 
-  // ── Session labels ────────────────────────────────────────────────────
-  const sessionLabels = useMemo(() => {
-    const counts: Record<string, number> = {};
-    return sessions.map((s) => {
-      counts[s.agent_type] = (counts[s.agent_type] ?? 0) + 1;
-      if (s.name) return s.name;
-      const shortName = agentDisplayName(s.agent_type);
-      return `${shortName} ${counts[s.agent_type]}`;
-    });
-  }, [sessions]);
+  const {
+    selectedSessionId,
+    setSelectedSessionId,
+    activeSession,
+    activeSessionLabel,
+    sessionLabels,
+    handleSelectSession,
+    handleBackToList,
+  } = useSessionSelection(sessions, isDesktop);
 
-  // ── Approval state (declared early for auto-select) ────────────────
-  const allPendingApprovals = useWsStore((s) => s.pendingApprovals);
-  const mergePendingApprovals = useWsStore((s) => s.mergePendingApprovals);
+  const {
+    groupedItems,
+    agentActivity,
+    pendingInputs,
+    sessionApprovals,
+    unreadSessions,
+    turnInFlight,
+    pendingInputSessionIds,
+    handleSend,
+    handleCancelTurn,
+    handleApprovalDecision,
+  } = useSessionChat(taskId, selectedSessionId, activeSession?.state);
 
-  // ── Guard: clear selection if the session was removed ───────────────
-  useEffect(() => {
-    if (selectedSessionId && !sessions.some(s => s.id === selectedSessionId)) {
-      setSelectedSessionId(null);
-    }
-  }, [sessions, selectedSessionId]);
-
-  const activeSession = useMemo(
-    () => sessions.find(s => s.id === selectedSessionId) ?? null,
-    [sessions, selectedSessionId],
-  );
-
-  const activeSessionLabel = useMemo(() => {
-    const idx = sessions.findIndex(s => s.id === selectedSessionId);
-    return idx >= 0 ? sessionLabels[idx] : '';
-  }, [sessions, selectedSessionId, sessionLabels]);
-
-  // ── Per-session chat history from server ──────────────────────────────
-  const { data: sessionChatHistory } = useQuery(
-    sessionChatQuery(selectedSessionId ?? '', 500),
-  );
-
-  // ── Store selectors (keyed by sessionId) ──────────────────────────────
-  const chatMessages = useWsStore((s) =>
-    selectedSessionId ? (s.chatMessages[selectedSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
-  );
-  const setChatMessages = useWsStore((s) => s.setChatMessages);
-  const appendChatMessage = useWsStore((s) => s.appendChatMessage);
-  const allPendingInputs = useWsStore((s) => s.pendingInputs);
-  const removePendingInput = useWsStore((s) => s.removePendingInput);
-  const agentActivity = useWsStore((s) =>
-    selectedSessionId ? (s.agentActivity[selectedSessionId] ?? null) : null
-  );
-  const unreadSessions = useWsStore((s) => s.unreadSessions);
-  const clearUnread = useWsStore((s) => s.clearUnread);
-  const turnInFlight = useWsStore((s) =>
-    selectedSessionId ? (s.turnsInFlight[selectedSessionId] ?? false) : false
-  );
-  const setTurnInFlight = useWsStore((s) => s.setTurnInFlight);
+  // ── Session usage ─────────────────────────────────────────────────────
   const allSessionUsage = useWsStore((s) => s.sessionUsage);
-  const setSessionUsage = useWsStore((s) => s.setSessionUsage);
   const activeSessionUsage = selectedSessionId ? allSessionUsage[selectedSessionId] : undefined;
 
-  // Seed sessionUsage store from initial sessions data (covers page-reload case)
-  useEffect(() => {
-    const current = useWsStore.getState().sessionUsage;
-    for (const s of sessions) {
-      if (s.usage && !current[s.id]) {
-        setSessionUsage(s.id, s.usage);
-      }
+  // ── Handle new session creation ───────────────────────────────────────
+  const handleNewSession = async (agentType: Parameters<typeof createSessionMutation.mutate>[0]) => {
+    const result = await createSessionMutation.mutateAsync(agentType);
+    setSelectedSessionId(result.id);
+    if (sessions.length === 0 && task?.description) {
+      setInputText(task.description);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, setSessionUsage]);
+  };
 
-  const pendingInputs = useMemo(
-    () => selectedSessionId
-      ? allPendingInputs.filter((p) => p.sessionId === selectedSessionId)
-      : [],
-    [allPendingInputs, selectedSessionId],
-  );
-
-  // ── Session approvals ──────────────────────────────────────────────
-  const sessionApprovals = useMemo(
-    () => selectedSessionId
-      ? allPendingApprovals.filter((a) => a.sessionId === selectedSessionId)
-      : [],
-    [allPendingApprovals, selectedSessionId],
-  );
-
-  useEffect(() => {
-    if (!taskId) return;
-    fetch(`/api/tasks/${taskId}/approvals?all=1`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('agemon_key') ?? ''}` },
-    })
-      .then(r => r.ok ? r.json() : [])
-      .then((approvals: PendingApproval[]) => {
-        mergePendingApprovals(taskId, approvals);
-      })
-      .catch(() => { /* ignore */ });
-  }, [taskId, mergePendingApprovals]);
-
-  // ── Clear unread for the active session ─────────────────────────────
-  useEffect(() => {
-    if (selectedSessionId) clearUnread(selectedSessionId);
-  }, [selectedSessionId, chatMessages, clearUnread]);
-
-  const pendingInputSessionIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const p of allPendingInputs) ids.add(p.sessionId);
-    return ids;
-  }, [allPendingInputs]);
-
-  // ── Seed store from server chat history ───────────────────────────────
-  useEffect(() => {
-    if (selectedSessionId && sessionChatHistory && sessionChatHistory.length > 0) {
-      setChatMessages(selectedSessionId, sessionChatHistory);
-    }
-  }, [sessionChatHistory, selectedSessionId, setChatMessages]);
-
-  // ── Clear turn-in-flight when session terminates ────────────────────
-  const sessionState = activeSession?.state;
-  useEffect(() => {
-    if (selectedSessionId && sessionState && isSessionTerminal(sessionState)) {
-      setTurnInFlight(selectedSessionId, false);
-    }
-  }, [selectedSessionId, sessionState, setTurnInFlight]);
-
-  // ── Grouped items ─────────────────────────────────────────────────────
-  const groupedItems = useMemo(() => groupMessages(chatMessages), [chatMessages]);
-
-  // ── Mutations ─────────────────────────────────────────────────────────
-  const createSessionMutation = useMutation({
-    mutationFn: (agentType: AgentType) => api.createSession(taskId, { agentType }),
-    onSuccess: (session) => {
-      setSelectedSessionId(session.id);
-      if (sessions.length === 0 && task?.description) {
-        setInputText(task.description);
-      }
-      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      showToast({ title: 'Session created' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to create session', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const stopMutation = useMutation({
-    mutationFn: (sessionId: string) => api.stopSession(sessionId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      showToast({ title: 'Stop signal sent' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to stop session', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const resumeMutation = useMutation({
-    mutationFn: (sessionId: string) => api.resumeSession(sessionId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      showToast({ title: 'Session resumed' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to resume session', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const markDoneMutation = useMutation({
-    mutationFn: () => api.updateTask(taskId, { status: 'done' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.all });
-      showToast({ title: 'Task marked as done' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to mark task done', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const archiveTaskMutation = useMutation({
-    mutationFn: (archived: boolean) => api.updateTask(taskId, { archived }),
-    onSuccess: (_, archived) => {
-      qc.invalidateQueries({ queryKey: taskKeys.detail(taskId) });
-      qc.invalidateQueries({ queryKey: taskKeys.all });
-      showToast({ title: archived ? 'Task archived' : 'Task unarchived' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to update archive status', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const archiveSessionMutation = useMutation({
-    mutationFn: ({ sessionId, archived }: { sessionId: string; archived: boolean }) =>
-      api.archiveSession(sessionId, archived),
-    onSuccess: (_, { archived }) => {
-      qc.invalidateQueries({ queryKey: sessionKeys.all });
-      showToast({ title: archived ? 'Session archived' : 'Session unarchived' });
-    },
-    onError: (err: Error) => {
-      showToast({ title: 'Failed to update session', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  // ── Send handler ──────────────────────────────────────────────────────
-  const handleSend = useCallback(() => {
-    const text = inputText.trim();
-    if (!text || !selectedSessionId) return;
-
-    if (pendingInputs.length > 0) {
-      const pi = pendingInputs[0];
-      sendClientEvent({ type: 'send_input', taskId, inputId: pi.inputId, response: text });
-      removePendingInput(pi.inputId);
-    } else {
-      sendClientEvent({ type: 'send_message', sessionId: selectedSessionId, content: text });
-    }
-
-    const optimisticMsg: ChatMessage = {
-      id: `local-${Date.now()}`,
-      role: 'user',
-      content: text,
-      eventType: pendingInputs.length > 0 ? 'input_response' : 'prompt',
-      timestamp: new Date().toISOString(),
-    };
-    appendChatMessage(selectedSessionId, optimisticMsg);
+  // ── Send wrapper ──────────────────────────────────────────────────────
+  const handleSendAndClear = () => {
+    handleSend(inputText);
     setInputText('');
-    setTurnInFlight(selectedSessionId, true);
-  }, [inputText, pendingInputs, taskId, selectedSessionId, removePendingInput, appendChatMessage, setTurnInFlight]);
-
-  const handleCancelTurn = useCallback(() => {
-    if (!selectedSessionId || !turnInFlight) return;
-    sendClientEvent({ type: 'cancel_turn', sessionId: selectedSessionId });
-  }, [selectedSessionId, turnInFlight]);
-
-  const handleApprovalDecision = useCallback((approvalId: string, decision: ApprovalDecision) => {
-    sendClientEvent({ type: 'approval_response', approvalId, decision });
-  }, []);
-
-  const handleSelectSession = useCallback((sessionId: string) => {
-    setSelectedSessionId(sessionId);
-    clearUnread(sessionId);
-    // Push history entry on mobile so back gesture returns to session list
-    if (!isDesktop) {
-      window.history.pushState({ agemonSession: sessionId }, '');
-    }
-  }, [clearUnread, isDesktop]);
-
-  const handleBackToList = useCallback(() => {
-    // Clear selection immediately so UI updates without waiting for popstate
-    setSelectedSessionId(null);
-    if (!isDesktop) {
-      // Also pop the history entry we pushed when selecting the session
-      window.history.back();
-    }
-  }, [isDesktop]);
-
-  // Handle browser back gesture / back button on mobile
-  useEffect(() => {
-    if (isDesktop) return;
-    const onPopState = (_e: PopStateEvent) => {
-      if (selectedSessionId) {
-        // User pressed back while viewing a session — return to session list
-        setSelectedSessionId(null);
-      }
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, [isDesktop, selectedSessionId]);
-
-  // ── Derived state ─────────────────────────────────────────────────────
-  const isDone = task?.status === 'done';
-  const hasSessions = sessions.length > 0;
-  const hasActiveSessions = sessions.some(s => isSessionActive(s.state));
-  const actionLoading = createSessionMutation.isPending || stopMutation.isPending || resumeMutation.isPending;
+  };
 
   // ── Loading state ─────────────────────────────────────────────────────
   if (isLoading) {
@@ -367,7 +141,7 @@ export default function TaskDetailView() {
             sessions={sessions}
             activeSessionId={selectedSessionId}
             onSelect={handleSelectSession}
-            onNew={(agentType) => createSessionMutation.mutate(agentType)}
+            onNew={handleNewSession}
             onStop={(sid) => stopMutation.mutate(sid)}
             onResume={(sid) => resumeMutation.mutate(sid)}
             onMarkDone={() => markDoneMutation.mutate()}
@@ -394,7 +168,7 @@ export default function TaskDetailView() {
             onApprovalDecision={handleApprovalDecision}
             inputText={inputText}
             setInputText={setInputText}
-            handleSend={handleSend}
+            handleSend={handleSendAndClear}
             onCancelTurn={handleCancelTurn}
             turnInFlight={turnInFlight}
             isDone={isDone}

@@ -14,7 +14,7 @@
 import { mkdir, writeFile, readFile, symlink, rm, access, readdir, lstat, stat, readlink } from 'fs/promises';
 import type { Dirent } from 'fs';
 import { join, resolve } from 'path';
-import { AGEMON_DIR } from './git.ts';
+import { homedir } from 'os';
 import { getAllPluginPaths, getAllSkillPaths } from './agents.ts';
 import type { Task } from '@agemon/shared';
 
@@ -28,12 +28,17 @@ async function exists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
 }
 
+/** Reads AGEMON_DIR dynamically from env (testable without module mocking). */
+function agemonDir(): string {
+  return process.env.AGEMON_DIR ? resolve(process.env.AGEMON_DIR) : join(homedir(), '.agemon');
+}
+
 /**
  * Generate or refresh all context artifacts for a task.
  * Safe to call multiple times — idempotent. Stale symlinks are pruned.
  */
 export async function refreshTaskContext(task: Task): Promise<void> {
-  const taskDir = join(AGEMON_DIR, 'tasks', task.id);
+  const taskDir = join(agemonDir(), 'tasks', task.id);
   await mkdir(taskDir, { recursive: true });
 
   await Promise.all([
@@ -48,7 +53,7 @@ export async function refreshTaskContext(task: Task): Promise<void> {
 
 /** Get the task directory path (no I/O). */
 export function getTaskDir(taskId: string): string {
-  return join(AGEMON_DIR, 'tasks', taskId);
+  return join(agemonDir(), 'tasks', taskId);
 }
 
 // ─── CLAUDE.md / AGENTS.md ───────────────────────────────────────────────────
@@ -137,7 +142,7 @@ async function generateClaudeMd(task: Task, taskDir: string): Promise<void> {
     '## Global Instructions', '',
   ];
 
-  const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
+  const globalClaudeMd = join(agemonDir(), 'CLAUDE.md');
   if (await exists(globalClaudeMd)) {
     lines.push(`@${globalClaudeMd}`, '');
   }
@@ -174,7 +179,7 @@ async function generateAgentsMd(task: Task, taskDir: string): Promise<void> {
     '## Global Instructions', '',
   ];
 
-  const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
+  const globalClaudeMd = join(agemonDir(), 'CLAUDE.md');
   if (await exists(globalClaudeMd)) {
     lines.push(`See: ${globalClaudeMd}`, '');
   }
@@ -203,14 +208,14 @@ async function generateAgentsMd(task: Task, taskDir: string): Promise<void> {
  * Wrapped in XML tags to separate it from the user's actual message.
  */
 export async function buildFirstPromptContext(task: Task): Promise<string> {
-  const taskDir = join(AGEMON_DIR, 'tasks', task.id);
+  const taskDir = join(agemonDir(), 'tasks', task.id);
   const sections: string[] = [
     ...buildTaskHeader(task),
     ...buildWorkspaceLayout(task),
     ...buildAgentGuidelines(),
   ];
 
-  const globalClaudeMd = join(AGEMON_DIR, 'CLAUDE.md');
+  const globalClaudeMd = join(agemonDir(), 'CLAUDE.md');
   if (await exists(globalClaudeMd)) {
     try {
       const content = await readFile(globalClaudeMd, 'utf8');
@@ -330,7 +335,7 @@ async function wireAgentPluginDirs(taskDir: string): Promise<void> {
     // _global → ~/.agemon/plugins/
     const globalLink = join(agentPluginsDir, '_global');
     if (!(await exists(globalLink))) {
-      await symlink(join(AGEMON_DIR, 'plugins'), globalLink);
+      await symlink(join(agemonDir(), 'plugins'), globalLink);
     }
 
     // _task → task-level aggregated plugins
@@ -368,7 +373,7 @@ async function wireAgentSkillDirs(taskDir: string): Promise<void> {
     await flattenSkillsInto(agentSkillsDir, repoSkillsBase, '_repo:');
 
     // Collect individual skill dirs from global ~/.agemon/skills/
-    const globalSkillsBase = join(AGEMON_DIR, 'skills');
+    const globalSkillsBase = join(agemonDir(), 'skills');
     await flattenSkillsInto(agentSkillsDir, globalSkillsBase, '_global:');
 
     // Prune stale symlinks (targets that no longer exist)

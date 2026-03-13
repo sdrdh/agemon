@@ -6,7 +6,8 @@
     "dev": "bun run --watch src/server.ts",
     "build": "bun build src/server.ts --outdir dist --target bun",
     "start": "bun run dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@agemon/shared": "workspace:*",
