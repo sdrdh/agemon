@@ -170,21 +170,27 @@ export interface ChatMessage {
 
 // ─── WebSocket Event Types ────────────────────────────────────────────────────
 
+interface ServerEventBase {
+  seq: number;
+  epoch: string;
+}
+
 export type ServerEvent =
-  | { type: 'task_updated'; task: Task }
-  | { type: 'agent_thought'; taskId: string; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
-  | { type: 'awaiting_input'; taskId: string; sessionId: string; question: string; inputId: string }
-  | { type: 'terminal_output'; sessionId: string; data: string }
-  | { type: 'session_started'; taskId: string; session: AgentSession }
-  | { type: 'session_ready'; taskId: string; session: AgentSession }
-  | { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState }
-  | { type: 'approval_requested'; approval: PendingApproval }
-  | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
-  | { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] }
-  | { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] }
-  | { type: 'turn_cancelled'; sessionId: string; taskId: string }
-  | { type: 'turn_completed'; sessionId: string; taskId: string }
-  | { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage };
+  | (ServerEventBase & { type: 'task_updated'; task: Task })
+  | (ServerEventBase & { type: 'agent_thought'; taskId: string; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string })
+  | (ServerEventBase & { type: 'awaiting_input'; taskId: string; sessionId: string; question: string; inputId: string })
+  | (ServerEventBase & { type: 'terminal_output'; sessionId: string; data: string })
+  | (ServerEventBase & { type: 'session_started'; taskId: string; session: AgentSession })
+  | (ServerEventBase & { type: 'session_ready'; taskId: string; session: AgentSession })
+  | (ServerEventBase & { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState })
+  | (ServerEventBase & { type: 'approval_requested'; approval: PendingApproval })
+  | (ServerEventBase & { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision })
+  | (ServerEventBase & { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] })
+  | (ServerEventBase & { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] })
+  | (ServerEventBase & { type: 'turn_cancelled'; sessionId: string; taskId: string })
+  | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string })
+  | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage })
+  | (ServerEventBase & { type: 'full_sync_required' });
 
 export type ClientEvent =
   | { type: 'send_input'; taskId: string; inputId: string; response: string }
@@ -192,7 +198,8 @@ export type ClientEvent =
   | { type: 'send_message'; sessionId: string; content: string }
   | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision }
   | { type: 'set_config_option'; sessionId: string; configId: string; value: string }
-  | { type: 'cancel_turn'; sessionId: string };
+  | { type: 'cancel_turn'; sessionId: string }
+  | { type: 'resume'; lastSeq: number };
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 
