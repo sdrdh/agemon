@@ -308,21 +308,22 @@
 
 ---
 
-### Task 4.32: Offline Behaviour & WebSocket Event Sequencing
+### Task 4.32: Offline Behaviour & WebSocket Event Sequencing ✅
 
 **Priority:** P1
 **Design Doc:** [`docs/plans/2026-03-12-offline-behaviour-design.md`](docs/plans/2026-03-12-offline-behaviour-design.md)
 
 **Deliverables:**
-- [ ] Add `seq: number` to `ServerEvent` in `shared/types/index.ts`; add `resume` to `ClientEvent`
-- [ ] Backend: global atomic seq counter + ring buffer (500 events) in `server.ts`
-- [ ] Backend: handle `resume` client event — replay ring buffer events where `seq > lastSeq` to that client only
-- [ ] Frontend: track `lastSeq` in Zustand store, updated on every received event
-- [ ] Frontend: send `{ type: 'resume', lastSeq }` after WS reconnect (in `ws.ts`)
-- [ ] Frontend: disable send button + textarea in `session-chat-panel.tsx` when `!connected`
-- [ ] Frontend: disable approve/reject buttons in `approval-card.tsx` when `!connected`
-- [ ] Show subtle "offline" label on disabled inputs (connection banner already covers global state)
-- [ ] Drafted text preserved in input on disconnect (not cleared until successful send)
+- [x] Add `seq: number` + `epoch: string` to `ServerEvent` in `shared/types/index.ts`; add `resume` to `ClientEvent`; add `full_sync_required` to `ServerEvent`
+- [x] Backend: global atomic seq counter + ring buffer (500 events) + epoch in `app.ts`
+- [x] Backend: handle `resume` client event — replay ring buffer events where `seq > lastSeq` to that client only
+- [x] Backend: detect buffer overflow → send `full_sync_required`; detect server restart via epoch
+- [x] Frontend: track `lastSeq` + `knownEpoch` in Zustand store, updated on every received event
+- [x] Frontend: send `{ type: 'resume', lastSeq }` after WS reconnect (in `ws.ts`)
+- [x] Frontend: disable send button + textarea + cancel button when `!connected`
+- [x] Frontend: disable approve/reject/always buttons in `approval-card.tsx` when `!connected`
+- [x] Drafted text preserved in input on disconnect (not cleared until successful send)
+- [x] Epoch mismatch and full_sync_required trigger full REST refetch via queryClient.invalidateQueries()
 
 **Key Considerations:**
 - Global seq (not per-task/session) is sufficient — simpler and matches Shelley/OpenClaw pattern

@@ -1,7 +1,7 @@
 # Offline Behaviour & WebSocket Event Sequencing
 
 **Date:** 2026-03-12
-**Status:** Approved
+**Status:** Approved (revised 2026-03-14)
 
 ---
 
@@ -21,6 +21,10 @@ When the WebSocket disconnects (mobile signal loss, server restart, network flap
 
 **Replay missed events on reconnect.** The server assigns a monotonic `seq` number to every `ServerEvent`. On reconnect the client sends its `lastSeq`; the server replays all events from a ring buffer that are `> lastSeq`. No full refetch needed.
 
+**Detect server restarts via epoch.** Every `ServerEvent` carries an `epoch` string (set once at server startup). If the client detects a new epoch on reconnect, it skips the resume handshake and triggers a full REST refetch instead.
+
+**Handle buffer overflow gracefully.** If the client's `lastSeq` is older than the ring buffer's oldest entry, the server sends `full_sync_required` and the client does a full refetch.
+
 This is the Shelley/OpenClaw pattern documented in `docs/reference-repo-analysis.md` §2.
 
 ---
@@ -29,31 +33,30 @@ This is the Shelley/OpenClaw pattern documented in `docs/reference-repo-analysis
 
 ### Backend
 
-**1. Sequence counter**
+**1. Sequence counter + epoch**
 
-Global atomic counter in `server.ts`. Increments on every broadcast.
+Global atomic counter and epoch string in `app.ts` inside `createApp()`. Increments on every broadcast. Epoch is set once at startup.
 
 ```ts
-// shared/types/index.ts
-type ServerEvent = {
-  seq: number;   // added — monotonic, server-global
-  type: string;
-  payload: unknown;
-};
+// app.ts
+const epoch = Date.now().toString();
+let globalSeq = 0;
 ```
+
+Every `ServerEvent` gets `seq` and `epoch` injected by the broadcast function.
 
 **2. Ring buffer**
 
-In-memory circular buffer of the last 500 events (configurable). Stored in `server.ts` alongside the WS connection map. No persistence needed — events are ephemeral.
+In-memory circular buffer of the last 500 events. Stored in `app.ts` alongside the WS connection map. No persistence needed — events are ephemeral.
 
 ```ts
 const EVENT_RING_SIZE = 500;
-const eventRing: ServerEvent[] = [];
+const eventRing: (ServerEvent & { seq: number; epoch: string })[] = [];
 let ringHead = 0;
 
-function broadcast(event: Omit<ServerEvent, 'seq'>) {
+function broadcast(event: ServerEvent) {
   const seq = ++globalSeq;
-  const e: ServerEvent = { seq, ...event };
+  const e = { ...event, seq, epoch };
   eventRing[ringHead % EVENT_RING_SIZE] = e;
   ringHead++;
   // send to all connected WS clients
@@ -69,32 +72,67 @@ New client event type:
 | { type: 'resume'; lastSeq: number }
 ```
 
-On receiving `resume`, the server finds all ring buffer events with `seq > lastSeq` (in order) and sends them to that client only.
+Handled directly in the WS `onMessage` handler in `app.ts` (connection-level concern, not a business event — does NOT go through `eventBus`).
+
+On receiving `resume`:
+1. Check if `lastSeq` falls outside the ring buffer (older than oldest entry).
+2. If gap is unrecoverable → send `{ type: 'full_sync_required', seq: globalSeq, epoch }` to that client only.
+3. Otherwise → replay all ring buffer events with `seq > lastSeq` in order to that client only.
+
+```ts
+const oldest = eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity;
+if (lastSeq < oldest) {
+  send(ws, { type: 'full_sync_required', seq: globalSeq, epoch });
+  return;
+}
+```
 
 ---
 
 ### Frontend
 
-**1. Track `lastSeq` in Zustand store**
+**1. Track `lastSeq` and `knownEpoch` in Zustand store**
 
 ```ts
 // store.ts
-lastSeq: number;  // updated on every received ServerEvent
+lastSeq: number;       // updated on every received ServerEvent
+knownEpoch: string;    // updated on every received ServerEvent
 ```
 
-**2. Send `resume` on reconnect**
+These are internal bookkeeping — no components subscribe to them. Access via `useWsStore.getState()` only (follows `rerender-defer-reads` pattern).
 
-In `ws.ts`, after the socket opens, send `{ type: 'resume', lastSeq }` if `lastSeq > 0`. The server replays missed events; deduplication is handled by the existing `msg.id` dedup logic in `ws-provider.tsx`.
+**2. Send `resume` on reconnect + detect epoch mismatch**
 
-**3. Disable inputs when offline**
+In `ws.ts`, on socket `onopen`:
+1. Read `lastSeq` and `knownEpoch` from `useWsStore.getState()`.
+2. If `lastSeq > 0`, send `{ type: 'resume', lastSeq }`.
+3. On first event received after reconnect, check `event.epoch !== knownEpoch`. If mismatch → server restarted → reset `lastSeq` to 0, trigger full REST refetch.
 
-- `session-chat-panel.tsx`: disable textarea and send button when `!connected`
-- `approval-card.tsx`: disable approve/reject buttons when `!connected`
-- Show a subtle `"offline"` label on disabled inputs (not a full banner — the existing connection banner already covers that)
+**3. Handle `full_sync_required`**
 
-**4. Navigation stays functional**
+In `ws-provider.tsx`, on receiving `full_sync_required`:
+- Invalidate all React Query caches (`queryClient.invalidateQueries()`) which triggers automatic refetches.
+- Clear Zustand chat messages for a clean slate.
+- Reset `lastSeq` to the received `seq`, set `knownEpoch` to the received `epoch`.
+
+**4. Disable inputs when offline**
+
+- `chat-input-area.tsx`: accept `connected` prop, disable textarea and send button when `!connected`
+- `session-chat-panel.tsx`: read `connected` from store, pass to `ChatInputArea`
+- `approval-card.tsx`: accept `connected` prop, disable approve/reject/always buttons when `!connected`
+- Drafted text is preserved in the textarea — the input is not cleared on disconnect
+
+**5. Navigation stays functional**
 
 No change needed — the Zustand store is local, routing is client-side, and REST fetches for task/session lists already show cached data via React Query. Users can browse freely while offline.
+
+---
+
+## React Best Practices Applied
+
+- **`rerender-defer-reads`** — `lastSeq` and `knownEpoch` are only read inside callbacks (`ws.ts` onopen), never during render. Accessed via `getState()`, not subscribed.
+- **`rerender-derived-state`** — Components subscribe to `connected: boolean`, not raw socket state.
+- **No unnecessary re-renders from seq tracking** — `lastSeq` updates on every WS event but zero components subscribe to it.
 
 ---
 
@@ -102,12 +140,14 @@ No change needed — the Zustand store is local, routing is client-side, and RES
 
 | Area | Change |
 |------|--------|
-| `shared/types/index.ts` | Add `seq` to `ServerEvent`; add `resume` to `ClientEvent` |
-| `backend/src/server.ts` | Ring buffer, seq counter, `resume` handler |
-| `frontend/src/lib/store.ts` | Add `lastSeq: number` |
-| `frontend/src/lib/ws.ts` | Send `resume` on open; update `lastSeq` on every event |
-| `frontend/src/components/custom/session-chat-panel.tsx` | Disable inputs when `!connected` |
-| `frontend/src/components/custom/approval-card.tsx` | Disable buttons when `!connected` |
+| `shared/types/index.ts` | Add `seq` + `epoch` to `ServerEvent`; add `resume` to `ClientEvent`; add `full_sync_required` to `ServerEvent` |
+| `backend/src/app.ts` | Ring buffer, seq counter, epoch, inject into broadcast; handle `resume` in WS `onMessage`; send `full_sync_required` on gap |
+| `frontend/src/lib/store.ts` | Add `lastSeq`, `knownEpoch`, `setLastSeq`, `setKnownEpoch`, `resetForFullSync` |
+| `frontend/src/lib/ws.ts` | Send `resume` on open |
+| `frontend/src/components/custom/ws-provider.tsx` | Track `lastSeq`/`knownEpoch` on every event; handle `full_sync_required` |
+| `frontend/src/components/custom/session-chat-panel.tsx` | Pass `connected` to `ChatInputArea` |
+| `frontend/src/components/custom/chat-input-area.tsx` | Accept `connected` prop, disable inputs when `!connected` |
+| `frontend/src/components/custom/approval-card.tsx` | Accept `connected` prop, disable buttons when `!connected` |
 
 ---
 
@@ -124,6 +164,8 @@ No change needed — the Zustand store is local, routing is client-side, and RES
 - [ ] Send button disabled and visually muted when `connected === false`
 - [ ] Approval buttons disabled when `connected === false`
 - [ ] Existing drafted text preserved in input when connection drops (not cleared)
-- [ ] On reconnect, missed events are replayed without duplicates in chat
+- [ ] On reconnect (same server): missed events replayed without duplicates
+- [ ] On reconnect (server restarted, epoch mismatch): full REST refetch triggered
+- [ ] On reconnect (gap overflowed buffer): `full_sync_required` triggers full REST refetch
 - [ ] Browsing between task chats works while offline
 - [ ] Existing smoke tests pass (`scripts/test-api.sh`)

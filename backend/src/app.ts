@@ -124,7 +124,10 @@ export function createApp(opts: AppOptions): AppContext {
           const lastSeq = ev.lastSeq as number;
           console.info(`[ws] resume requested, lastSeq=${lastSeq}, globalSeq=${globalSeq}`);
 
-          // Check if lastSeq falls outside ring buffer (spec formula)
+          // Check if lastSeq falls outside ring buffer.
+          // When ring is empty, oldest=Infinity → any lastSeq triggers full_sync (correct:
+          // a fresh server has nothing to replay). When ring has wrapped, ringHead%SIZE
+          // points to the oldest slot (about to be overwritten next).
           const oldest = eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity;
           if (lastSeq < oldest) {
             // Gap unrecoverable — tell client to refetch
@@ -134,7 +137,8 @@ export function createApp(opts: AppOptions): AppContext {
             return;
           }
 
-          // Replay events with seq > lastSeq, in order
+          // Replay events with seq > lastSeq. Ring stores events in seq order
+          // (append-only), so positional iteration preserves chronological ordering.
           const bufferLen = Math.min(ringHead, EVENT_RING_SIZE);
           let replayed = 0;
           for (let i = 0; i < bufferLen; i++) {
