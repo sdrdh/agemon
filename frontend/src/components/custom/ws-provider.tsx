@@ -258,7 +258,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
       if (result.should_notify) {
         useWsStore.getState().setUpdateAvailable(true);
       }
-    }).catch(() => { /* ignore */ });
+    }).catch((err) => { console.warn('[ws-provider] initial update check failed:', err); });
 
     return () => {
       unsubEvent();

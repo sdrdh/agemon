@@ -155,7 +155,7 @@ async function broadcastUpdateCheck() {
     if (result.has_update && result.should_notify) {
       broadcast({ type: 'update_available', version: result.latest, should_notify: true });
     }
-  } catch { /* ignore — non-critical */ }
+  } catch (err) { console.warn('[agemon] periodic update check failed:', (err as Error).message); }
 }
 // Initial check after 30s (let server settle), then every 6h
 setTimeout(broadcastUpdateCheck, 30_000);
