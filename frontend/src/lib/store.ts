@@ -43,6 +43,14 @@ interface WsState {
   sessionUsage: Record<string, SessionUsage>;
   /** Tool calls keyed by sessionId */
   toolCalls: Record<string, ToolCall[]>;
+  /** Last received server event sequence number (internal bookkeeping, not subscribed by components) */
+  lastSeq: number;
+  /** Server epoch string (internal bookkeeping, not subscribed by components) */
+  knownEpoch: string;
+  setLastSeq: (seq: number) => void;
+  setKnownEpoch: (epoch: string) => void;
+  /** Reset store state for full resync (epoch mismatch or buffer overflow) */
+  resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -79,6 +87,8 @@ export const useWsStore = create<WsState>((set) => ({
   turnsInFlight: {},
   sessionUsage: {},
   toolCalls: {},
+  lastSeq: 0,
+  knownEpoch: '',
 
   setConnected: (connected) => set({ connected }),
 
@@ -225,4 +235,21 @@ export const useWsStore = create<WsState>((set) => ({
       const { [sessionId]: _removed, ...rest } = state.toolCalls;
       return { toolCalls: rest };
     }),
+
+  setLastSeq: (seq) => set({ lastSeq: seq }),
+  setKnownEpoch: (epoch) => set({ knownEpoch: epoch }),
+  resetForFullSync: () => set({
+    chatMessages: {},
+    pendingInputs: [],
+    pendingApprovals: [],
+    agentActivity: {},
+    unreadSessions: {},
+    toolCalls: {},
+    turnsInFlight: {},
+    configOptions: {},
+    availableCommands: {},
+    sessionUsage: {},
+    lastSeq: 0,
+    knownEpoch: '',
+  }),
 }));
