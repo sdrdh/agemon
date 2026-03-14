@@ -32,6 +32,8 @@ export function createApp(opts: AppOptions): AppContext {
   const eventBus = new EventEmitter();
 
   // ─── CORS (scoped to /api/* only — avoids conflict with upgradeWebSocket) ─────
+  // Only needed in dev (Vite on :5173 → backend on :3000 = cross-origin).
+  // In production, frontend is served by the same server — same-origin, no CORS needed.
   if (process.env.NODE_ENV !== 'production') {
     app.use('/api/*', cors({
       origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
@@ -51,7 +53,10 @@ export function createApp(opts: AppOptions): AppContext {
   // ─── Auth Middleware ──────────────────────────────────────────────────────────
   app.use(async (c, next) => {
     const path = c.req.path;
-    if (path === '/api/health' || path === '/ws') return next();
+    // Skip auth for non-API routes (frontend static files), health, version, and WebSocket
+    // /ws has its own token-based auth via query param
+    if (path === '/ws' || path === '/api/health' || path === '/api/version') return next();
+    if (!path.startsWith('/api') && !path.startsWith('/mcp')) return next();
 
     const auth = c.req.header('authorization') ?? '';
     const authBuf = Buffer.from(auth);
@@ -125,14 +130,17 @@ export function createApp(opts: AppOptions): AppContext {
           console.info(`[ws] resume requested, lastSeq=${lastSeq}, globalSeq=${globalSeq}`);
 
           // Check if lastSeq falls outside ring buffer.
-          // ringHead===0 → empty → Infinity → full_sync (correct).
+          // ringHead===0 → empty → nothing to replay, skip.
           // ringHead < SIZE → not wrapped → oldest is at index 0.
           // ringHead >= SIZE → wrapped → oldest is at ringHead%SIZE.
-          const oldest = ringHead > 0
-            ? (ringHead >= EVENT_RING_SIZE
-                ? eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity
-                : eventRing[0]?.seq ?? Infinity)
-            : Infinity;
+          if (ringHead === 0) {
+            // Ring is empty — nothing to replay
+            console.info('[ws] ring empty, nothing to replay');
+            return;
+          }
+          const oldest = ringHead >= EVENT_RING_SIZE
+            ? eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity
+            : eventRing[0]?.seq ?? Infinity;
           if (lastSeq < oldest) {
             // Gap unrecoverable — tell client to refetch
             const syncEvent = { type: 'full_sync_required' as const, seq: globalSeq, epoch };

@@ -43,6 +43,9 @@ interface WsState {
   sessionUsage: Record<string, SessionUsage>;
   /** Tool calls keyed by sessionId */
   toolCalls: Record<string, ToolCall[]>;
+  /** Whether an update is available for the server */
+  updateAvailable: boolean;
+  setUpdateAvailable: (available: boolean) => void;
   /** Reset store state for full resync (epoch mismatch or buffer overflow) */
   resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
@@ -81,6 +84,9 @@ export const useWsStore = create<WsState>((set) => ({
   turnsInFlight: {},
   sessionUsage: {},
   toolCalls: {},
+  updateAvailable: false,
+
+  setUpdateAvailable: (available) => set({ updateAvailable: available }),
 
   setConnected: (connected) => set({ connected }),
 
@@ -239,5 +245,6 @@ export const useWsStore = create<WsState>((set) => ({
     configOptions: {},
     availableCommands: {},
     sessionUsage: {},
+    updateAvailable: false,
   }),
 }));

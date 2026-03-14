@@ -88,14 +88,50 @@ export function getActiveSession(taskId: string): AgentSession | null {
 
 /**
  * On server startup, mark any sessions that were running/starting/ready as interrupted.
+ * If the `auto_resume_sessions` setting is enabled, also attempt to resume them.
  */
-export function recoverInterruptedSessions(): void {
+export async function recoverInterruptedSessions(): Promise<void> {
   for (const state of ['starting', 'ready', 'running'] as const) {
     const stateSessions = db.listSessionsByState(state);
     for (const session of stateSessions) {
       db.updateSessionState(session.id, 'interrupted', { pid: null });
       console.info(`[acp] marked session ${session.id} as interrupted (crash recovery)`);
     }
+  }
+
+  // Auto-resume is opt-in — do nothing if the setting is not explicitly enabled
+  if (db.getSetting('auto_resume_sessions') !== 'true') {
+    return;
+  }
+
+  const interruptedSessions = db.listSessionsByState('interrupted').filter(
+    (s) => s.external_session_id !== null
+  );
+
+  if (interruptedSessions.length === 0) {
+    return;
+  }
+
+  console.info(`[acp] auto-resume: ${interruptedSessions.length} interrupted session(s) eligible`);
+
+  // Dynamic import to avoid circular dependency (resume.ts imports from lifecycle.ts indirectly)
+  const { resumeSession } = await import('./resume.ts');
+
+  // Process in batches of 3 to avoid overwhelming the system
+  const BATCH_SIZE = 3;
+  for (let i = 0; i < interruptedSessions.length; i += BATCH_SIZE) {
+    const batch = interruptedSessions.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (session) => {
+        try {
+          await resumeSession(session.id);
+          console.info(`[acp] auto-resume: session ${session.id} resumed successfully`);
+        } catch (err) {
+          db.updateSessionState(session.id, 'crashed');
+          console.warn(`[acp] auto-resume: session ${session.id} failed to resume, marked as crashed:`, err);
+        }
+      })
+    );
   }
 }
 

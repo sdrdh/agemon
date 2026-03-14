@@ -66,6 +66,7 @@ import * as inputs from './inputs.ts';
 import * as diffs from './diffs.ts';
 import * as approvals from './approvals.ts';
 import * as mcpServers from './mcp-servers.ts';
+import * as settings from './settings.ts';
 
 export const db = {
   // Tasks
@@ -132,4 +133,9 @@ export const db = {
   listGlobalMcpServers: mcpServers.listGlobalMcpServers,
   listTaskMcpServers: mcpServers.listTaskMcpServers,
   getMergedMcpServers: mcpServers.getMergedMcpServers,
+
+  // Settings
+  getSetting: settings.getSetting,
+  setSetting: settings.setSetting,
+  getAllSettings: settings.getAllSettings,
 };
