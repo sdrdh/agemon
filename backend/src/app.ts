@@ -145,8 +145,9 @@ export function createApp(opts: AppOptions): AppContext {
           // (append-only), so positional iteration preserves chronological ordering.
           const bufferLen = Math.min(ringHead, EVENT_RING_SIZE);
           let replayed = 0;
+          const startIdx = ringHead >= EVENT_RING_SIZE ? ringHead % EVENT_RING_SIZE : 0;
           for (let i = 0; i < bufferLen; i++) {
-            const idx = (ringHead > EVENT_RING_SIZE ? ringHead + i : i) % EVENT_RING_SIZE;
+            const idx = (startIdx + i) % EVENT_RING_SIZE;
             const e = eventRing[idx];
             if (e && e.seq > lastSeq) {
               ws.send(JSON.stringify(e));
