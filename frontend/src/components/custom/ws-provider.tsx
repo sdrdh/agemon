@@ -42,6 +42,28 @@ export function WsProvider({ children }: { children: ReactNode }) {
     const store = useWsStore.getState;
 
     const unsubEvent = onServerEvent((event: ServerEvent) => {
+      // ── Seq/epoch bookkeeping (before business logic) ─────────────────────
+      if (typeof event.seq === 'number') {
+        store().setLastSeq(event.seq);
+      }
+      if (event.epoch) {
+        const known = store().knownEpoch;
+        if (known && event.epoch !== known) {
+          // Server restarted — full resync. The first event after restart is
+          // intentionally dropped: queryClient.invalidateQueries() triggers REST
+          // refetches that will bring all fresh data including what this event carried.
+          console.info('[ws] epoch mismatch detected, triggering full resync');
+          store().resetForFullSync();
+          store().setLastSeq(event.seq);
+          store().setKnownEpoch(event.epoch);
+          queryClient.invalidateQueries();
+          return;
+        }
+        if (!known) {
+          store().setKnownEpoch(event.epoch);
+        }
+      }
+
       switch (event.type) {
         case 'task_updated': {
           const task = event.task;
@@ -200,6 +222,14 @@ export function WsProvider({ children }: { children: ReactNode }) {
         }
         case 'session_usage_update': {
           store().setSessionUsage(event.sessionId, event.usage);
+          break;
+        }
+        case 'full_sync_required': {
+          console.info('[ws] full_sync_required received, triggering full resync');
+          store().resetForFullSync();
+          store().setLastSeq(event.seq);
+          store().setKnownEpoch(event.epoch);
+          queryClient.invalidateQueries();
           break;
         }
       }
