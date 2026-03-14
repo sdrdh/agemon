@@ -43,6 +43,8 @@ interface WsState {
   sessionUsage: Record<string, SessionUsage>;
   /** Tool calls keyed by sessionId */
   toolCalls: Record<string, ToolCall[]>;
+  /** Reset store state for full resync (epoch mismatch or buffer overflow) */
+  resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
   appendChatMessage: (sessionId: string, msg: ChatMessage) => void;
   setChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -225,4 +227,17 @@ export const useWsStore = create<WsState>((set) => ({
       const { [sessionId]: _removed, ...rest } = state.toolCalls;
       return { toolCalls: rest };
     }),
+
+  resetForFullSync: () => set({
+    chatMessages: {},
+    pendingInputs: [],
+    pendingApprovals: [],
+    agentActivity: {},
+    unreadSessions: {},
+    toolCalls: {},
+    turnsInFlight: {},
+    configOptions: {},
+    availableCommands: {},
+    sessionUsage: {},
+  }),
 }));

@@ -5,9 +5,10 @@ import type { PendingApproval, ApprovalDecision } from '@agemon/shared';
 interface ApprovalCardProps {
   approval: PendingApproval;
   onDecision: (approvalId: string, decision: ApprovalDecision) => void;
+  connected: boolean;
 }
 
-export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
+export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardProps) {
   const [submitting, setSubmitting] = useState(false);
   const isPending = approval.status === 'pending';
   const isAllowed = approval.decision === 'allow_once' || approval.decision === 'allow_always';
@@ -119,7 +120,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
           type="button"
           className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-foreground"
           onClick={() => handleClick('allow_once')}
-          disabled={submitting}
+          disabled={submitting || !connected}
         >
           <Check className="h-3 w-3" />
           Allow
@@ -129,7 +130,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
           type="button"
           className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-muted-foreground"
           onClick={() => handleClick('allow_always')}
-          disabled={submitting}
+          disabled={submitting || !connected}
         >
           <ShieldCheck className="h-3 w-3" />
           Always
@@ -139,7 +140,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
           type="button"
           className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-red-500/10 transition-colors text-red-600 dark:text-red-400"
           onClick={() => handleClick('deny')}
-          disabled={submitting}
+          disabled={submitting || !connected}
         >
           <X className="h-3 w-3" />
           Deny

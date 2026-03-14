@@ -59,6 +59,7 @@ export function SessionChatPanel({
   const sessionStopped = isSessionTerminal(session.state);
   const sessionReady = session.state === 'ready';
   const canType = sessionRunning && !turnInFlight && !isDone;
+  const connected = useWsStore((s) => s.connected);
 
   // ── Config options ──────────────────────────────────────────────────────
   const configOptions = useWsStore((s) => s.configOptions[session.id]);
@@ -211,6 +212,7 @@ export function SessionChatPanel({
         onScroll={handleScroll}
         onApprovalDecision={onApprovalDecision}
         scrollToBottom={scrollToBottom}
+        connected={connected}
       />
 
       <div className="border-t bg-background">
@@ -226,6 +228,7 @@ export function SessionChatPanel({
         )}
         <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <ChatInputArea
+            connected={connected}
             sessionStopped={sessionStopped}
             sessionReady={sessionReady}
             canType={canType}

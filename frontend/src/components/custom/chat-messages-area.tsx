@@ -32,6 +32,7 @@ export function ChatMessagesArea({
   onScroll,
   onApprovalDecision,
   scrollToBottom,
+  connected,
 }: {
   sessionReady: boolean;
   sessionRunning: boolean;
@@ -46,6 +47,7 @@ export function ChatMessagesArea({
   onScroll: () => void;
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   scrollToBottom: () => void;
+  connected: boolean;
 }) {
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -79,6 +81,7 @@ export function ChatMessagesArea({
               message={item.message}
               approvalLookup={approvalLookup}
               onApprovalDecision={onApprovalDecision}
+              connected={connected}
             />
           );
         })}

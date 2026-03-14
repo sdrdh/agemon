@@ -9,6 +9,19 @@ let socket: WebSocket | null = null;
 let connected = false;
 let reconnectDelay = 1_000;
 let shouldReconnect = false;
+
+// ── Event sequencing bookkeeping (module-level, not in Zustand) ─────────────
+// These update on every WS event but are only read on reconnect. Keeping them
+// outside Zustand avoids hundreds of unnecessary set() calls per second during
+// active agent streaming.
+let lastSeq = 0;
+let knownEpoch = '';
+
+export function getLastSeq() { return lastSeq; }
+export function setLastSeq(seq: number) { lastSeq = seq; }
+export function getKnownEpoch() { return knownEpoch; }
+export function setKnownEpoch(ep: string) { knownEpoch = ep; }
+export function resetSeqState() { lastSeq = 0; knownEpoch = ''; }
 const listeners = new Set<Listener>();
 const connectionListeners = new Set<ConnectionListener>();
 
@@ -32,6 +45,13 @@ export function connectWs() {
   socket.onopen = () => {
     reconnectDelay = 1_000;
     setConnected(true);
+
+    // Send resume if we have a lastSeq (reconnecting, not first connect).
+    // Invariant: lastSeq === 0 on first connect, so resume is never sent on page load.
+    if (lastSeq > 0) {
+      socket!.send(JSON.stringify({ type: 'resume', lastSeq }));
+      console.info(`[ws] sent resume, lastSeq=${lastSeq}`);
+    }
   };
 
   socket.onmessage = (e) => {

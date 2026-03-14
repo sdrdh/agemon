@@ -356,7 +356,7 @@ function handleSessionUpdate(
       const kind = extractToolName(toolCall);
       const args = extractToolContext(toolCall);
 
-      const event: ToolCallEvent = { toolCallId, kind, title, status, args };
+      const event: ToolCallEvent = { toolCallId, kind, title, status, args, startedAt: new Date().toISOString() };
       const content = JSON.stringify(event);
 
       db.insertEvent({
