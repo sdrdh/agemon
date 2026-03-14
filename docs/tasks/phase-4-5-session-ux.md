@@ -336,3 +336,25 @@
 **Dependencies:** Task 1.3 (WebSocket infrastructure)
 
 ---
+
+### Task 4.34: Semantic Color CSS Variables
+
+**Priority:** P2
+**Status:** Todo
+
+**Deliverables:**
+- [ ] Add `--warning`, `--success`, `--danger` (+ foreground variants) CSS variables to each theme in `index.css`
+- [ ] Create matching Tailwind utility classes (e.g. `text-warning`, `bg-success/50`)
+- [ ] Migrate all 45 hardcoded `amber-*`, `emerald-*`, `red-*` usages across 18 files to use semantic tokens
+- [ ] Verify all themes render correct semantic colors
+
+**Key Considerations:**
+- Currently only `--destructive` exists as a semantic color variable
+- Approval card alone has 12 explicit color usages; other files (session list, badges, activity groups, tool cards) share the same pattern
+- Builds on Task 4.11 theme infrastructure
+
+**Affected Areas:** frontend (index.css, tailwind config, 18 component files)
+
+**Dependencies:** Task 4.11 (Multi-Theme System & Settings Page)
+
+---

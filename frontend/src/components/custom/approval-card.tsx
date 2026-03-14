@@ -10,6 +10,7 @@ interface ApprovalCardProps {
 
 export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const isPending = approval.status === 'pending';
   const isAllowed = approval.decision === 'allow_once' || approval.decision === 'allow_always';
 
@@ -51,7 +52,10 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
         {contextLine && (
           <>
             <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground truncate">{contextLine}</span>
+            <span
+              className={`text-muted-foreground cursor-pointer ${expanded ? 'whitespace-pre-wrap break-all' : 'truncate'}`}
+              onClick={() => setExpanded((e) => !e)}
+            >{contextLine}</span>
           </>
         )}
         <span className={`ml-auto shrink-0 ${isAllowed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -82,24 +86,30 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
 
       {/* Command preview — only for Bash/shell */}
       {command && (
-        <div className="mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono truncate">
+        <div
+          className={`mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono cursor-pointer ${expanded ? 'whitespace-pre-wrap break-all' : 'truncate'}`}
+          onClick={() => setExpanded((e) => !e)}
+        >
           $ {command}
         </div>
       )}
 
       {/* Diff preview — only for Edit */}
       {hasOldNew && (
-        <div className="mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono max-h-[80px] overflow-y-auto">
+        <div
+          className={`mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono cursor-pointer ${expanded ? 'max-h-none' : 'max-h-[80px]'} overflow-y-auto`}
+          onClick={() => setExpanded((e) => !e)}
+        >
           {context.oldString && (
             <div className="text-red-400 whitespace-pre-wrap break-all">
-              {context.oldString.split('\n').slice(0, 3).map((line, i) => (
+              {(expanded ? context.oldString.split('\n') : context.oldString.split('\n').slice(0, 3)).map((line, i) => (
                 <div key={i}>- {line}</div>
               ))}
             </div>
           )}
           {context.newString && (
             <div className="text-emerald-400 whitespace-pre-wrap break-all">
-              {context.newString.split('\n').slice(0, 3).map((line, i) => (
+              {(expanded ? context.newString.split('\n') : context.newString.split('\n').slice(0, 3)).map((line, i) => (
                 <div key={i}>+ {line}</div>
               ))}
             </div>
@@ -109,8 +119,11 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
 
       {/* Content preview — only for Write */}
       {context.preview && !hasOldNew && !command && (
-        <div className="mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono truncate">
-          {context.preview.slice(0, 80)}
+        <div
+          className={`mx-2.5 mb-1.5 rounded bg-zinc-900 text-zinc-100 dark:bg-zinc-950 px-2 py-1 text-[11px] font-mono cursor-pointer ${expanded ? 'whitespace-pre-wrap break-all' : 'truncate'}`}
+          onClick={() => setExpanded((e) => !e)}
+        >
+          {expanded ? context.preview : context.preview.slice(0, 80)}
         </div>
       )}
 
