@@ -93,7 +93,9 @@ async function fetchNightlyRelease(): Promise<GitHubRelease> {
   if (tagsRes.ok) {
     const tags = await tagsRes.json() as { ref: string }[];
     if (tags.length > 0) {
-      const latestTag = tags[tags.length - 1].ref.replace('refs/tags/', '');
+      // Sort lexicographically — nightly-YYYY-MM-DD format sorts correctly
+      const sorted = tags.map(t => t.ref.replace('refs/tags/', '')).sort();
+      const latestTag = sorted[sorted.length - 1];
       return {
         tag_name: latestTag,
         published_at: new Date().toISOString(),
@@ -133,7 +135,10 @@ async function fetchBranchHead(branch: string): Promise<GitHubRelease & { commit
 async function getLocalHead(): Promise<string> {
   const proc = Bun.spawn(['git', 'rev-parse', 'HEAD'], { cwd: PROJECT_ROOT, stdout: 'pipe', stderr: 'pipe' });
   const stdout = await new Response(proc.stdout).text();
-  await proc.exited;
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error('Failed to get local git HEAD — not a git repository?');
+  }
   return stdout.trim();
 }
 
