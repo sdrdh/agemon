@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { CURRENT_VERSION } from './version.ts';
 import type { ReleaseChannel, UpdateResult } from '@agemon/shared';
 
-const PROJECT_ROOT = join(import.meta.dir, '../../../..');
+const PROJECT_ROOT = join(import.meta.dir, '../../..');
 
 // ─── Update Strategy Interface ──────────────────────────────────────────────
 

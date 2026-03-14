@@ -4,7 +4,7 @@ import type { ReleaseChannel, VersionCheckResult } from '@agemon/shared';
 
 // ─── Current Version ─────────────────────────────────────────────────────────
 
-const PROJECT_ROOT = join(import.meta.dir, '../../../..');
+const PROJECT_ROOT = join(import.meta.dir, '../../..');
 const pkg = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8'));
 export const CURRENT_VERSION: string = pkg.version;
 
