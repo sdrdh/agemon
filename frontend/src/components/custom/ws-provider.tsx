@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { onServerEvent, onConnectionChange } from '@/lib/ws';
+import { onServerEvent, onConnectionChange, setLastSeq, getKnownEpoch, setKnownEpoch, resetSeqState } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
 import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
@@ -43,24 +43,27 @@ export function WsProvider({ children }: { children: ReactNode }) {
 
     const unsubEvent = onServerEvent((event: ServerEvent) => {
       // ── Seq/epoch bookkeeping (before business logic) ─────────────────────
+      // lastSeq and knownEpoch are module-level vars in ws.ts (not Zustand)
+      // to avoid hundreds of unnecessary set() calls per second during streaming.
       if (typeof event.seq === 'number') {
-        store().setLastSeq(event.seq);
+        setLastSeq(event.seq);
       }
       if (event.epoch) {
-        const known = store().knownEpoch;
+        const known = getKnownEpoch();
         if (known && event.epoch !== known) {
           // Server restarted — full resync. The first event after restart is
           // intentionally dropped: queryClient.invalidateQueries() triggers REST
           // refetches that will bring all fresh data including what this event carried.
           console.info('[ws] epoch mismatch detected, triggering full resync');
           store().resetForFullSync();
-          store().setLastSeq(event.seq);
-          store().setKnownEpoch(event.epoch);
+          resetSeqState();
+          setLastSeq(event.seq);
+          setKnownEpoch(event.epoch);
           queryClient.invalidateQueries();
           return;
         }
         if (!known) {
-          store().setKnownEpoch(event.epoch);
+          setKnownEpoch(event.epoch);
         }
       }
 
@@ -227,8 +230,9 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'full_sync_required': {
           console.info('[ws] full_sync_required received, triggering full resync');
           store().resetForFullSync();
-          store().setLastSeq(event.seq);
-          store().setKnownEpoch(event.epoch);
+          resetSeqState();
+          setLastSeq(event.seq);
+          setKnownEpoch(event.epoch);
           queryClient.invalidateQueries();
           break;
         }
