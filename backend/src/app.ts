@@ -22,7 +22,7 @@ export interface AppOptions {
 
 export interface AppContext {
   app: Hono;
-  broadcast: (event: ServerEvent) => void;
+  broadcast: (event: Omit<ServerEvent, 'seq' | 'epoch'>) => void;
   eventBus: EventEmitter;
   wsClients: Set<WSContext>;
 }
@@ -81,9 +81,19 @@ export function createApp(opts: AppOptions): AppContext {
     c.json({ status: 'ok', timestamp: new Date().toISOString() }),
   );
 
+  // ─── Event Sequencing ───────────────────────────────────────────────────────
+  const epoch = Date.now().toString();
+  let globalSeq = 0;
+  const EVENT_RING_SIZE = 500;
+  const eventRing: ServerEvent[] = [];
+  let ringHead = 0;
+
   // ─── WebSocket ────────────────────────────────────────────────────────────────
   const WS_OPEN = 1 as const; // WebSocket OPEN readyState
-  const WS_CLIENT_EVENT_TYPES = new Set(['send_input', 'terminal_input', 'send_message', 'approval_response', 'set_config_option', 'cancel_turn']);
+  const WS_CLIENT_EVENT_TYPES = new Set([
+    'send_input', 'terminal_input', 'send_message', 'approval_response',
+    'set_config_option', 'cancel_turn', 'resume',
+  ]);
   const wsClients = new Set<WSContext>();
 
   app.use('/ws', async (c, next) => {
@@ -101,11 +111,46 @@ export function createApp(opts: AppOptions): AppContext {
       wsClients.add(ws);
       console.info(`[ws] client connected (total: ${wsClients.size})`);
     },
-    onMessage(event, _ws) {
+    onMessage(event, ws) {
       try {
-        const ev: ClientEvent = JSON.parse(String(event.data));
-        if (!ev || typeof ev.type !== 'string' || !WS_CLIENT_EVENT_TYPES.has(ev.type)) {
-          console.warn('[ws] unknown client event type:', ev?.type);
+        const ev = JSON.parse(String(event.data));
+        if (!ev || typeof ev.type !== 'string') {
+          console.warn('[ws] unknown client event');
+          return;
+        }
+
+        // Handle resume directly — connection-level, not a business event
+        if (ev.type === 'resume' && typeof ev.lastSeq === 'number') {
+          const lastSeq = ev.lastSeq as number;
+          console.info(`[ws] resume requested, lastSeq=${lastSeq}, globalSeq=${globalSeq}`);
+
+          // Check if lastSeq falls outside ring buffer (spec formula)
+          const oldest = eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity;
+          if (lastSeq < oldest) {
+            // Gap unrecoverable — tell client to refetch
+            const syncEvent = { type: 'full_sync_required' as const, seq: globalSeq, epoch };
+            ws.send(JSON.stringify(syncEvent));
+            console.info(`[ws] sent full_sync_required (lastSeq=${lastSeq} < oldest=${oldest})`);
+            return;
+          }
+
+          // Replay events with seq > lastSeq, in order
+          const bufferLen = Math.min(ringHead, EVENT_RING_SIZE);
+          let replayed = 0;
+          for (let i = 0; i < bufferLen; i++) {
+            const idx = (ringHead > EVENT_RING_SIZE ? ringHead + i : i) % EVENT_RING_SIZE;
+            const e = eventRing[idx];
+            if (e && e.seq > lastSeq) {
+              ws.send(JSON.stringify(e));
+              replayed++;
+            }
+          }
+          console.info(`[ws] replayed ${replayed} events`);
+          return;
+        }
+
+        if (!WS_CLIENT_EVENT_TYPES.has(ev.type)) {
+          console.warn('[ws] unknown client event type:', ev.type);
           return;
         }
         if (ev.type === 'terminal_input') {
@@ -124,8 +169,12 @@ export function createApp(opts: AppOptions): AppContext {
     },
   })));
 
-  function broadcast(event: ServerEvent) {
-    const payload = JSON.stringify(event);
+  function broadcast(event: Omit<ServerEvent, 'seq' | 'epoch'>) {
+    const seq = ++globalSeq;
+    const e = { ...event, seq, epoch } as ServerEvent;
+    eventRing[ringHead % EVENT_RING_SIZE] = e;
+    ringHead++;
+    const payload = JSON.stringify(e);
     for (const client of [...wsClients]) {
       if (client.readyState === WS_OPEN) client.send(payload);
     }
