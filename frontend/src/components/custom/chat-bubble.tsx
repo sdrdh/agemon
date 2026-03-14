@@ -38,10 +38,11 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
+export function ChatBubble({ message, approvalLookup, onApprovalDecision, connected }: {
   message: ChatMessage;
   approvalLookup?: Map<string, PendingApproval>;
   onApprovalDecision?: (approvalId: string, decision: ApprovalDecision) => void;
+  connected?: boolean;
 }) {
   const { role, content, eventType } = message;
 
@@ -54,7 +55,7 @@ export function ChatBubble({ message, approvalLookup, onApprovalDecision }: {
     if (approvalLookup && onApprovalDecision) {
       const approval = approvalLookup.get(approvalId);
       if (approval) {
-        return <ApprovalCard approval={approval} onDecision={onApprovalDecision} />;
+        return <ApprovalCard approval={approval} onDecision={onApprovalDecision} connected={connected ?? true} />;
       }
     }
     // Approval not yet in store — brief flash while HTTP fetch loads it

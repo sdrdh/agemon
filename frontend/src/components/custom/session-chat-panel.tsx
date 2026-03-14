@@ -212,6 +212,7 @@ export function SessionChatPanel({
         onScroll={handleScroll}
         onApprovalDecision={onApprovalDecision}
         scrollToBottom={scrollToBottom}
+        connected={connected}
       />
 
       <div className="border-t bg-background">
