@@ -14,6 +14,7 @@ const MODE_INPUT_STYLES: Record<string, string> = {
 };
 
 export function ChatInputArea({
+  connected,
   sessionStopped,
   sessionReady,
   canType,
@@ -34,6 +35,7 @@ export function ChatInputArea({
   onSetSelectedCommandIdx,
   onAdjustTextareaHeight,
 }: {
+  connected: boolean;
   sessionStopped: boolean;
   sessionReady: boolean;
   canType: boolean;
@@ -133,7 +135,7 @@ export function ChatInputArea({
             }}
             onKeyDown={handleInputKeyDown}
             placeholder={inputPlaceholder}
-            disabled={!canType && !sessionReady}
+            disabled={!connected || (!canType && !sessionReady)}
             rows={1}
             className={`flex-1 min-h-[44px] max-h-[40vh] resize-none overflow-y-auto rounded-md border border-input bg-background px-3 py-3 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${MODE_INPUT_STYLES[currentMode] ?? ''}`}
           />
@@ -143,6 +145,7 @@ export function ChatInputArea({
               size="icon"
               variant="destructive"
               onClick={onCancelTurn}
+              disabled={!connected}
               className="min-h-[44px] min-w-[44px]"
               aria-label="Cancel turn"
             >
@@ -153,7 +156,7 @@ export function ChatInputArea({
               type="button"
               size="icon"
               onClick={onSend}
-              disabled={(!canType && !sessionReady) || !inputText.trim()}
+              disabled={!connected || (!canType && !sessionReady) || !inputText.trim()}
               className="min-h-[44px] min-w-[44px]"
             >
               <Send className="h-4 w-4" />
