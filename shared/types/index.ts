@@ -175,6 +175,11 @@ interface ServerEventBase {
   epoch: string;
 }
 
+/** Distributes Omit across union members (built-in Omit collapses them). */
+export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
+
+export type ServerEventPayload = DistributiveOmit<ServerEvent, 'seq' | 'epoch'>;
+
 export type ServerEvent =
   | (ServerEventBase & { type: 'task_updated'; task: Task })
   | (ServerEventBase & { type: 'agent_thought'; taskId: string; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string })

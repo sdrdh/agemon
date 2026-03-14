@@ -6,7 +6,7 @@ import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
 import { timingSafeEqual } from 'node:crypto';
 import { db } from './db/client.ts';
-import type { ServerEvent, ClientEvent } from '@agemon/shared';
+import type { ServerEvent, ServerEventPayload, ClientEvent } from '@agemon/shared';
 
 const HTTP_STATUS: Record<number, string> = {
   400: 'Bad Request',
@@ -22,7 +22,7 @@ export interface AppOptions {
 
 export interface AppContext {
   app: Hono;
-  broadcast: (event: Omit<ServerEvent, 'seq' | 'epoch'>) => void;
+  broadcast: (event: ServerEventPayload) => void;
   eventBus: EventEmitter;
   wsClients: Set<WSContext>;
 }
@@ -125,10 +125,14 @@ export function createApp(opts: AppOptions): AppContext {
           console.info(`[ws] resume requested, lastSeq=${lastSeq}, globalSeq=${globalSeq}`);
 
           // Check if lastSeq falls outside ring buffer.
-          // When ring is empty, oldest=Infinity → any lastSeq triggers full_sync (correct:
-          // a fresh server has nothing to replay). When ring has wrapped, ringHead%SIZE
-          // points to the oldest slot (about to be overwritten next).
-          const oldest = eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity;
+          // ringHead===0 → empty → Infinity → full_sync (correct).
+          // ringHead < SIZE → not wrapped → oldest is at index 0.
+          // ringHead >= SIZE → wrapped → oldest is at ringHead%SIZE.
+          const oldest = ringHead > 0
+            ? (ringHead >= EVENT_RING_SIZE
+                ? eventRing[ringHead % EVENT_RING_SIZE]?.seq ?? Infinity
+                : eventRing[0]?.seq ?? Infinity)
+            : Infinity;
           if (lastSeq < oldest) {
             // Gap unrecoverable — tell client to refetch
             const syncEvent = { type: 'full_sync_required' as const, seq: globalSeq, epoch };
@@ -173,7 +177,7 @@ export function createApp(opts: AppOptions): AppContext {
     },
   })));
 
-  function broadcast(event: Omit<ServerEvent, 'seq' | 'epoch'>) {
+  function broadcast(event: ServerEventPayload) {
     const seq = ++globalSeq;
     const e = { ...event, seq, epoch } as ServerEvent;
     eventRing[ringHead % EVENT_RING_SIZE] = e;
