@@ -1,6 +1,7 @@
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 import { showToast } from './toast';
 import { STORAGE_KEY } from '@/lib/api';
+import { useWsStore } from '@/lib/store';
 
 type Listener = (event: ServerEvent) => void;
 type ConnectionListener = (connected: boolean) => void;
@@ -32,6 +33,14 @@ export function connectWs() {
   socket.onopen = () => {
     reconnectDelay = 1_000;
     setConnected(true);
+
+    // Send resume if we have a lastSeq (reconnecting, not first connect).
+    // Invariant: lastSeq === 0 on first connect, so resume is never sent on page load.
+    const { lastSeq } = useWsStore.getState();
+    if (lastSeq > 0) {
+      socket!.send(JSON.stringify({ type: 'resume', lastSeq }));
+      console.info(`[ws] sent resume, lastSeq=${lastSeq}`);
+    }
   };
 
   socket.onmessage = (e) => {
