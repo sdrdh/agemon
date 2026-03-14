@@ -212,8 +212,13 @@ async function checkRelease(channel: ReleaseChannel, now: string): Promise<Versi
     ? latestTag !== `v${CURRENT_VERSION}` && latestTag !== CURRENT_VERSION
     : isNewer(CURRENT_VERSION, latestVersion);
 
+  // Delay badge notification for stable/pre-release by 5 days so early
+  // adopters can surface issues before the wider install base sees the badge.
+  // Nightly channel always notifies immediately.
   const fiveDaysMs = 5 * 24 * 60 * 60 * 1000;
-  const shouldNotify = hasUpdate && (Date.now() - new Date(publishedAt).getTime()) > fiveDaysMs;
+  const shouldNotify = hasUpdate && (
+    channel === 'nightly' || (Date.now() - new Date(publishedAt).getTime()) > fiveDaysMs
+  );
 
   return {
     current: CURRENT_VERSION,

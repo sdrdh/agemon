@@ -143,6 +143,24 @@ console.log(`[agemon] backend listening on http://${HOST}:${PORT}`);
 const { recoverInterruptedSessions, shutdownAllSessions } = await import('./lib/acp/index.ts');
 await recoverInterruptedSessions();
 
+// ─── Periodic Update Check ──────────────────────────────────────────────────
+// Check for updates every 6 hours and broadcast to connected clients
+const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
+async function broadcastUpdateCheck() {
+  try {
+    const { checkForUpdates } = await import('./lib/version.ts');
+    const channel = (db.getSetting('release_channel') ?? 'stable') as import('@agemon/shared').ReleaseChannel;
+    const branch = db.getSetting('release_branch') ?? undefined;
+    const result = await checkForUpdates(true, channel, branch);
+    if (result.has_update && result.should_notify) {
+      broadcast({ type: 'update_available', version: result.latest, should_notify: true });
+    }
+  } catch { /* ignore — non-critical */ }
+}
+// Initial check after 30s (let server settle), then every 6h
+setTimeout(broadcastUpdateCheck, 30_000);
+setInterval(broadcastUpdateCheck, UPDATE_CHECK_INTERVAL);
+
 process.on('SIGINT', async () => {
   console.info('[agemon] shutting down...');
   await shutdownAllSessions();

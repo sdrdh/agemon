@@ -459,6 +459,23 @@ install_systemd_service() {
     return
   fi
 
+  # Create agemon system user if it doesn't exist
+  if ! id -u agemon &>/dev/null; then
+    info "Creating 'agemon' system user..."
+    sudo useradd -r -s /bin/false -d /opt/agemon -m agemon 2>/dev/null \
+      || sudo useradd -r -s /usr/sbin/nologin -d /opt/agemon agemon
+    success "System user 'agemon' created."
+  else
+    info "System user 'agemon' already exists."
+  fi
+
+  # Ensure agemon owns the install directory
+  sudo chown -R agemon:agemon "${INSTALL_DIR}"
+  # Ensure agemon can write to runtime dirs
+  sudo chown -R agemon:agemon "${AGEMON_DIR}" 2>/dev/null || true
+  # Ensure agemon can read the env file
+  sudo chown root:agemon /etc/agemon/env 2>/dev/null || true
+
   info "Installing systemd service..."
   sudo cp "$service_src" /etc/systemd/system/agemon.service
   sudo systemctl daemon-reload

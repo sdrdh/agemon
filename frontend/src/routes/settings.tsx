@@ -142,6 +142,9 @@ function McpServersSection() {
 
 // ─── About Section ─────────────────────────────────────────────────────────
 
+const RESTART_POLL_INTERVAL_MS = 2000;
+const RESTART_POLL_MAX_ATTEMPTS = 30;
+
 function AboutSection() {
   const { versionInfo, loading: checkLoading, error: checkError, check } = useVersionChecker();
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
@@ -198,8 +201,8 @@ function AboutSection() {
     try {
       await api.restart();
       // Poll until server comes back
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
+      for (let i = 0; i < RESTART_POLL_MAX_ATTEMPTS; i++) {
+        await new Promise(r => setTimeout(r, RESTART_POLL_INTERVAL_MS));
         try {
           const res = await fetch('/api/health');
           if (res.ok) { window.location.reload(); return; }

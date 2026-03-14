@@ -19,7 +19,5 @@ export function getAllSettings(): Record<string, string> {
   const rows = getDb().query<{ key: string; value: string }, []>(
     'SELECT key, value FROM settings'
   ).all();
-  const result: Record<string, string> = {};
-  for (const row of rows) result[row.key] = row.value;
-  return result;
+  return Object.fromEntries(rows.map(row => [row.key, row.value]));
 }
