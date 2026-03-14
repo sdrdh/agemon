@@ -13,6 +13,7 @@ import { Home, KanbanSquare, TerminalSquare, Settings } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
+import { useWsStore } from './lib/store';
 import { WsProvider } from './components/custom/ws-provider';
 import { ConnectionBanner } from './components/custom/connection-banner';
 import { ThemeProvider } from './lib/theme-provider';
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
 function BottomNav() {
   const matches = useMatches();
   const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const updateAvailable = useWsStore(s => s.updateAvailable);
   if (isTaskDetail) return null;
 
   return (
@@ -59,7 +61,12 @@ function BottomNav() {
                 'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors',
             }}
           >
-            <Icon className="h-5 w-5" />
+            <span className="relative">
+              <Icon className="h-5 w-5" />
+              {to === '/settings' && updateAvailable && (
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
+              )}
+            </span>
             <span className="text-[10px] leading-tight">{label}</span>
           </Link>
         ))}

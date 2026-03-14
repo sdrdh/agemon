@@ -3,6 +3,7 @@ import { onServerEvent, onConnectionChange, setLastSeq, getKnownEpoch, setKnownE
 import { useWsStore } from '@/lib/store';
 import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
+import { api } from '@/lib/api';
 import type { ServerEvent } from '@agemon/shared';
 
 /** Extract a short activity label from a tool-call content string. */
@@ -227,6 +228,15 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setSessionUsage(event.sessionId, event.usage);
           break;
         }
+        case 'update_available': {
+          useWsStore.getState().setUpdateAvailable(true);
+          break;
+        }
+        case 'server_restarting': {
+          // Could show a toast/banner, for now just log
+          console.info('[ws] server is restarting...');
+          break;
+        }
         case 'full_sync_required': {
           console.info('[ws] full_sync_required received, triggering full resync');
           store().resetForFullSync();
@@ -242,6 +252,13 @@ export function WsProvider({ children }: { children: ReactNode }) {
     const unsubConn = onConnectionChange((connected) => {
       store().setConnected(connected);
     });
+
+    // Check for updates on mount (cached on server side)
+    api.checkForUpdates().then(result => {
+      if (result.should_notify) {
+        useWsStore.getState().setUpdateAvailable(true);
+      }
+    }).catch(() => { /* ignore */ });
 
     return () => {
       unsubEvent();

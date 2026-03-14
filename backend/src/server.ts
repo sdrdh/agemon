@@ -72,6 +72,33 @@ try {
   process.exit(1);
 }
 
+// Auto-upgrade on startup (only when setting enabled AND under systemd)
+try {
+  const autoUpgrade = db.getSetting('auto_upgrade');
+  if (autoUpgrade === 'true') {
+    const { isRunningUnderSystemd, checkForUpdates } = await import('./lib/version.ts');
+    if (isRunningUnderSystemd()) {
+      const channel = (db.getSetting('release_channel') ?? 'stable') as import('@agemon/shared').ReleaseChannel;
+      const branch = db.getSetting('release_branch') ?? undefined;
+      const check = await checkForUpdates(true, channel, branch);
+      if (check.has_update) {
+        console.info(`[agemon] auto-upgrading to ${check.latest} (channel: ${channel})...`);
+        const { getUpdateStrategy } = await import('./lib/updater.ts');
+        const strategy = getUpdateStrategy();
+        const result = await strategy.applyUpdate(check.latest_tag, channel);
+        if (result.ok) {
+          console.info(`[agemon] upgrade complete (${result.from_version} → ${result.to_version}), restarting...`);
+          setTimeout(() => process.exit(0), 100);
+        } else {
+          console.warn(`[agemon] auto-upgrade failed: ${result.message}`);
+        }
+      }
+    }
+  }
+} catch (err) {
+  console.warn('[agemon] auto-upgrade check failed, continuing with current version:', (err as Error).message);
+}
+
 // Create app
 const { app, broadcast } = createApp({ key: AGEMON_KEY });
 
@@ -90,6 +117,9 @@ app.route('/api', approvalsRoutes);
 
 const { mcpConfigRoutes } = await import('./routes/mcp-config.ts');
 app.route('/api', mcpConfigRoutes);
+
+const { systemRoutes } = await import('./routes/system.ts');
+app.route('/api', systemRoutes);
 
 // ─── MCP Server ──────────────────────────────────────────────────────────────
 const { getMcpServer, getMcpTransport } = await import('./lib/mcp/server.ts');
@@ -111,7 +141,7 @@ console.log(`[agemon] backend listening on http://${HOST}:${PORT}`);
 // ─── Crash Recovery + Graceful Shutdown ──────────────────────────────────────
 // Dynamic import avoids circular dependency: acp modules import broadcast from server.ts
 const { recoverInterruptedSessions, shutdownAllSessions } = await import('./lib/acp/index.ts');
-recoverInterruptedSessions();
+await recoverInterruptedSessions();
 
 process.on('SIGINT', async () => {
   console.info('[agemon] shutting down...');

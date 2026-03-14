@@ -168,6 +168,49 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+// ─── Version & Settings Types ───────────────────────────────────────────────
+
+export const RELEASE_CHANNELS = ['stable', 'pre-release', 'nightly', 'branch'] as const;
+export type ReleaseChannel = typeof RELEASE_CHANNELS[number];
+
+export interface VersionInfo {
+  current: string;
+  running_under_systemd: boolean;
+}
+
+export interface VersionCheckResult {
+  current: string;
+  latest: string;
+  latest_tag: string;
+  has_update: boolean;
+  should_notify: boolean;
+  published_at: string;
+  release_url: string;
+  checked_at: string;
+  channel: ReleaseChannel;
+  error?: string;
+}
+
+export interface UpdateResult {
+  ok: boolean;
+  method: 'git' | 'binary';
+  from_version: string;
+  to_version: string;
+  message: string;
+}
+
+export interface RestartResult {
+  ok: boolean;
+  reason?: 'not_supervised' | 'shutting_down';
+  message: string;
+}
+
+export interface SettingEntry {
+  key: string;
+  value: string;
+  updated_at: string;
+}
+
 // ─── WebSocket Event Types ────────────────────────────────────────────────────
 
 interface ServerEventBase {
@@ -195,6 +238,8 @@ export type ServerEvent =
   | (ServerEventBase & { type: 'turn_cancelled'; sessionId: string; taskId: string })
   | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string })
   | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage })
+  | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
+  | (ServerEventBase & { type: 'server_restarting' })
   | (ServerEventBase & { type: 'full_sync_required' });
 
 export type ClientEvent =

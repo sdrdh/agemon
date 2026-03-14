@@ -1,0 +1,16 @@
+[Unit]
+Description=Agemon — AI Agent Orchestration
+After=network.target
+
+[Service]
+Type=simple
+User=agemon
+WorkingDirectory=/opt/agemon
+ExecStart=/usr/local/bin/bun run backend/src/server.ts
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+EnvironmentFile=-/etc/agemon/env
+
+[Install]
+WantedBy=multi-user.target

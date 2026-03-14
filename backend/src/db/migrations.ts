@@ -3,7 +3,7 @@ import { join } from 'path';
 import { getDb } from './client.ts';
 import { parseRepoName } from './helpers.ts';
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export function runMigrations() {
   const db = getDb();
@@ -285,6 +285,9 @@ export function runMigrations() {
         db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id)');
         db.run('CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state)');
       }
+
+      // ── v14 migration: settings key-value table ──
+      // (Table created by schema.sql via CREATE TABLE IF NOT EXISTS — no extra DDL needed here)
 
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);
     })();

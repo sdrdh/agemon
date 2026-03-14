@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug } from 'lucide-react';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
 import { McpServerList } from '@/components/custom/mcp-server-list';
+import { useVersionChecker } from '@/hooks/use-version-checker';
+import { api } from '@/lib/api';
+import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
+import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers';
+type Section = 'appearance' | 'mcp-servers' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
+  { id: 'about', label: 'About', icon: Info },
 ];
 
 // ─── Appearance Section ─────────────────────────────────────────────────────
@@ -135,6 +140,286 @@ function McpServersSection() {
   );
 }
 
+// ─── About Section ─────────────────────────────────────────────────────────
+
+function AboutSection() {
+  const { versionInfo, loading: checkLoading, error: checkError, check } = useVersionChecker();
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [isSystemd, setIsSystemd] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
+  const [restartError, setRestartError] = useState<string | null>(null);
+  const [autoUpgrade, setAutoUpgrade] = useState(false);
+  const [autoResume, setAutoResume] = useState(false);
+  const [releaseChannel, setReleaseChannel] = useState<ReleaseChannel>('stable');
+  const [releaseBranch, setReleaseBranch] = useState('');
+  const [branchInput, setBranchInput] = useState('');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Load version + settings on mount (parallel)
+  useEffect(() => {
+    Promise.all([
+      api.getVersion().catch(() => null),
+      api.getSettings().catch(() => null),
+    ]).then(([version, settings]) => {
+      if (version) {
+        setCurrentVersion(version.current);
+        setIsSystemd(version.running_under_systemd);
+      }
+      if (settings) {
+        setAutoUpgrade(settings.auto_upgrade === 'true');
+        setAutoResume(settings.auto_resume_sessions === 'true');
+        const ch = (settings.release_channel as ReleaseChannel) || 'stable';
+        setReleaseChannel(ch);
+        const br = settings.release_branch || '';
+        setReleaseBranch(br);
+        setBranchInput(br);
+      }
+      setSettingsLoaded(true);
+    });
+  }, []);
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    try {
+      const result = await api.applyUpdate();
+      setUpdateResult(result);
+    } catch (err) {
+      setUpdateResult({ ok: false, method: 'git', from_version: '', to_version: '', message: (err as Error).message });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    setRestartError(null);
+    try {
+      await api.restart();
+      // Poll until server comes back
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await fetch('/api/health');
+          if (res.ok) { window.location.reload(); return; }
+        } catch { /* still down */ }
+      }
+      setRestartError('Server did not come back. Check systemd logs.');
+    } catch (err) {
+      setRestartError((err as Error).message);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  const toggleSetting = async (key: string, current: boolean, setter: (v: boolean) => void) => {
+    const newValue = !current;
+    setter(newValue);
+    await api.setSetting(key, String(newValue)).catch(() => setter(current));
+  };
+
+  const handleChannelChange = async (newChannel: ReleaseChannel) => {
+    setReleaseChannel((prev) => {
+      // Optimistic update; rollback handled in catch via functional setState
+      api.setSetting('release_channel', newChannel)
+        .then(() => check(true))
+        .catch(() => setReleaseChannel(prev));
+      return newChannel;
+    });
+    setUpdateResult(null);
+  };
+
+  const handleBranchSave = async () => {
+    const trimmed = branchInput.trim();
+    if (!trimmed) return;
+    setReleaseBranch((prev) => {
+      api.setSetting('release_branch', trimmed)
+        .then(() => check(true))
+        .catch(() => setReleaseBranch(prev));
+      return trimmed;
+    });
+    setUpdateResult(null);
+  };
+
+  return (
+    <section className="space-y-6">
+      <h2 className="text-sm font-semibold">About & Updates</h2>
+
+      {/* Version info */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Current version</span>
+          <span className="text-sm font-mono">{currentVersion ?? '...'}</span>
+        </div>
+        {versionInfo && (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {versionInfo.channel === 'branch' ? 'Latest commit' : 'Latest version'}
+              </span>
+              <span className="text-sm font-mono">{versionInfo.latest || '—'}</span>
+            </div>
+            {versionInfo.published_at && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Published</span>
+                <span className="text-sm">{new Date(versionInfo.published_at).toLocaleDateString()}</span>
+              </div>
+            )}
+          </>
+        )}
+        {checkError && (
+          <p className="text-xs text-destructive">{checkError}</p>
+        )}
+      </div>
+
+      {/* Release channel picker */}
+      {settingsLoaded && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Release Channel
+          </h3>
+          <div className="inline-flex rounded-lg border bg-muted/50 p-1 gap-1 flex-wrap">
+            {RELEASE_CHANNELS.map((ch) => (
+              <button
+                key={ch}
+                type="button"
+                onClick={() => handleChannelChange(ch)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium min-h-[36px] transition-colors capitalize ${
+                  releaseChannel === ch
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {ch}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {releaseChannel === 'stable' && 'Track official releases only.'}
+            {releaseChannel === 'pre-release' && 'Include release candidates and beta versions.'}
+            {releaseChannel === 'nightly' && 'Track nightly builds (may be unstable).'}
+            {releaseChannel === 'branch' && 'Track a specific git branch.'}
+          </p>
+          {releaseChannel === 'branch' && (
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={branchInput}
+                onChange={(e) => setBranchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleBranchSave()}
+                placeholder="e.g. main, develop, feat/my-branch"
+                className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Button
+                variant="outline"
+                className="min-h-[44px]"
+                onClick={handleBranchSave}
+                disabled={!branchInput.trim() || branchInput.trim() === releaseBranch}
+              >
+                {releaseBranch ? 'Update' : 'Set'}
+              </Button>
+            </div>
+          )}
+          {releaseChannel === 'branch' && releaseBranch && (
+            <p className="text-xs text-muted-foreground">
+              Tracking branch: <span className="font-mono text-foreground">{releaseBranch}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Check / Update / Restart buttons */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          className="min-h-[44px]"
+          onClick={() => check(true)}
+          disabled={checkLoading}
+        >
+          {checkLoading ? 'Checking...' : 'Check for Updates'}
+        </Button>
+
+        {versionInfo?.has_update && !updateResult?.ok && (
+          <Button
+            className="min-h-[44px]"
+            onClick={handleUpdate}
+            disabled={updating}
+          >
+            {updating ? 'Updating...' : versionInfo.channel === 'branch' ? `Pull latest` : `Update to v${versionInfo.latest}`}
+          </Button>
+        )}
+
+        {updateResult?.ok && isSystemd && (
+          <Button
+            className="min-h-[44px]"
+            onClick={handleRestart}
+            disabled={restarting}
+          >
+            {restarting ? 'Restarting...' : 'Restart Server'}
+          </Button>
+        )}
+
+        {updateResult?.ok && !isSystemd && (
+          <p className="text-sm text-muted-foreground self-center">
+            Updated! Restart the server manually to apply.
+          </p>
+        )}
+      </div>
+
+      {updateResult && (
+        <p className={`text-xs ${updateResult.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+          {updateResult.message}
+        </p>
+      )}
+      {restartError && (
+        <p className="text-xs text-destructive">{restartError}</p>
+      )}
+
+      {/* Settings toggles */}
+      {settingsLoaded && (
+        <div className="space-y-3 pt-2 border-t">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Automation
+          </h3>
+
+          <label className="flex items-center justify-between min-h-[44px] cursor-pointer">
+            <div>
+              <span className="text-sm">Auto-upgrade on startup</span>
+              <p className="text-xs text-muted-foreground">Automatically update when server restarts (systemd only)</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoUpgrade}
+              onClick={() => toggleSetting('auto_upgrade', autoUpgrade, setAutoUpgrade)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${autoUpgrade ? 'bg-primary' : 'bg-muted'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition-transform ${autoUpgrade ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </label>
+
+          <label className="flex items-center justify-between min-h-[44px] cursor-pointer">
+            <div>
+              <span className="text-sm">Auto-resume sessions</span>
+              <p className="text-xs text-muted-foreground">Automatically resume interrupted agent sessions on startup</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoResume}
+              onClick={() => toggleSetting('auto_resume_sessions', autoResume, setAutoResume)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${autoResume ? 'bg-primary' : 'bg-muted'}`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition-transform ${autoResume ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </label>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Settings Page ──────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -195,6 +480,7 @@ export default function SettingsPage() {
         <div className="flex-1 p-4 md:p-6 max-w-2xl">
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
+          {activeSection === 'about' && <AboutSection />}
         </div>
       </div>
     </div>

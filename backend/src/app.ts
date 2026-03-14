@@ -51,7 +51,7 @@ export function createApp(opts: AppOptions): AppContext {
   // ─── Auth Middleware ──────────────────────────────────────────────────────────
   app.use(async (c, next) => {
     const path = c.req.path;
-    if (path === '/api/health' || path === '/ws') return next();
+    if (path === '/api/health' || path === '/api/version' || path === '/ws') return next();
 
     const auth = c.req.header('authorization') ?? '';
     const authBuf = Buffer.from(auth);

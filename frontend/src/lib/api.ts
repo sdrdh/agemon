@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -105,6 +105,22 @@ export const api = {
     request<void>(`/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
   testMcpServer: (body: TestMcpServerBody) =>
     request<TestMcpServerResult>('/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
+
+  // System / Version
+  getVersion: () =>
+    fetch(`${BASE}/version`).then(r => r.json()) as Promise<VersionInfo>,
+  checkForUpdates: (refresh = false) =>
+    request<VersionCheckResult>(`/version/check${refresh ? '?refresh=true' : ''}`),
+  applyUpdate: () =>
+    request<UpdateResult>('/update', { method: 'POST' }),
+  restart: () =>
+    request<RestartResult>('/restart', { method: 'POST' }),
+
+  // Settings
+  getSettings: () => request<Record<string, string>>('/settings'),
+  getSetting: (key: string) => request<{ value: string | null }>(`/settings/${key}`),
+  setSetting: (key: string, value: string) =>
+    request<{ ok: boolean }>('/settings', { method: 'POST', body: JSON.stringify({ key, value }) }),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

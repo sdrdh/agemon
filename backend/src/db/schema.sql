@@ -133,3 +133,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_task ON mcp_servers(task_id);
 -- SQLite treats NULLs as distinct in UNIQUE constraints, so add a partial unique index for global servers
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_servers_global_name ON mcp_servers(name) WHERE task_id IS NULL;
+
+-- Key-value settings store
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
