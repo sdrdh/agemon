@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { Task, TasksByProject, ACPEvent, ChatMessage, AgentSession } from '@agemon/shared';
+import type { Task, TasksByProject, ACPEvent, ChatHistoryResponse, AgentSession } from '@agemon/shared';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,7 +79,7 @@ export function taskSessionsQuery(taskId: string, includeArchived = false) {
 export function sessionChatQuery(sessionId: string, limit = 500) {
   return {
     queryKey: sessionKeys.chat(sessionId),
-    queryFn: (): Promise<ChatMessage[]> => api.getSessionChat(sessionId, limit),
+    queryFn: (): Promise<ChatHistoryResponse> => api.getSessionChat(sessionId, limit),
     enabled: !!sessionId,
   };
 }

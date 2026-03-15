@@ -1,11 +1,15 @@
 import { getDb } from './client.ts';
 import type { ACPEvent, ChatMessage } from '@agemon/shared';
 
-export function listEvents(taskId: string, limit: number): ACPEvent[] {
+export function listEvents(taskId: string, limit: number, before?: string): ACPEvent[] {
   const db = getDb();
-  return db.query<ACPEvent, [string, number]>(
-    'SELECT * FROM acp_events WHERE task_id = ? ORDER BY created_at ASC LIMIT ?'
-  ).all(taskId, limit);
+  return db.query<ACPEvent, [string, string | null, string | null, number]>(
+    `SELECT * FROM (
+      SELECT * FROM acp_events
+      WHERE task_id = ? AND (? IS NULL OR created_at < ?)
+      ORDER BY created_at DESC LIMIT ?
+    ) sub ORDER BY created_at ASC`
+  ).all(taskId, before ?? null, before ?? null, limit);
 }
 
 export function insertEvent(event: Omit<ACPEvent, 'created_at'>): ACPEvent {
@@ -19,7 +23,7 @@ export function insertEvent(event: Omit<ACPEvent, 'created_at'>): ACPEvent {
   return row;
 }
 
-export function listChatHistory(taskId: string, limit: number): ChatMessage[] {
+export function listChatHistory(taskId: string, limit: number, before?: string): ChatMessage[] {
   const database = getDb();
 
   interface RawChatRow {
@@ -30,14 +34,23 @@ export function listChatHistory(taskId: string, limit: number): ChatMessage[] {
     timestamp: string;
   }
 
-  const rows = database.query<RawChatRow, [string, string, number]>(`
-    SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
-      FROM acp_events WHERE task_id = ?
-    UNION ALL
-    SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
-      FROM awaiting_input WHERE task_id = ? AND status = 'answered'
-    ORDER BY timestamp ASC LIMIT ?
-  `).all(taskId, taskId, limit);
+  const b = before ?? null;
+  const rows = database.query<RawChatRow, [string, string | null, string | null, number, string, string | null, string | null, number, number]>(`
+    SELECT * FROM (
+      SELECT * FROM (
+        SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
+          FROM acp_events WHERE task_id = ? AND (? IS NULL OR created_at < ?)
+          ORDER BY created_at DESC LIMIT ?
+      )
+      UNION ALL
+      SELECT * FROM (
+        SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
+          FROM awaiting_input WHERE task_id = ? AND status = 'answered' AND (? IS NULL OR created_at < ?)
+          ORDER BY created_at DESC LIMIT ?
+      )
+      ORDER BY timestamp DESC LIMIT ?
+    ) sub ORDER BY timestamp ASC
+  `).all(taskId, b, b, limit, taskId, b, b, limit, limit);
 
   const eventTypeMap: Record<string, ChatMessage['eventType']> = {
     thought: 'thought',
@@ -57,7 +70,7 @@ export function listChatHistory(taskId: string, limit: number): ChatMessage[] {
   }));
 }
 
-export function listChatHistoryBySession(sessionId: string, limit: number): ChatMessage[] {
+export function listChatHistoryBySession(sessionId: string, limit: number, before?: string): ChatMessage[] {
   const database = getDb();
 
   interface RawChatRow {
@@ -68,17 +81,29 @@ export function listChatHistoryBySession(sessionId: string, limit: number): Chat
     timestamp: string;
   }
 
-  const rows = database.query<RawChatRow, [string, string, string, number]>(`
-    SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
-      FROM acp_events WHERE session_id = ?
-    UNION ALL
-    SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
-      FROM awaiting_input WHERE session_id = ? AND status = 'answered'
-    UNION ALL
-    SELECT id, 'system' as role, id || ':' || status || ':' || tool_name as content, 'approval_request' as event_type, created_at as timestamp
-      FROM pending_approvals WHERE session_id = ?
-    ORDER BY timestamp ASC LIMIT ?
-  `).all(sessionId, sessionId, sessionId, limit);
+  const b = before ?? null;
+  const rows = database.query<RawChatRow, [string, string | null, string | null, number, string, string | null, string | null, number, string, string | null, string | null, number, number]>(`
+    SELECT * FROM (
+      SELECT * FROM (
+        SELECT id, 'agent' as role, content, type as event_type, created_at as timestamp
+          FROM acp_events WHERE session_id = ? AND (? IS NULL OR created_at < ?)
+          ORDER BY created_at DESC LIMIT ?
+      )
+      UNION ALL
+      SELECT * FROM (
+        SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
+          FROM awaiting_input WHERE session_id = ? AND status = 'answered' AND (? IS NULL OR created_at < ?)
+          ORDER BY created_at DESC LIMIT ?
+      )
+      UNION ALL
+      SELECT * FROM (
+        SELECT id, 'system' as role, id || ':' || status || ':' || tool_name as content, 'approval_request' as event_type, created_at as timestamp
+          FROM pending_approvals WHERE session_id = ? AND (? IS NULL OR created_at < ?)
+          ORDER BY created_at DESC LIMIT ?
+      )
+      ORDER BY timestamp DESC LIMIT ?
+    ) sub ORDER BY timestamp ASC
+  `).all(sessionId, b, b, limit, sessionId, b, b, limit, sessionId, b, b, limit, limit);
 
   const eventTypeMap: Record<string, ChatMessage['eventType']> = {
     thought: 'thought',

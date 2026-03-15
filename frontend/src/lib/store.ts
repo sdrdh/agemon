@@ -66,6 +66,7 @@ interface WsState {
   setSessionUsage: (sessionId: string, usage: SessionUsage) => void;
   upsertToolCall: (sessionId: string, toolCallId: string, patch: Partial<ToolCall>) => void;
   clearToolCalls: (sessionId: string) => void;
+  prependChatMessages: (sessionId: string, msgs: ChatMessage[]) => void;
 }
 
 const MAX_MESSAGES_PER_SESSION = 500;
@@ -232,6 +233,14 @@ export const useWsStore = create<WsState>((set) => ({
     set((state) => {
       const { [sessionId]: _removed, ...rest } = state.toolCalls;
       return { toolCalls: rest };
+    }),
+
+  prependChatMessages: (sessionId, msgs) =>
+    set((state) => {
+      const existing = state.chatMessages[sessionId] ?? [];
+      const existingIds = new Set(existing.map((m) => m.id));
+      const deduped = msgs.filter((m) => !existingIds.has(m.id));
+      return { chatMessages: { ...state.chatMessages, [sessionId]: [...deduped, ...existing] } };
     }),
 
   resetForFullSync: () => set({

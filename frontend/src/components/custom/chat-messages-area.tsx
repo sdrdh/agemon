@@ -1,4 +1,4 @@
-import { ChevronsDown } from 'lucide-react';
+import { ChevronsDown, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
 import { ToolCardShell } from '@/components/custom/tool-cards/tool-card-shell';
@@ -33,6 +33,7 @@ export function ChatMessagesArea({
   onApprovalDecision,
   scrollToBottom,
   connected,
+  isLoadingMore,
 }: {
   sessionReady: boolean;
   sessionRunning: boolean;
@@ -48,6 +49,7 @@ export function ChatMessagesArea({
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   scrollToBottom: () => void;
   connected: boolean;
+  isLoadingMore?: boolean;
 }) {
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -56,6 +58,13 @@ export function ChatMessagesArea({
         onScroll={onScroll}
         className="h-full overflow-y-auto px-4 py-3"
       >
+        {isLoadingMore && (
+          <div className="flex items-center justify-center py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-xs text-muted-foreground">Loading older messages...</span>
+          </div>
+        )}
+
         {groupedItems.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <p className="text-muted-foreground text-sm">

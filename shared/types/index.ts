@@ -168,6 +168,11 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface ChatHistoryResponse {
+  messages: ChatMessage[];
+  hasMore: boolean;
+}
+
 // ─── Version & Settings Types ───────────────────────────────────────────────
 
 export const RELEASE_CHANNELS = ['stable', 'pre-release', 'nightly', 'branch'] as const;

@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -70,8 +70,10 @@ export const api = {
     request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
     request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
-  getSessionChat: (sessionId: string, limit = 500) =>
-    request<ChatMessage[]>(`/sessions/${sessionId}/chat?limit=${limit}`),
+  getSessionChat: (sessionId: string, limit = 500, before?: string) =>
+    request<ChatHistoryResponse>(
+      `/sessions/${sessionId}/chat?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`
+    ),
   resumeSession: (sessionId: string) =>
     request<AgentSession>(`/sessions/${sessionId}/resume`, { method: 'POST' }),
   stopSession: (sessionId: string) =>

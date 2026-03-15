@@ -59,6 +59,9 @@ export default function TaskDetailView() {
     unreadSessions,
     turnInFlight,
     pendingInputSessionIds,
+    hasMore,
+    isLoadingMore,
+    fetchOlderMessages,
     handleSend,
     handleCancelTurn,
     handleApprovalDecision,
@@ -179,6 +182,9 @@ export default function TaskDetailView() {
             isDesktop={isDesktop}
             chatEndRef={chatEndRef}
             usage={activeSessionUsage}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onFetchOlderMessages={fetchOlderMessages}
           />
         )}
 

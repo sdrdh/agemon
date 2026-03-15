@@ -70,8 +70,9 @@ sessionsRoutes.get('/sessions/:id/chat', (c) => {
 
   const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
   const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 5000 ? 500 : limitParam;
-  const messages = db.listChatHistoryBySession(sessionId, limit);
-  return c.json(messages);
+  const before = c.req.query('before') || undefined;
+  const messages = db.listChatHistoryBySession(sessionId, limit, before);
+  return c.json({ messages, hasMore: messages.length === limit });
 });
 
 /**
@@ -203,8 +204,9 @@ sessionsRoutes.get('/tasks/:id/chat', (c) => {
   const task = requireTask(c.req.param('id'));
   const limitParam = parseInt(c.req.query('limit') ?? '500', 10);
   const limit = isNaN(limitParam) || limitParam < 1 || limitParam > 5000 ? 500 : limitParam;
-  const messages = db.listChatHistory(task.id, limit);
-  return c.json(messages);
+  const before = c.req.query('before') || undefined;
+  const messages = db.listChatHistory(task.id, limit, before);
+  return c.json({ messages, hasMore: messages.length === limit });
 });
 
 // ── Global session + repo endpoints ──────────────────────────────────────────

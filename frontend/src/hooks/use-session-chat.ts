@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWsStore, type ToolCall } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { sessionChatQuery } from '@/lib/query';
+import { api } from '@/lib/api';
 import { groupMessages, isSessionTerminal } from '@/lib/chat-utils';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
 import type { AgentSessionState, ChatMessage, ApprovalDecision, PendingApproval } from '@agemon/shared';
@@ -26,9 +27,33 @@ function rehydrateToolCalls(
 
 export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: AgentSessionState) {
   // ── Per-session chat history from server ──────────────────────────────
-  const { data: sessionChatHistory } = useQuery(
+  const { data: sessionChatData } = useQuery(
     sessionChatQuery(selectedSessionId ?? '', 500),
   );
+
+  // ── Pagination state ──────────────────────────────────────────────────
+  // hasMore/isLoadingMore use refs for gating in callbacks (rerender-use-ref-transient-values)
+  // and state for UI rendering of the spinner
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const hasMoreRef = useRef(false);
+  const isLoadingMoreRef = useRef(false);
+
+  // Update hasMore from initial fetch
+  useEffect(() => {
+    if (sessionChatData) {
+      setHasMore(sessionChatData.hasMore);
+      hasMoreRef.current = sessionChatData.hasMore;
+    }
+  }, [sessionChatData]);
+
+  // Reset pagination state on session change
+  useEffect(() => {
+    setHasMore(false);
+    setIsLoadingMore(false);
+    hasMoreRef.current = false;
+    isLoadingMoreRef.current = false;
+  }, [selectedSessionId]);
 
   // ── Store selectors (keyed by sessionId) ──────────────────────────────
   const chatMessages = useWsStore((s) =>
@@ -36,6 +61,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   );
   const setChatMessages = useWsStore((s) => s.setChatMessages);
   const appendChatMessage = useWsStore((s) => s.appendChatMessage);
+  const prependChatMessages = useWsStore((s) => s.prependChatMessages);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const removePendingInput = useWsStore((s) => s.removePendingInput);
   const agentActivity = useWsStore((s) =>
@@ -94,12 +120,16 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   const upsertToolCall = useWsStore((s) => s.upsertToolCall);
 
   useEffect(() => {
-    if (selectedSessionId && sessionChatHistory && sessionChatHistory.length > 0) {
-      setChatMessages(selectedSessionId, sessionChatHistory);
+    if (selectedSessionId && sessionChatData && sessionChatData.messages.length > 0) {
+      // Only seed the store if empty — avoids overwriting prepended older messages on React Query refetch
+      const current = useWsStore.getState().chatMessages[selectedSessionId];
+      if (!current || current.length === 0) {
+        setChatMessages(selectedSessionId, sessionChatData.messages);
+      }
       // Rehydrate tool calls from persisted chat messages
-      rehydrateToolCalls(sessionChatHistory, selectedSessionId, upsertToolCall);
+      rehydrateToolCalls(sessionChatData.messages, selectedSessionId, upsertToolCall);
     }
-  }, [sessionChatHistory, selectedSessionId, setChatMessages, upsertToolCall]);
+  }, [sessionChatData, selectedSessionId, setChatMessages, upsertToolCall]);
 
   // ── Clear turn-in-flight when session terminates ────────────────────
   useEffect(() => {
@@ -107,6 +137,31 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
       setTurnInFlight(selectedSessionId, false);
     }
   }, [selectedSessionId, sessionState, setTurnInFlight]);
+
+  // ── Fetch older messages (scroll-up pagination) ─────────────────────
+  // Uses refs for gating to avoid recreating callback on transient state changes (rerender-functional-setstate)
+  const fetchOlderMessages = useCallback(async () => {
+    if (!selectedSessionId || !hasMoreRef.current || isLoadingMoreRef.current) return;
+    const currentMessages = useWsStore.getState().chatMessages[selectedSessionId];
+    if (!currentMessages || currentMessages.length === 0) return;
+
+    const earliest = currentMessages[0].timestamp;
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const response = await api.getSessionChat(selectedSessionId, 500, earliest);
+      prependChatMessages(selectedSessionId, response.messages);
+      setHasMore(response.hasMore);
+      hasMoreRef.current = response.hasMore;
+      // Rehydrate tool calls from older messages
+      rehydrateToolCalls(response.messages, selectedSessionId, upsertToolCall);
+    } catch {
+      /* ignore fetch errors */
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [selectedSessionId, prependChatMessages, upsertToolCall]);
 
   // ── Grouped items ─────────────────────────────────────────────────────
   const groupedItems = useMemo(() => groupMessages(chatMessages, selectedSessionId ?? undefined), [chatMessages, selectedSessionId]);
@@ -153,6 +208,9 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
     unreadSessions,
     turnInFlight,
     pendingInputSessionIds,
+    hasMore,
+    isLoadingMore,
+    fetchOlderMessages,
     handleSend,
     handleCancelTurn,
     handleApprovalDecision,

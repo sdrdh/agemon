@@ -33,6 +33,9 @@ export function SessionChatPanel({
   isDesktop,
   chatEndRef,
   usage,
+  hasMore,
+  isLoadingMore,
+  onFetchOlderMessages,
 }: {
   session: AgentSession;
   sessionLabel: string;
@@ -54,6 +57,9 @@ export function SessionChatPanel({
   isDesktop: boolean;
   chatEndRef: React.RefObject<HTMLDivElement>;
   usage?: SessionUsage;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onFetchOlderMessages?: () => Promise<void>;
 }) {
   const sessionRunning = isSessionActive(session.state);
   const sessionStopped = isSessionTerminal(session.state);
@@ -142,12 +148,31 @@ export function SessionChatPanel({
   const isNearBottomRef = useRef(true);
   const [showNewMessages, setShowNewMessages] = useState(false);
 
+  // Refs to avoid recreating handleScroll on every prop change (rerender-use-ref-transient-values)
+  const hasMoreRef = useRef(hasMore);
+  const isLoadingMoreRef = useRef(isLoadingMore);
+  const fetchRef = useRef(onFetchOlderMessages);
+  hasMoreRef.current = hasMore;
+  isLoadingMoreRef.current = isLoadingMore;
+  fetchRef.current = onFetchOlderMessages;
+
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD;
     isNearBottomRef.current = nearBottom;
     if (nearBottom) setShowNewMessages(false);
+
+    // Scroll-to-top: load older messages
+    if (el.scrollTop < 100 && hasMoreRef.current && !isLoadingMoreRef.current && fetchRef.current) {
+      const prevScrollHeight = el.scrollHeight;
+      fetchRef.current().then(() => {
+        // Wait for React to commit the prepended messages before restoring scroll
+        requestAnimationFrame(() => {
+          el.scrollTop = el.scrollHeight - prevScrollHeight;
+        });
+      });
+    }
   }, []);
 
   // Auto-scroll only when near bottom
@@ -213,6 +238,7 @@ export function SessionChatPanel({
         onApprovalDecision={onApprovalDecision}
         scrollToBottom={scrollToBottom}
         connected={connected}
+        isLoadingMore={isLoadingMore}
       />
 
       <div className="border-t bg-background">
