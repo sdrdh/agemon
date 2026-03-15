@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { friendlyError } from '@/lib/errors';
+import { formatDuration } from '@/lib/time-utils';
 import type { AgentSession, AgentSessionState, Task } from '@agemon/shared';
 
 const STATE_STYLES: Record<AgentSessionState, { label: string; className: string }> = {
@@ -41,27 +42,6 @@ const STATE_GROUPS: { label: string; states: AgentSessionState[] }[] = [
   { label: 'Active', states: ['running', 'ready', 'starting'] },
   { label: 'Stopped', states: ['stopped', 'interrupted', 'crashed'] },
 ];
-
-function formatDuration(startedAt: string, endedAt: string | null): string {
-  const start = new Date(startedAt).getTime();
-  if (endedAt) {
-    const end = new Date(endedAt).getTime();
-    return formatMs(end - start);
-  }
-  return 'running';
-}
-
-function formatMs(ms: number): string {
-  if (ms < 0) return '0s';
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSec = seconds % 60;
-  if (minutes < 60) return `${minutes}m ${remainingSec}s`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMin = minutes % 60;
-  return `${hours}h ${remainingMin}m`;
-}
 
 function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleDateString(undefined, {
@@ -218,7 +198,7 @@ export default function SessionsPage() {
                 session={session}
                 task={taskMap.get(session.task_id)}
                 onClick={() =>
-                  navigate({ to: '/tasks/$id', params: { id: session.task_id } })
+                  navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } })
                 }
               />
             ))}

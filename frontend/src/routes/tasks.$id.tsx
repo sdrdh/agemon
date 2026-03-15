@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useParams, useNavigate } from '@tanstack/react-router';
+import { useParams, useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/custom/status-badge';
@@ -15,6 +15,7 @@ import { friendlyError } from '@/lib/errors';
 
 export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
+  const { session: urlSessionId } = useSearch({ from: '/tasks/$id' });
   const navigate = useNavigate();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
@@ -43,13 +44,12 @@ export default function TaskDetailView() {
 
   const {
     selectedSessionId,
-    setSelectedSessionId,
     activeSession,
     activeSessionLabel,
     sessionLabels,
     handleSelectSession,
     handleBackToList,
-  } = useSessionSelection(sessions, isDesktop);
+  } = useSessionSelection(sessions, isDesktop, taskId, urlSessionId);
 
   const {
     groupedItems,
@@ -71,7 +71,7 @@ export default function TaskDetailView() {
   // ── Handle new session creation ───────────────────────────────────────
   const handleNewSession = async (agentType: Parameters<typeof createSessionMutation.mutate>[0]) => {
     const result = await createSessionMutation.mutateAsync(agentType);
-    setSelectedSessionId(result.id);
+    handleSelectSession(result.id);
     if (sessions.length === 0 && task?.description) {
       setInputText(task.description);
     }

@@ -29,7 +29,7 @@ export default function TaskCreateForm() {
         description: description.trim() || undefined,
         repos: repos.length > 0 ? repos : undefined,
       });
-      navigate({ to: '/tasks/$id', params: { id: task.id } });
+      navigate({ to: '/tasks/$id', params: { id: task.id }, search: { session: undefined } });
     } catch (err) {
       showToast({ title: 'Failed to create task', description: friendlyError(err, 'An unexpected error occurred'), variant: 'destructive' });
     } finally {

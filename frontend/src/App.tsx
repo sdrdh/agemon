@@ -25,6 +25,7 @@ const KanbanPage = lazy(() => import('./routes/kanban'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
+const ProjectsPage = lazy(() => import('./routes/projects'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ interface RouterContext {
 // ─── Bottom Nav ──────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { to: '/' as const, label: 'Tasks', icon: Home, exact: true },
+  { to: '/' as const, label: 'Home', icon: Home, exact: true },
   { to: '/kanban' as const, label: 'Kanban', icon: KanbanSquare, exact: false },
   { to: '/sessions' as const, label: 'Sessions', icon: TerminalSquare, exact: false },
   { to: '/settings' as const, label: 'Settings', icon: Settings, exact: false },
@@ -80,18 +81,25 @@ function BottomNav() {
 function RootLayout() {
   const matches = useMatches();
   const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
+  const connected = useWsStore(s => s.connected);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       {!isTaskDetail && (
         <header className="sticky top-0 z-40 bg-background border-b">
-          <div className="flex items-center h-11 px-4 max-w-5xl mx-auto">
+          <div className="flex items-center justify-between h-11 px-4 max-w-5xl mx-auto">
             <Link to="/" className="text-base font-bold">
               Agemon
             </Link>
+            <span
+              className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`}
+              aria-label={connected ? 'Connected' : 'Disconnected'}
+            />
           </div>
         </header>
       )}
+      {!isTaskDetail && !isDashboard && <ConnectionBanner />}
       <main className={isTaskDetail ? '' : 'pb-16 max-w-5xl mx-auto'}>
         <Outlet />
       </main>
@@ -122,6 +130,9 @@ const taskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks/$id',
   component: TaskDetailPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    session: typeof search.session === 'string' ? search.session : undefined,
+  }),
 });
 
 const kanbanRoute = createRoute({
@@ -142,6 +153,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const projectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/projects',
+  component: ProjectsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   taskNewRoute,
@@ -149,6 +166,7 @@ const routeTree = rootRoute.addChildren([
   kanbanRoute,
   sessionsRoute,
   settingsRoute,
+  projectsRoute,
 ]);
 
 const router = createRouter({
@@ -244,7 +262,6 @@ export default function App() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <WsProvider>
-            <ConnectionBanner />
             <Suspense fallback={<SuspenseFallback />}>
               <RouterProvider router={router} />
             </Suspense>

@@ -132,7 +132,7 @@ export default function KanbanPage() {
                       key={task.id}
                       task={task}
                       onClick={() =>
-                        navigate({ to: '/tasks/$id', params: { id: task.id } })
+                        navigate({ to: '/tasks/$id', params: { id: task.id }, search: { session: undefined } })
                       }
                       pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                       onArchive={(archived) => handleArchive(task.id, archived)}
@@ -168,7 +168,7 @@ export default function KanbanPage() {
                     key={task.id}
                     task={task}
                     onClick={() =>
-                      navigate({ to: '/tasks/$id', params: { id: task.id } })
+                      navigate({ to: '/tasks/$id', params: { id: task.id }, search: { session: undefined } })
                     }
                     pendingApprovalCount={approvalCountByTask[task.id] ?? 0}
                     onArchive={(archived) => handleArchive(task.id, archived)}

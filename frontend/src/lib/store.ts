@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, SessionConfigOption, SessionUsage, ToolCallStatus, ToolCallDisplay } from '@agemon/shared';
 
-interface PendingInput {
+export interface PendingInput {
   inputId: string;
   taskId: string;
   sessionId: string;
