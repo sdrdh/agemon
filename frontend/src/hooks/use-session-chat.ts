@@ -40,8 +40,10 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   const isLoadingMoreRef = useRef(false);
 
   // Update hasMore from initial fetch
+  // Guard: sessionChatData.messages may be undefined if React Query serves a stale cache
+  // from before the response shape changed from ChatMessage[] to { messages, hasMore }
   useEffect(() => {
-    if (sessionChatData) {
+    if (sessionChatData?.messages) {
       setHasMore(sessionChatData.hasMore);
       hasMoreRef.current = sessionChatData.hasMore;
     }
@@ -120,7 +122,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   const upsertToolCall = useWsStore((s) => s.upsertToolCall);
 
   useEffect(() => {
-    if (selectedSessionId && sessionChatData && sessionChatData.messages.length > 0) {
+    if (selectedSessionId && sessionChatData?.messages && sessionChatData.messages.length > 0) {
       // Only seed the store if empty — avoids overwriting prepended older messages on React Query refetch
       const current = useWsStore.getState().chatMessages[selectedSessionId];
       if (!current || current.length === 0) {
