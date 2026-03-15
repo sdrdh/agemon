@@ -120,13 +120,15 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
 
   // ── Seed store from server chat history ───────────────────────────────
   const upsertToolCall = useWsStore((s) => s.upsertToolCall);
+  // Track which session we've already seeded — first fetch seeds, refetches (window focus) don't
+  const seededSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (selectedSessionId && sessionChatData?.messages && sessionChatData.messages.length > 0) {
-      // Only seed the store if empty — avoids overwriting prepended older messages on React Query refetch
-      const current = useWsStore.getState().chatMessages[selectedSessionId];
-      if (!current || current.length === 0) {
+      if (seededSessionRef.current !== selectedSessionId) {
+        // First fetch for this session: always seed (even if WS already delivered some messages)
         setChatMessages(selectedSessionId, sessionChatData.messages);
+        seededSessionRef.current = selectedSessionId;
       }
       // Rehydrate tool calls from persisted chat messages
       rehydrateToolCalls(sessionChatData.messages, selectedSessionId, upsertToolCall);
