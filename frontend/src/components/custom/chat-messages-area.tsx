@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { ChevronsDown, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
@@ -125,14 +125,15 @@ export function ChatMessagesArea({
 
   // Show "New messages" when items are appended and user isn't at bottom
   const prevLengthRef = useRef(groupedItems.length);
-  if (groupedItems.length > prevLengthRef.current && !isAtBottomRef.current) {
-    // Check this isn't a prepend (firstItemIndex would have decreased)
-    const expectedAppendFirst = START_INDEX - groupedItems.length;
-    if (expectedAppendFirst >= firstItemIndexRef.current) {
-      setShowNewMessages(true);
+  useEffect(() => {
+    if (groupedItems.length > prevLengthRef.current && !isAtBottomRef.current) {
+      const expectedAppendFirst = START_INDEX - groupedItems.length;
+      if (expectedAppendFirst >= firstItemIndexRef.current) {
+        setShowNewMessages(true);
+      }
     }
-  }
-  prevLengthRef.current = groupedItems.length;
+    prevLengthRef.current = groupedItems.length;
+  }, [groupedItems.length]);
 
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
@@ -191,10 +192,12 @@ export function ChatMessagesArea({
       <Virtuoso
         ref={virtuosoRef}
         data={groupedItems}
+        defaultItemHeight={80}
         firstItemIndex={firstItemIndexRef.current}
         initialTopMostItemIndex={groupedItems.length - 1}
         itemContent={renderItem}
         computeItemKey={computeItemKey}
+        alignToBottom
         followOutput="auto"
         atTopStateChange={handleAtTopStateChange}
         atBottomStateChange={handleAtBottomStateChange}

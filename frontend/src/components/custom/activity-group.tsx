@@ -126,7 +126,7 @@ export const ActivityGroup = memo(function ActivityGroup({ messages, isLast, ses
 
       {/* Animated expanded detail view using CSS grid */}
       <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        className="grid"
         style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">

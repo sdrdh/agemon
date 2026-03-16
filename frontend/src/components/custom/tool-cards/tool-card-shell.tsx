@@ -88,7 +88,7 @@ export function ToolCardShell({ toolCall, condensed }: { toolCall: ToolCall; con
 
       {/* Expandable detail panel */}
       <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        className="grid"
         style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
