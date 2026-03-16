@@ -62,10 +62,10 @@ function parseToolCallUpdateEvent(content: string): ToolCallUpdateEvent | null {
 export const SESSION_STATE_DOT: Record<AgentSessionState, string> = {
   starting: 'bg-blue-500',
   ready: 'bg-cyan-500',
-  running: 'bg-green-500',
+  running: 'bg-success',
   stopped: 'bg-zinc-400',
-  crashed: 'bg-red-500',
-  interrupted: 'bg-amber-500',
+  crashed: 'bg-destructive',
+  interrupted: 'bg-warning',
 };
 
 export const SESSION_STATE_LABEL: Record<AgentSessionState, string> = {

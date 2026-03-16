@@ -119,33 +119,23 @@
 
 ---
 
-### Task 4.19: Token Usage Tracking per Session
+### Task 4.19: Token Usage Tracking per Session ✅
 
 **Priority:** P2
-**Estimated Time:** 4 hours
+**Status:** Done (slightly flaky — usage parsing/normalization works but may be inconsistent across agent types)
 
 **Deliverables:**
-- [ ] Parse `usage_update` notifications from ACP (currently discarded in `default: break` at acp.ts)
-- [ ] Store cumulative input/output token counts per session in the DB
-- [ ] Broadcast usage updates to frontend via WebSocket
-- [ ] Display token counts (input/output/total) in the session chat header
-
-**Key Considerations:**
-- ACP `session/update` with `usage_update` type already arrives at the backend — just needs handling instead of being silently dropped
-- Raw token counts only — no cost estimation needed
-- Cumulative per session (sum of all turns)
-- Lightweight display: compact token count in session header, no separate page needed
-
-**Affected Areas:** backend (acp.ts, db schema, ws events), frontend (session chat header), shared (new types)
-
-**Dependencies:** None
+- [x] Parse `usage_update` notifications from ACP
+- [x] Store cumulative input/output token counts per session in the DB (`usage_json` column on `agent_sessions`)
+- [x] Broadcast usage updates to frontend via WebSocket (`session_usage_update` event)
+- [x] Display token counts (input/output/total) in the session chat header
 
 ---
 
 ### Task 4.20: Context Window Utilization Monitor ✅
 
-**Priority:** P1  
-**Status:** Done (with minor bugs)
+**Priority:** P1
+**Status:** Done (slightly flaky — context % can be inaccurate depending on agent-reported values)
 
 **Deliverables:**
 - [x] Derive context window fill percentage from token usage data (used tokens / max context window)
@@ -337,7 +327,7 @@
 
 ---
 
-### Task 4.34: Semantic Color CSS Variables
+### Task 4.34: Semantic Color CSS Variables ✅
 
 **Priority:** P2
 **Status:** Todo
@@ -359,16 +349,17 @@
 
 ---
 
-### Task 4.35: Session View Load Performance
+### Task 4.35: Session View Load Performance ✅
 
 **Priority:** P1
 **Estimated Time:** 1-2 days
+**Status:** Done
 
 **Deliverables:**
-- [ ] Further reduce initial chat history fetch size (currently 200 after recent reduction from 500) — consider 50-100 for first paint; scroll-up pagination handles the rest
-- [ ] Add composite indexes on `(session_id, created_at)` for `acp_events`, `awaiting_input`, and `pending_approvals` tables to eliminate sort step in the 3-table UNION query
-- [ ] Implement virtual list rendering for the chat message area so only visible messages are mounted as DOM nodes (react-virtuoso is a good fit given variable row heights)
-- [ ] Defer tool call rehydration so it only processes visible/recently-loaded messages rather than the full fetched set on every mount and session switch
+- [x] Further reduce initial chat history fetch size (currently 200 after recent reduction from 500) — consider 50-100 for first paint; scroll-up pagination handles the rest
+- [x] Add composite indexes on `(session_id, created_at)` for `acp_events`, `awaiting_input`, and `pending_approvals` tables to eliminate sort step in the 3-table UNION query
+- [x] Implement virtual list rendering for the chat message area so only visible messages are mounted as DOM nodes (react-virtuoso is a good fit given variable row heights)
+- [x] Defer tool call rehydration so it only processes visible/recently-loaded messages rather than the full fetched set on every mount and session switch
 
 **Key Considerations:**
 - Virtual list is the highest-impact fix for mobile jank on long sessions — DOM node count grows unbounded without it
@@ -383,21 +374,22 @@
 
 ---
 
-### Task 4.36: Dashboard Active Session Cards
+### Task 4.36: Dashboard Active Session Cards ✅
 
 **Priority:** P1
 **Estimated Time:** 2 days
+**Status:** Done
 
 **Deliverables:**
-- [ ] Add a backend endpoint `GET /api/dashboard/active` returning two lists:
+- [x] Add a backend endpoint `GET /api/dashboard/active` returning two lists:
   - `blocked`: all sessions with pending `awaiting_input` rows (no time filter), with the question and the last agent message before the question as context
   - `idle`: sessions in `running` state with no pending input, last active within 6 hours, with their last agent message
-- [ ] Seed the dashboard from this endpoint on page load so cards appear correctly after a hard refresh — not just from live WS events
-- [ ] Show **blocked** cards with: preceding agent message as context, the question, and an inline textarea + send button to respond
-- [ ] Show **idle** cards with: last agent message and a textarea to send the next message
-- [ ] Both card types include **Stop** and **Archive** inline actions
-- [ ] Responding or stopping from a card removes it immediately (optimistic update); WS events keep remaining cards in sync
-- [ ] On WS reconnect, invalidate the dashboard query so cards re-seed from the endpoint rather than relying solely on ring buffer replay
+- [x] Seed the dashboard from this endpoint on page load so cards appear correctly after a hard refresh — not just from live WS events
+- [x] Show **blocked** cards with: preceding agent message as context, the question, and an inline textarea + send button to respond
+- [x] Show **idle** cards with: last agent message and a textarea to send the next message
+- [x] Both card types include **Stop** and **Archive** inline actions
+- [x] Responding or stopping from a card removes it immediately (optimistic update); WS events keep remaining cards in sync
+- [x] On WS reconnect, invalidate the dashboard query so cards re-seed from the endpoint rather than relying solely on ring buffer replay
 
 **Key Considerations:**
 - `awaiting_input.created_at` determines age of blocked sessions; idle sessions use `acp_events.created_at` of their last event for the 6-hour cutoff

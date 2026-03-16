@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 interface SectionHeaderProps {
   title: string;
   count: number;
-  colorClass: string; // e.g. 'text-amber-500', 'text-emerald-500', 'text-muted-foreground'
+  colorClass: string; // e.g. 'text-warning', 'text-success', 'text-muted-foreground'
 }
 
 export function SectionHeader({ title, count, colorClass }: SectionHeaderProps) {

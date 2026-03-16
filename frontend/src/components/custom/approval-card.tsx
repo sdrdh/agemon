@@ -10,7 +10,7 @@ function optionStyle(kind: string) {
     case 'allow_always':
       return { Icon: ShieldCheck, text: 'text-muted-foreground', hover: 'hover:bg-primary/10' };
     case 'deny':
-      return { Icon: X, text: 'text-red-600 dark:text-red-400', hover: 'hover:bg-red-500/10' };
+      return { Icon: X, text: 'text-destructive', hover: 'hover:bg-destructive/10' };
     default:
       return { Icon: Check, text: 'text-foreground', hover: 'hover:bg-primary/10' };
   }
@@ -50,16 +50,16 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
   const contextLine = filePath || (toolTitle !== toolName ? toolTitle : '');
 
   const borderColor = isPending
-    ? 'border-amber-400/50'
+    ? 'border-warning/50'
     : isAllowed
-      ? 'border-emerald-500/30'
-      : 'border-red-500/30';
+      ? 'border-success/30'
+      : 'border-destructive/30';
 
   const bgColor = isPending
-    ? 'bg-amber-50/40 dark:bg-amber-950/15'
+    ? 'bg-warning/10'
     : isAllowed
-      ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
-      : 'bg-red-50/20 dark:bg-red-950/10';
+      ? 'bg-success/10'
+      : 'bg-destructive/10';
 
   const options = approval.options?.length > 0 ? approval.options : FALLBACK_OPTIONS;
 
@@ -68,8 +68,8 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
     return (
       <div className={`my-1 flex items-center gap-2 rounded-md border ${borderColor} ${bgColor} px-2.5 py-1.5 text-xs`}>
         {isAllowed
-          ? <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-          : <ShieldX className="h-3.5 w-3.5 text-red-500 shrink-0" />
+          ? <ShieldCheck className="h-3.5 w-3.5 text-success shrink-0" />
+          : <ShieldX className="h-3.5 w-3.5 text-destructive shrink-0" />
         }
         <span className="font-mono font-medium">{toolName}</span>
         {contextLine && (
@@ -81,7 +81,7 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
             >{contextLine}</span>
           </>
         )}
-        <span className={`ml-auto shrink-0 ${isAllowed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+        <span className={`ml-auto shrink-0 ${isAllowed ? 'text-success' : 'text-destructive'}`}>
           {isAllowed ? 'allowed' : 'denied'}
         </span>
       </div>
@@ -93,7 +93,7 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
     <div className={`my-1.5 rounded-md border ${borderColor} ${bgColor} overflow-hidden`}>
       {/* Tool info row */}
       <div className="flex items-center gap-2 px-2.5 py-1.5">
-        <Shield className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+        <Shield className="h-3.5 w-3.5 text-warning shrink-0" />
         <span className="text-xs font-mono font-semibold">{toolName}</span>
         {contextLine && (
           <>
@@ -102,8 +102,8 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
           </>
         )}
         <span className="ml-auto relative flex h-1.5 w-1.5 shrink-0">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500/75" />
-          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning/75" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-warning" />
         </span>
       </div>
 
@@ -124,14 +124,14 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
           onClick={() => setExpanded((e) => !e)}
         >
           {context.oldString && (
-            <div className="text-red-400 whitespace-pre-wrap break-all">
+            <div className="text-destructive whitespace-pre-wrap break-all">
               {(expanded ? context.oldString.split('\n') : context.oldString.split('\n').slice(0, 3)).map((line, i) => (
                 <div key={i}>- {line}</div>
               ))}
             </div>
           )}
           {context.newString && (
-            <div className="text-emerald-400 whitespace-pre-wrap break-all">
+            <div className="text-success whitespace-pre-wrap break-all">
               {(expanded ? context.newString.split('\n') : context.newString.split('\n').slice(0, 3)).map((line, i) => (
                 <div key={i}>+ {line}</div>
               ))}

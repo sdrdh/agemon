@@ -20,7 +20,7 @@ export function ActiveSessionsSection({
 }: ActiveSessionsSectionProps) {
   return (
     <div className="space-y-2">
-      <SectionHeader title="Active Sessions" colorClass="text-emerald-500" count={sessions.length} />
+      <SectionHeader title="Active Sessions" colorClass="text-success" count={sessions.length} />
       {sessions.length === 0 ? (
         <div className="rounded-lg bg-card p-4 text-center">
           <p className="text-sm text-muted-foreground mb-2">No agents running</p>

@@ -70,6 +70,14 @@ export function listChatHistory(taskId: string, limit: number, before?: string):
   }));
 }
 
+export function getLastAgentMessage(sessionId: string): string | null {
+  const db = getDb();
+  const row = db.query<{ content: string }, [string]>(
+    "SELECT content FROM acp_events WHERE session_id = ? AND type = 'thought' ORDER BY created_at DESC LIMIT 1"
+  ).get(sessionId);
+  return row?.content ?? null;
+}
+
 export function listChatHistoryBySession(sessionId: string, limit: number, before?: string): ChatMessage[] {
   const database = getDb();
 

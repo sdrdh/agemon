@@ -118,6 +118,9 @@ app.route('/api', approvalsRoutes);
 const { mcpConfigRoutes } = await import('./routes/mcp-config.ts');
 app.route('/api', mcpConfigRoutes);
 
+const { dashboardRoutes } = await import('./routes/dashboard.ts');
+app.route('/api', dashboardRoutes);
+
 const { systemRoutes } = await import('./routes/system.ts');
 app.route('/api', systemRoutes);
 

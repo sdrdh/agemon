@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { db, generateTaskId } from '../db/client.ts';
 import { broadcast } from '../server.ts';
 import { getActiveSession, stopAgent } from '../lib/acp/index.ts';
+import { archiveSessionsByTask } from '../db/sessions.ts';
 import { gitManager } from '../lib/git.ts';
 import { refreshTaskContext } from '../lib/context.ts';
 import { sendError, validateTaskFields, validateRepoUrls, requireTask, VALID_TASK_STATUSES } from './shared.ts';
@@ -116,6 +117,17 @@ tasksRoutes.patch('/tasks/:id', async (c) => {
 
   const updated = db.updateTask(task.id, { title, description, agent, repos, status, archived });
   if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
+
+  // Cascade archive to sessions: stop active ones, then archive all
+  if (archived === true) {
+    const sessions = db.listSessions(task.id, true);
+    for (const s of sessions) {
+      if (s.state === 'running' || s.state === 'ready' || s.state === 'starting') {
+        try { stopAgent(s.id); } catch { /* already stopping */ }
+      }
+    }
+    archiveSessionsByTask(task.id, true);
+  }
 
   // When repos change: create worktrees + refresh context (CLAUDE.md, symlinks)
   if (repos !== undefined) {

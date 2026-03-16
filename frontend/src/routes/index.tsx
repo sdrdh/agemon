@@ -3,13 +3,16 @@ import { useNavigate, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { sessionsListQuery, tasksListQuery } from '@/lib/query';
+import { sessionsListQuery, tasksListQuery, dashboardActiveQuery, queryClient, dashboardKeys, sessionKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
+import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errors';
 import { SummaryStrip } from '@/components/custom/dashboard/summary-strip';
 import { NeedsInputSection } from '@/components/custom/dashboard/needs-input-section';
 import { RecentlyCompletedSection } from '@/components/custom/dashboard/recently-completed-section';
+import { IdleSessionCard } from '@/components/custom/dashboard/idle-session-card';
+import { SectionHeader } from '@/components/custom/dashboard/section-header';
 import type { Task, AgentSession, ApprovalDecision } from '@agemon/shared';
 
 export default function DashboardPage() {
@@ -17,6 +20,7 @@ export default function DashboardPage() {
 
   const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useQuery(sessionsListQuery());
   const { data: tasks, isLoading: tasksLoading, error: tasksError } = useQuery(tasksListQuery());
+  const { data: dashboardActive } = useQuery(dashboardActiveQuery());
 
   const allApprovals = useWsStore((s) => s.pendingApprovals);
   const pendingApprovals = useMemo(
@@ -80,10 +84,33 @@ export default function DashboardPage() {
     });
   }, []);
 
+  const handleSendToSession = useCallback((sessionId: string, content: string) => {
+    sendClientEvent({ type: 'send_message', sessionId, content });
+  }, []);
+
+  const handleStopSession = useCallback(async (sessionId: string) => {
+    try {
+      await api.stopSession(sessionId);
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleArchiveSession = useCallback(async (sessionId: string) => {
+    try {
+      await api.archiveSession(sessionId, true);
+      queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
+    } catch { /* ignore */ }
+  }, []);
+
   const activeTaskCount = useMemo(
     () => (tasks ?? []).filter((t) => !t.archived).length,
     [tasks],
   );
+
+  // Idle sessions from REST endpoint — stable reference when undefined
+  const idleSessions = useMemo(() => dashboardActive?.idle ?? [], [dashboardActive]);
 
   const error = sessionsError ?? tasksError;
 
@@ -109,6 +136,7 @@ export default function DashboardPage() {
   const nothingActionable =
     pendingApprovals.length === 0 &&
     pendingInputs.length === 0 &&
+    idleSessions.length === 0 &&
     recentlyCompleted.length === 0;
 
   return (
@@ -143,7 +171,27 @@ export default function DashboardPage() {
               onApprovalDecision={handleApprovalDecision}
               onInputSubmit={handleInputSubmit}
               onNavigateToTask={handleNavigateToTask}
+              onStopSession={handleStopSession}
+              onArchiveSession={handleArchiveSession}
             />
+            {idleSessions.length > 0 && (
+              <div className="space-y-2">
+                <SectionHeader title="Idle Sessions" colorClass="text-success" count={idleSessions.length} />
+                <div className="space-y-2">
+                  {idleSessions.map((entry) => (
+                    <IdleSessionCard
+                      key={entry.session.id}
+                      entry={entry}
+                      connected={connected}
+                      onSendMessage={handleSendToSession}
+                      onStop={handleStopSession}
+                      onArchive={handleArchiveSession}
+                      onNavigate={() => handleNavigateToTask(entry.task.id, entry.session.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <RecentlyCompletedSection
               sessions={recentlyCompleted}
               taskMap={taskMap}

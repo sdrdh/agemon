@@ -3,7 +3,7 @@ import { join } from 'path';
 import { getDb } from './client.ts';
 import { parseRepoName } from './helpers.ts';
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export function runMigrations() {
   const db = getDb();
@@ -297,6 +297,13 @@ export function runMigrations() {
         if (!cols.some(c => c.name === 'last_message')) {
           db.run('ALTER TABLE agent_sessions ADD COLUMN last_message TEXT DEFAULT NULL');
         }
+      }
+
+      // ── v16 migration: composite indexes for session-scoped queries ──
+      if (current < 16) {
+        db.run('CREATE INDEX IF NOT EXISTS idx_acp_events_session_created ON acp_events(session_id, created_at)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_awaiting_input_session_created ON awaiting_input(session_id, created_at)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_pending_approvals_session_created ON pending_approvals(session_id, created_at)');
       }
 
       db.run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION]);

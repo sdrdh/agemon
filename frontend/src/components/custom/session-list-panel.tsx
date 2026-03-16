@@ -107,7 +107,7 @@ export function SessionListPanel({
             const usage = sessionUsage[session.id];
             const ctxPct = usage ? contextFillPct(usage) : null;
             const ctxBg = ctxPct !== null
-              ? ctxPct >= 70 ? 'bg-red-500/15' : ctxPct >= 50 ? 'bg-amber-400/15' : 'bg-primary/5'
+              ? ctxPct >= 70 ? 'bg-destructive/15' : ctxPct >= 50 ? 'bg-warning/15' : 'bg-primary/5'
               : null;
 
             return (
@@ -138,7 +138,7 @@ export function SessionListPanel({
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium truncate">{label}</span>
                     {ctxPct !== null && (
-                      <span className={`text-[10px] tabular-nums shrink-0 ${ctxPct >= 70 ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                      <span className={`text-[10px] tabular-nums shrink-0 ${ctxPct >= 70 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                         {ctxPct}%
                       </span>
                     )}
@@ -151,8 +151,8 @@ export function SessionListPanel({
                 {needsAttention && (
                   <span className="flex h-2.5 w-2.5 shrink-0" role="status">
                     <span className="sr-only">Awaiting input</span>
-                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-amber-400/75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-warning/75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning" />
                   </span>
                 )}
                 {hasUnread && !needsAttention && (

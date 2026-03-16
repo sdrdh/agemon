@@ -23,6 +23,10 @@
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 240 5.9% 10%;
@@ -47,6 +51,10 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
@@ -71,6 +79,10 @@
     --accent-foreground: 226 47% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 226 20% 88%;
     --input: 226 20% 88%;
     --ring: 234 89% 74%;
@@ -93,6 +105,10 @@
     --accent-foreground: 213 31% 91%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 222 30% 20%;
     --input: 222 30% 20%;
     --ring: 234 89% 74%;
@@ -117,6 +133,10 @@
     --accent-foreground: 160 60% 85%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 240 10% 3.9%;
+    --success: 160 84% 39%;
+    --success-foreground: 240 10% 3.9%;
     --border: 160 10% 15%;
     --input: 160 10% 15%;
     --ring: 160 84% 39%;
@@ -141,6 +161,10 @@
     --accent-foreground: 240 20% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 240 15% 88%;
     --input: 240 15% 88%;
     --ring: 244 76% 53%;
@@ -163,6 +187,10 @@
     --accent-foreground: 220 15% 85%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
     --border: 240 15% 15%;
     --input: 240 15% 15%;
     --ring: 244 76% 53%;
@@ -187,6 +215,10 @@
     --accent-foreground: 60 30% 96%;
     --destructive: 0 100% 67%;
     --destructive-foreground: 60 30% 96%;
+    --warning: 65 68% 64%;
+    --warning-foreground: 231 15% 18%;
+    --success: 135 94% 65%;
+    --success-foreground: 231 15% 18%;
     --border: 232 14% 28%;
     --input: 232 14% 28%;
     --ring: 191 97% 77%;
@@ -211,6 +243,10 @@
     --accent-foreground: 219 14% 76%;
     --destructive: 355 65% 65%;
     --destructive-foreground: 219 14% 76%;
+    --warning: 39 67% 69%;
+    --warning-foreground: 220 13% 18%;
+    --success: 95 38% 62%;
+    --success-foreground: 220 13% 18%;
     --border: 220 13% 26%;
     --input: 220 13% 26%;
     --ring: 207 82% 66%;

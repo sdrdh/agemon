@@ -93,7 +93,7 @@ function RootLayout() {
               Agemon
             </Link>
             <span
-              className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-red-500'}`}
+              className={`h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-destructive'}`}
               aria-label={connected ? 'Connected' : 'Disconnected'}
             />
           </div>

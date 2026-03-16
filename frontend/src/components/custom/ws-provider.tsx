@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { onServerEvent, onConnectionChange, setLastSeq, getKnownEpoch, setKnownEpoch, resetSeqState } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
-import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
+import { queryClient, taskKeys, sessionKeys, dashboardKeys } from '@/lib/query';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
 import { api } from '@/lib/api';
 import type { ServerEvent } from '@agemon/shared';
@@ -135,6 +135,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'session_started': {
@@ -172,6 +173,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'approval_requested': {
@@ -186,6 +188,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           store().setAgentActivity(event.approval.sessionId, `Waiting for approval: ${event.approval.toolName}`);
           store().markUnread(event.approval.sessionId);
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'approval_resolved': {
@@ -222,6 +225,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'turn_completed': {
           store().setTurnInFlight(event.sessionId, false);
           store().setAgentActivity(event.sessionId, null);
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'session_usage_update': {

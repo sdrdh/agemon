@@ -88,11 +88,11 @@ export function CompletedSessionCard({ session, taskName, onNavigate, onDismiss 
           <span className="font-medium text-sm truncate">{taskName}</span>
           <div className="flex items-center gap-2 shrink-0">
             {isDone ? (
-              <Badge variant="outline" className="text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-500">
+              <Badge variant="outline" className="text-xs border-success/30 bg-success/10 text-success">
                 ✓ Done
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-xs border-red-500/30 bg-red-500/10 text-red-500">
+              <Badge variant="outline" className="text-xs border-destructive/30 bg-destructive/10 text-destructive">
                 ✗ Crashed
               </Badge>
             )}

@@ -1,4 +1,5 @@
-import { memo } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { ChevronsDown, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
@@ -19,6 +20,37 @@ const ToolCallCardItem = memo(function ToolCallCardItem({ toolCallId, sessionId 
   return <ToolCardShell toolCall={toolCall} />;
 });
 
+/** Large start index so prepends don't go negative. */
+const START_INDEX = 100_000;
+
+/** Stable Header component — receives isLoadingMore via context (Virtuoso re-mounts if reference changes). */
+const ListHeader = memo(function ListHeader({ context }: { context?: { isLoadingMore?: boolean } }) {
+  if (!context?.isLoadingMore) return null;
+  return (
+    <div className="flex items-center justify-center py-3">
+      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      <span className="ml-2 text-xs text-muted-foreground">Loading older messages...</span>
+    </div>
+  );
+});
+
+/** Stable Footer component — renders agent activity indicator. */
+const ListFooter = memo(function ListFooter({ context }: { context?: { agentActivity: string | null; sessionRunning: boolean } }) {
+  const { agentActivity, sessionRunning } = context ?? { agentActivity: null, sessionRunning: false };
+  if (!agentActivity || !sessionRunning || agentActivity.startsWith('Waiting for approval')) return null;
+  return (
+    <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
+      </span>
+      <span className="truncate">{agentActivity}</span>
+    </div>
+  );
+});
+
+const STABLE_COMPONENTS = { Header: ListHeader, Footer: ListFooter };
+
 export function ChatMessagesArea({
   sessionReady,
   sessionRunning,
@@ -26,15 +58,13 @@ export function ChatMessagesArea({
   selectedSessionId,
   groupedItems,
   agentActivity,
-  showNewMessages,
-  scrollContainerRef,
-  chatEndRef,
   approvalLookup,
-  onScroll,
   onApprovalDecision,
-  scrollToBottom,
   connected,
   isLoadingMore,
+  hasMore,
+  onFetchOlderMessages,
+  virtuosoRef,
 }: {
   sessionReady: boolean;
   sessionRunning: boolean;
@@ -42,72 +72,138 @@ export function ChatMessagesArea({
   selectedSessionId: string | null;
   groupedItems: ChatItem[];
   agentActivity: string | null;
-  showNewMessages: boolean;
-  scrollContainerRef: React.RefObject<HTMLDivElement>;
-  chatEndRef: React.RefObject<HTMLDivElement>;
   approvalLookup: Map<string, PendingApproval>;
-  onScroll: () => void;
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
-  scrollToBottom: () => void;
   connected: boolean;
   isLoadingMore?: boolean;
+  hasMore?: boolean;
+  onFetchOlderMessages?: () => Promise<void>;
+  virtuosoRef: React.RefObject<VirtuosoHandle>;
 }) {
-  return (
-    <div className="relative flex-1 overflow-hidden">
-      <div
-        ref={scrollContainerRef}
-        onScroll={onScroll}
-        className="h-full overflow-y-auto px-4 py-3"
-      >
-        {isLoadingMore && (
-          <div className="flex items-center justify-center py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-xs text-muted-foreground">Loading older messages...</span>
-          </div>
-        )}
+  const [showNewMessages, setShowNewMessages] = useState(false);
 
-        {groupedItems.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground text-sm">
-              {sessionReady
-                ? 'Session ready. Send your first message.'
-                : isSessionActive(sessionState)
-                  ? 'Waiting for agent output...'
-                  : 'No messages in this session.'}
-            </p>
-          </div>
-        )}
+  // firstItemIndex should only change on prepend, not on append.
+  // Track the baseline count at which firstItemIndex was last set.
+  const baselineRef = useRef(groupedItems.length);
+  const firstItemIndexRef = useRef(START_INDEX - groupedItems.length);
 
-        {groupedItems.map((item, idx) => {
-          if (item.kind === 'activity-group') {
-            return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} sessionId={selectedSessionId} />;
-          }
-          if (item.kind === 'tool-call') {
-            return <ToolCallCardItem key={`tc-${item.toolCallId}`} toolCallId={item.toolCallId} sessionId={item.sessionId} />;
-          }
-          return (
-            <ChatBubble
-              key={item.message.id}
-              message={item.message}
-              approvalLookup={approvalLookup}
-              onApprovalDecision={onApprovalDecision}
-              connected={connected}
-            />
-          );
-        })}
+  // On prepend: items were added before baseline, shift firstItemIndex down
+  // On append/regroup: baseline grows, firstItemIndex stays the same
+  if (groupedItems.length > baselineRef.current) {
+    // Could be prepend or append — check if firstItemIndex needs adjustment
+    // Virtuoso guarantees: if firstItemIndex decreases, it's a prepend
+    const newFirstIndex = START_INDEX - groupedItems.length;
+    if (newFirstIndex < firstItemIndexRef.current) {
+      firstItemIndexRef.current = newFirstIndex;
+    }
+    baselineRef.current = groupedItems.length;
+  } else if (groupedItems.length < baselineRef.current) {
+    // Items removed (regroup collapse) — recalculate
+    baselineRef.current = groupedItems.length;
+    firstItemIndexRef.current = START_INDEX - groupedItems.length;
+  }
 
-        {agentActivity && sessionRunning && !agentActivity.startsWith('Waiting for approval') && (
-          <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
-            </span>
-            <span className="truncate">{agentActivity}</span>
-          </div>
-        )}
+  // Use refs for atTopStateChange to avoid stale closures and callback recreation
+  const hasMoreRef = useRef(hasMore);
+  const isLoadingMoreRef = useRef(isLoadingMore);
+  const fetchRef = useRef(onFetchOlderMessages);
+  hasMoreRef.current = hasMore;
+  isLoadingMoreRef.current = isLoadingMore;
+  fetchRef.current = onFetchOlderMessages;
 
-        <div ref={chatEndRef} />
+  const handleAtTopStateChange = useCallback((atTop: boolean) => {
+    if (atTop && hasMoreRef.current && !isLoadingMoreRef.current && fetchRef.current) {
+      fetchRef.current();
+    }
+  }, []);
+
+  const isAtBottomRef = useRef(true);
+  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
+    isAtBottomRef.current = atBottom;
+    if (atBottom) setShowNewMessages(false);
+  }, []);
+
+  // Show "New messages" when items are appended and user isn't at bottom
+  const prevLengthRef = useRef(groupedItems.length);
+  if (groupedItems.length > prevLengthRef.current && !isAtBottomRef.current) {
+    // Check this isn't a prepend (firstItemIndex would have decreased)
+    const expectedAppendFirst = START_INDEX - groupedItems.length;
+    if (expectedAppendFirst >= firstItemIndexRef.current) {
+      setShowNewMessages(true);
+    }
+  }
+  prevLengthRef.current = groupedItems.length;
+
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+    setShowNewMessages(false);
+  }, [virtuosoRef]);
+
+  const renderItem = useCallback((_index: number, item: ChatItem) => {
+    if (item.kind === 'activity-group') {
+      return <ActivityGroup messages={item.messages} isLast={false} sessionId={selectedSessionId} />;
+    }
+    if (item.kind === 'tool-call') {
+      return <ToolCallCardItem toolCallId={item.toolCallId} sessionId={item.sessionId} />;
+    }
+    return (
+      <ChatBubble
+        message={item.message}
+        approvalLookup={approvalLookup}
+        onApprovalDecision={onApprovalDecision}
+        connected={connected}
+      />
+    );
+  }, [selectedSessionId, approvalLookup, onApprovalDecision, connected]);
+
+  // Stable key computation for Virtuoso — uses item identity rather than index
+  const computeItemKey = useCallback((_index: number, item: ChatItem) => {
+    if (item.kind === 'activity-group') return `ag-${item.messages[0].id}`;
+    if (item.kind === 'tool-call') return `tc-${item.toolCallId}`;
+    return item.message.id;
+  }, []);
+
+  // Context for Header/Footer (avoids inline component recreation)
+  const context = useMemo(() => ({
+    isLoadingMore,
+    agentActivity,
+    sessionRunning,
+  }), [isLoadingMore, agentActivity, sessionRunning]);
+
+  if (groupedItems.length === 0) {
+    return (
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <div className="flex items-center justify-center h-full px-4 py-3">
+          <p className="text-muted-foreground text-sm">
+            {sessionReady
+              ? 'Session ready. Send your first message.'
+              : isSessionActive(sessionState)
+                ? 'Waiting for agent output...'
+                : 'No messages in this session.'}
+          </p>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="relative flex-1 min-h-0 overflow-hidden">
+      <Virtuoso
+        ref={virtuosoRef}
+        data={groupedItems}
+        firstItemIndex={firstItemIndexRef.current}
+        initialTopMostItemIndex={groupedItems.length - 1}
+        itemContent={renderItem}
+        computeItemKey={computeItemKey}
+        followOutput="auto"
+        atTopStateChange={handleAtTopStateChange}
+        atBottomStateChange={handleAtBottomStateChange}
+        className="h-full"
+        overscan={{ main: 300, reverse: 300 }}
+        context={context}
+        components={STABLE_COMPONENTS}
+        increaseViewportBy={{ top: 200, bottom: 100 }}
+      />
 
       {showNewMessages && (
         <button

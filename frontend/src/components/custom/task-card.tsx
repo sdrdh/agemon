@@ -24,7 +24,7 @@ export function TaskCard({ task, onClick, pendingApprovalCount = 0, onArchive }:
           <CardTitle className="text-base leading-snug min-w-0 break-words">{task.title}</CardTitle>
           <div className="flex items-center gap-1.5 shrink-0">
             {pendingApprovalCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 text-warning px-2 py-0.5 text-xs font-medium">
                 <Shield className="h-3 w-3" />
                 {pendingApprovalCount}
               </span>

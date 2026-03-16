@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useState, useRef } from 'react';
+import { useEffect, useMemo, useCallback, useState, useRef, type MutableRefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWsStore, type ToolCall } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
@@ -15,9 +15,12 @@ function rehydrateToolCalls(
   messages: ChatMessage[],
   sessionId: string,
   upsertToolCall: (sessionId: string, toolCallId: string, patch: Partial<ToolCall>) => void,
+  seenIdsRef?: MutableRefObject<Set<string>>,
 ): void {
   for (const msg of messages) {
     if (msg.eventType !== 'action') continue;
+    if (seenIdsRef && seenIdsRef.current.has(msg.id)) continue;
+    seenIdsRef?.current.add(msg.id);
     try {
       const obj = JSON.parse(msg.content);
       applyToolCallEvent(obj, sessionId, upsertToolCall);
@@ -28,7 +31,7 @@ function rehydrateToolCalls(
 export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: AgentSessionState) {
   // ── Per-session chat history from server ──────────────────────────────
   const { data: sessionChatData } = useQuery(
-    sessionChatQuery(selectedSessionId ?? '', 200),
+    sessionChatQuery(selectedSessionId ?? '', 50),
   );
 
   // ── Pagination state ──────────────────────────────────────────────────
@@ -38,6 +41,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const hasMoreRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
+  const rehydratedIdsRef = useRef(new Set<string>());
 
   // Update hasMore from initial fetch
   // Guard: sessionChatData.messages may be undefined if React Query serves a stale cache
@@ -49,12 +53,13 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
     }
   }, [sessionChatData]);
 
-  // Reset pagination state on session change
+  // Reset pagination + rehydration state on session change
   useEffect(() => {
     setHasMore(false);
     setIsLoadingMore(false);
     hasMoreRef.current = false;
     isLoadingMoreRef.current = false;
+    rehydratedIdsRef.current = new Set();
   }, [selectedSessionId]);
 
   // ── Store selectors (keyed by sessionId) ──────────────────────────────
@@ -131,7 +136,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
         seededSessionRef.current = selectedSessionId;
       }
       // Rehydrate tool calls from persisted chat messages
-      rehydrateToolCalls(sessionChatData.messages, selectedSessionId, upsertToolCall);
+      rehydrateToolCalls(sessionChatData.messages, selectedSessionId, upsertToolCall, rehydratedIdsRef);
     }
   }, [sessionChatData, selectedSessionId, setChatMessages, upsertToolCall]);
 
@@ -158,7 +163,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
       setHasMore(response.hasMore);
       hasMoreRef.current = response.hasMore;
       // Rehydrate tool calls from older messages
-      rehydrateToolCalls(response.messages, selectedSessionId, upsertToolCall);
+      rehydrateToolCalls(response.messages, selectedSessionId, upsertToolCall, rehydratedIdsRef);
     } catch {
       /* ignore fetch errors */
     } finally {

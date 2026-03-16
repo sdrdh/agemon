@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -123,6 +123,9 @@ export const api = {
   getSetting: (key: string) => request<{ value: string | null }>(`/settings/${key}`),
   setSetting: (key: string, value: string) =>
     request<{ ok: boolean }>('/settings', { method: 'POST', body: JSON.stringify({ key, value }) }),
+
+  // Dashboard
+  getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

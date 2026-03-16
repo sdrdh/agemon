@@ -83,6 +83,11 @@ export function updateSessionArchived(id: string, archived: boolean): AgentSessi
   return row ? parseSession(row) : null;
 }
 
+export function archiveSessionsByTask(taskId: string, archived: boolean): void {
+  const db = getDb();
+  db.run('UPDATE agent_sessions SET archived = ? WHERE task_id = ?', [archived ? 1 : 0, taskId]);
+}
+
 export function updateSessionUsage(id: string, usage: SessionUsage): void {
   const db = getDb();
   db.run('UPDATE agent_sessions SET usage_json = ? WHERE id = ?', [JSON.stringify(usage), id]);
@@ -114,6 +119,13 @@ export function getSessionAvailableCommands(id: string): AgentCommand[] | null {
   ).get(id);
   if (!row?.available_commands) return null;
   try { return JSON.parse(row.available_commands); } catch { return null; }
+}
+
+export function listActiveSessions(): AgentSession[] {
+  const db = getDb();
+  return db.query<AgentSession, []>(
+    "SELECT * FROM agent_sessions WHERE state IN ('running', 'ready') AND archived = 0 ORDER BY started_at DESC"
+  ).all().map(parseSession);
 }
 
 export function listAllSessions(limit: number, includeArchived = false): AgentSession[] {

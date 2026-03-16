@@ -53,7 +53,7 @@ export function ToolCardShell({ toolCall, condensed }: { toolCall: ToolCall; con
 
   return (
     <div
-      className={`border rounded-lg ${condensed ? 'my-0.5' : 'my-1'} ${toolCall.error ? 'border-red-400/50' : 'border-muted'} bg-card`}
+      className={`border rounded-lg ${condensed ? 'my-0.5' : 'my-1'} ${toolCall.error ? 'border-destructive/50' : 'border-muted'} bg-card`}
     >
       <button
         type="button"

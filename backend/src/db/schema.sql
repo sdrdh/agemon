@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS acp_events (
 
 CREATE INDEX IF NOT EXISTS idx_acp_events_task_id ON acp_events(task_id);
 CREATE INDEX IF NOT EXISTS idx_acp_events_session_id ON acp_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_acp_events_session_created ON acp_events(session_id, created_at);
 
 -- Blocking questions from the agent
 CREATE TABLE IF NOT EXISTS awaiting_input (
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS awaiting_input (
 
 CREATE INDEX IF NOT EXISTS idx_awaiting_input_task_id ON awaiting_input(task_id);
 CREATE INDEX IF NOT EXISTS idx_awaiting_input_session_id ON awaiting_input(session_id);
+CREATE INDEX IF NOT EXISTS idx_awaiting_input_session_created ON awaiting_input(session_id, created_at);
 
 -- Pending code reviews / diffs
 CREATE TABLE IF NOT EXISTS diffs (
@@ -109,6 +111,7 @@ CREATE TABLE IF NOT EXISTS pending_approvals (
 CREATE INDEX IF NOT EXISTS idx_pending_approvals_task ON pending_approvals(task_id);
 CREATE INDEX IF NOT EXISTS idx_pending_approvals_session ON pending_approvals(session_id);
 CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals(status);
+CREATE INDEX IF NOT EXISTS idx_pending_approvals_session_created ON pending_approvals(session_id, created_at);
 
 -- Persistent "Always Allow" rules
 CREATE TABLE IF NOT EXISTS approval_rules (

@@ -4,10 +4,10 @@ import type { SessionConfigOption } from '@agemon/shared';
 /** Input border/bg color per mode */
 const MODE_BADGE_STYLES: Record<string, string> = {
   default: 'bg-muted text-muted-foreground hover:bg-muted/80',
-  plan: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
+  plan: 'bg-warning/15 text-warning hover:bg-warning/25',
   acceptEdits: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
   dontAsk: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/60',
-  bypassPermissions: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60',
+  bypassPermissions: 'bg-destructive/15 text-destructive hover:bg-destructive/25',
 };
 
 export function SessionModeBar({

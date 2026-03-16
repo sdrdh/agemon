@@ -257,6 +257,26 @@ export type ClientEvent =
   | { type: 'cancel_turn'; sessionId: string }
   | { type: 'resume'; lastSeq: number };
 
+// ─── Dashboard Types ────────────────────────────────────────────────────────
+
+export interface DashboardSessionBase {
+  session: AgentSession;
+  task: { id: string; title: string; description: string | null };
+  lastAgentMessage: string | null;
+}
+
+export interface DashboardBlockedSession extends DashboardSessionBase {
+  pendingInputs: AwaitingInput[];
+  pendingApprovals: PendingApproval[];
+}
+
+export interface DashboardIdleSession extends DashboardSessionBase {}
+
+export interface DashboardActiveResponse {
+  blocked: DashboardBlockedSession[];
+  idle: DashboardIdleSession[];
+}
+
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 
 export interface CreateTaskBody {

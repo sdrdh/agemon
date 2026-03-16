@@ -79,7 +79,7 @@ export const ActivityGroup = memo(function ActivityGroup({ messages, isLast, ses
     }
   }
 
-  const borderColor = failedCount > 0 ? 'border-red-400/50' : 'border-muted';
+  const borderColor = failedCount > 0 ? 'border-destructive/50' : 'border-muted';
 
   return (
     <div
@@ -107,7 +107,7 @@ export const ActivityGroup = memo(function ActivityGroup({ messages, isLast, ses
             </span>
           )}
           {skillCount > 0 && (
-            <span className="flex items-center gap-1 text-amber-500">
+            <span className="flex items-center gap-1 text-warning">
               <Zap className="h-3 w-3 shrink-0" />
               <span>{skillCount} skill{skillCount !== 1 ? 's' : ''}</span>
             </span>
@@ -119,7 +119,7 @@ export const ActivityGroup = memo(function ActivityGroup({ messages, isLast, ses
             </span>
           )}
           {statusSuffix && (
-            <span className={failedCount > 0 ? 'text-red-400' : 'text-emerald-500'}>{statusSuffix}</span>
+            <span className={failedCount > 0 ? 'text-destructive' : 'text-success'}>{statusSuffix}</span>
           )}
         </div>
       </div>

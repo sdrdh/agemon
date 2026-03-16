@@ -15,6 +15,8 @@ interface NeedsInputSectionProps {
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   onInputSubmit: (inputId: string, taskId: string, response: string) => void;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
+  onStopSession?: (sessionId: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
 }
 
 /** Get the last meaningful message for a session — agent thought or user message. */
@@ -42,6 +44,8 @@ export function NeedsInputSection({
   onApprovalDecision,
   onInputSubmit,
   onNavigateToTask,
+  onStopSession,
+  onArchiveSession,
 }: NeedsInputSectionProps) {
   const chatMessages = useWsStore((s) => s.chatMessages);
   const sorted = useMemo(() => {
@@ -64,7 +68,7 @@ export function NeedsInputSection({
 
   return (
     <div className="space-y-2">
-      <SectionHeader title="Needs Your Input" colorClass="text-amber-500" count={totalCount} />
+      <SectionHeader title="Needs Your Input" colorClass="text-warning" count={totalCount} />
       <div className="space-y-2">
         {sorted.map((entry) => {
           if (entry.type === 'approval') {
@@ -85,6 +89,8 @@ export function NeedsInputSection({
                 connected={connected}
                 onDecision={onApprovalDecision}
                 onNavigate={() => onNavigateToTask(approval.taskId, approval.sessionId)}
+                onStop={onStopSession}
+                onArchive={onArchiveSession}
               />
             );
           } else {
@@ -105,6 +111,8 @@ export function NeedsInputSection({
                 connected={connected}
                 onSubmit={onInputSubmit}
                 onNavigate={() => onNavigateToTask(input.taskId, input.sessionId)}
+                onStop={onStopSession}
+                onArchive={onArchiveSession}
               />
             );
           }

@@ -371,7 +371,7 @@ function AboutSection() {
       </div>
 
       {updateResult && (
-        <p className={`text-xs ${updateResult.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+        <p className={`text-xs ${updateResult.ok ? 'text-success' : 'text-destructive'}`}>
           {updateResult.message}
         </p>
       )}

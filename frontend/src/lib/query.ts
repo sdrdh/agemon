@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { Task, TasksByProject, ACPEvent, ChatHistoryResponse, AgentSession } from '@agemon/shared';
+import type { Task, TasksByProject, ACPEvent, ChatHistoryResponse, AgentSession, DashboardActiveResponse } from '@agemon/shared';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,7 +76,20 @@ export function taskSessionsQuery(taskId: string, includeArchived = false) {
   };
 }
 
-export function sessionChatQuery(sessionId: string, limit = 200) {
+export const dashboardKeys = {
+  all: ['dashboard'] as const,
+  active: ['dashboard', 'active'] as const,
+};
+
+export function dashboardActiveQuery() {
+  return {
+    queryKey: dashboardKeys.active,
+    queryFn: (): Promise<DashboardActiveResponse> => api.getDashboardActive(),
+    staleTime: 10_000,
+  };
+}
+
+export function sessionChatQuery(sessionId: string, limit = 50) {
   return {
     queryKey: sessionKeys.chat(sessionId),
     queryFn: (): Promise<ChatHistoryResponse> => api.getSessionChat(sessionId, limit),

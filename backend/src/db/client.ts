@@ -98,16 +98,19 @@ export const db = {
   updateSessionAvailableCommands: sessions.updateSessionAvailableCommands,
   getSessionConfigOptions: sessions.getSessionConfigOptions,
   getSessionAvailableCommands: sessions.getSessionAvailableCommands,
+  listActiveSessions: sessions.listActiveSessions,
   listAllSessions: sessions.listAllSessions,
 
   // Events
   listEvents: events.listEvents,
   insertEvent: events.insertEvent,
   listChatHistory: events.listChatHistory,
+  getLastAgentMessage: events.getLastAgentMessage,
   listChatHistoryBySession: events.listChatHistoryBySession,
 
   // Inputs
   listPendingInputs: inputs.listPendingInputs,
+  listAllPendingInputs: inputs.listAllPendingInputs,
   insertAwaitingInput: inputs.insertAwaitingInput,
   answerInput: inputs.answerInput,
 
@@ -123,6 +126,7 @@ export const db = {
   getPendingApproval: approvals.getPendingApproval,
   listPendingApprovals: approvals.listPendingApprovals,
   listPendingApprovalsBySession: approvals.listPendingApprovalsBySession,
+  listAllPendingApprovals: approvals.listAllPendingApprovals,
   listAllApprovals: approvals.listAllApprovals,
   insertApprovalRule: approvals.insertApprovalRule,
   findApprovalRule: approvals.findApprovalRule,

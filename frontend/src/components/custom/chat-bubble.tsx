@@ -30,7 +30,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label="Copy message"
     >
       {copied ? (
-        <Check className="h-4 w-4 text-emerald-500" />
+        <Check className="h-4 w-4 text-success" />
       ) : (
         <Copy className="h-4 w-4 text-muted-foreground" />
       )}
@@ -88,8 +88,8 @@ export const ChatBubble = memo(function ChatBubble({ message, approvalLookup, on
 
   if (eventType === 'input_request') {
     return (
-      <div className="flex justify-start my-2">
-        <div className="group relative max-w-[85%] rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm break-words prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
+      <div className="flex justify-start my-2 max-w-[85%]">
+        <div className="group relative min-w-0 rounded-lg border border-warning bg-warning/10 px-3 py-2 text-sm break-words overflow-hidden prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
           <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</Markdown>
           <CopyButton text={content} />
         </div>
@@ -98,8 +98,8 @@ export const ChatBubble = memo(function ChatBubble({ message, approvalLookup, on
   }
 
   return (
-    <div className="flex justify-start my-2">
-      <div className="group relative max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm break-words prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
+    <div className="flex justify-start my-2 max-w-[85%]">
+      <div className="group relative min-w-0 rounded-lg bg-muted px-3 py-2 text-sm break-words overflow-hidden prose prose-sm dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-headings:my-2 max-w-none">
         <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</Markdown>
         <CopyButton text={content} />
       </div>

@@ -49,8 +49,8 @@ export function SessionActivityCard({
 
       {/* Running indicator row */}
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-        <span className="text-xs text-emerald-500 font-medium">Running</span>
+        <span className="h-2 w-2 rounded-full bg-success shrink-0" />
+        <span className="text-xs text-success font-medium">Running</span>
       </div>
 
       {/* Activity line */}

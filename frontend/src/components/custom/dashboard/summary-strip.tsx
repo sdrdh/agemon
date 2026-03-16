@@ -12,14 +12,14 @@ export function SummaryStrip({ blocked, active, completed, tasks }: SummaryStrip
         className="flex flex-col items-center justify-center py-3 px-2"
         aria-label={`${blocked} blocked`}
       >
-        <span className="text-2xl font-bold text-amber-500 leading-none">{blocked}</span>
+        <span className="text-2xl font-bold text-warning leading-none">{blocked}</span>
         <span className="text-[11px] text-muted-foreground mt-1">Blocked</span>
       </div>
       <div
         className="flex flex-col items-center justify-center py-3 px-2"
         aria-label={`${active} active`}
       >
-        <span className="text-2xl font-bold text-emerald-500 leading-none">{active}</span>
+        <span className="text-2xl font-bold text-success leading-none">{active}</span>
         <span className="text-[11px] text-muted-foreground mt-1">Active</span>
       </div>
       <div
