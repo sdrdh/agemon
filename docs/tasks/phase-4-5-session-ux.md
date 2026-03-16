@@ -358,3 +358,27 @@
 **Dependencies:** Task 4.11 (Multi-Theme System & Settings Page)
 
 ---
+
+### Task 4.35: Session View Load Performance
+
+**Priority:** P1
+**Estimated Time:** 1-2 days
+
+**Deliverables:**
+- [ ] Further reduce initial chat history fetch size (currently 200 after recent reduction from 500) — consider 50-100 for first paint; scroll-up pagination handles the rest
+- [ ] Add composite indexes on `(session_id, created_at)` for `acp_events`, `awaiting_input`, and `pending_approvals` tables to eliminate sort step in the 3-table UNION query
+- [ ] Implement virtual list rendering for the chat message area so only visible messages are mounted as DOM nodes (react-virtuoso is a good fit given variable row heights)
+- [ ] Defer tool call rehydration so it only processes visible/recently-loaded messages rather than the full fetched set on every mount and session switch
+
+**Key Considerations:**
+- Virtual list is the highest-impact fix for mobile jank on long sessions — DOM node count grows unbounded without it
+- Virtual list must preserve auto-scroll-to-bottom when new WS messages arrive and the user is near the bottom
+- Scroll-up pagination (`fetchOlderMessages`) must remain compatible with the virtual list's scroll anchor — prepending items should not jump the viewport
+- The composite index change is a schema migration (bump `SCHEMA_VERSION` in `backend/src/db/migrations.ts`)
+- Tool call rehydration iterates all fetched messages synchronously on mount; for sessions heavy with tool calls this is measurable on mobile
+
+**Affected Areas:** backend (schema/migrations), frontend (session-chat-panel, use-session-chat hook, query defaults)
+
+**Dependencies:** Task 4.5 (session chat history), Task 4.7 (scroll-up pagination)
+
+---
