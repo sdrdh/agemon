@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info } from 'lucide-react';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
 import { McpServerList } from '@/components/custom/mcp-server-list';
+import { SkillsManager } from '@/components/custom/skills-manager';
 import { useVersionChecker } from '@/hooks/use-version-checker';
 import { api } from '@/lib/api';
 import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
 import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers' | 'about';
+type Section = 'appearance' | 'mcp-servers' | 'skills' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
+  { id: 'skills', label: 'Skills', icon: Zap },
   { id: 'about', label: 'About', icon: Info },
 ];
 
@@ -136,6 +138,22 @@ function McpServersSection() {
         </p>
       </div>
       <McpServerList scope="global" />
+    </section>
+  );
+}
+
+// ─── Skills Section ──────────────────────────────────────────────────────────
+
+function SkillsSection() {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Skills</h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Global skills are available to all agent sessions. Install from GitHub repositories.
+        </p>
+      </div>
+      <SkillsManager scope="global" />
     </section>
   );
 }
@@ -483,6 +501,7 @@ export default function SettingsPage() {
         <div className="flex-1 p-4 md:p-6 max-w-2xl">
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
+          {activeSection === 'skills' && <SkillsSection />}
           {activeSection === 'about' && <AboutSection />}
         </div>
       </div>

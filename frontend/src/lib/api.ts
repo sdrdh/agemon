@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -126,6 +126,29 @@ export const api = {
 
   // Dashboard
   getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
+
+  // Skills
+  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/skills'),
+  previewSkills: (source: string) =>
+    request<SkillPreviewResult>('/skills/preview', {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    }),
+  installGlobalSkill: (source: string, skillNames?: string[]) =>
+    request<SkillInstallResult>('/skills', {
+      method: 'POST',
+      body: JSON.stringify({ source, skillNames }),
+    }),
+  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/skills/${name}`, { method: 'DELETE' }),
+  listTaskSkills: (taskId: string) =>
+    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/tasks/${taskId}/skills`),
+  installTaskSkill: (taskId: string, source: string, skillNames?: string[]) =>
+    request<SkillInstallResult>(`/tasks/${taskId}/skills`, {
+      method: 'POST',
+      body: JSON.stringify({ source, skillNames }),
+    }),
+  removeTaskSkill: (taskId: string, name: string) =>
+    request<{ ok: boolean }>(`/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

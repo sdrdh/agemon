@@ -358,6 +358,32 @@ export interface TestMcpServerResult {
   tools?: McpToolInfo[];
 }
 
+// ─── Skills ──────────────────────────────────────────────────────────────────
+
+export interface InstalledSkill {
+  name: string;
+  description: string;
+  path: string;
+  scope: 'global' | 'task' | 'repo';
+}
+
+export interface SkillPreview {
+  name: string;
+  description: string;
+}
+
+export interface SkillPreviewResult {
+  ok: boolean;
+  skills: SkillPreview[];
+  error?: string;
+}
+
+export interface SkillInstallResult {
+  ok: boolean;
+  installed?: string[];
+  error?: string;
+}
+
 // ─── Shared Validation ──────────────────────────────────────────────────────
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */
