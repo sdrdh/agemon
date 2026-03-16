@@ -340,7 +340,7 @@ do_install() {
     else
       die "Cannot create ${INSTALL_DIR} — run as root or install sudo."
     fi
-    git clone --branch develop "${AGEMON_REPO}" "${INSTALL_DIR}"
+    git clone --branch main "${AGEMON_REPO}" "${INSTALL_DIR}"
   fi
 
   success "Source installed at ${INSTALL_DIR}"
