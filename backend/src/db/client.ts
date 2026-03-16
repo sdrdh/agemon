@@ -91,6 +91,7 @@ export const db = {
   insertSession: sessions.insertSession,
   updateSessionState: sessions.updateSessionState,
   updateSessionName: sessions.updateSessionName,
+  updateSessionLastMessage: sessions.updateSessionLastMessage,
   updateSessionArchived: sessions.updateSessionArchived,
   updateSessionUsage: sessions.updateSessionUsage,
   updateSessionConfigOptions: sessions.updateSessionConfigOptions,

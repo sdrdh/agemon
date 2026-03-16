@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { PendingApproval, ApprovalDecision, AgentSession, Task, ChatMessage } from '@agemon/shared';
 import type { PendingInput } from '@/lib/store';
+import { useWsStore } from '@/lib/store';
 import { SectionHeader } from './section-header';
 import { DashboardApprovalCard } from './dashboard-approval-card';
 import { QuestionInputCard } from './question-input-card';
@@ -10,7 +11,6 @@ interface NeedsInputSectionProps {
   inputs: PendingInput[];
   taskMap: Map<string, Task>;
   sessionMap: Map<string, AgentSession>;
-  chatMessages: Record<string, ChatMessage[]>;
   connected: boolean;
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   onInputSubmit: (inputId: string, taskId: string, response: string) => void;
@@ -38,12 +38,12 @@ export function NeedsInputSection({
   inputs,
   taskMap,
   sessionMap,
-  chatMessages,
   connected,
   onApprovalDecision,
   onInputSubmit,
   onNavigateToTask,
 }: NeedsInputSectionProps) {
+  const chatMessages = useWsStore((s) => s.chatMessages);
   const sorted = useMemo(() => {
     const approvalItems = approvals.map((a) => ({
       type: 'approval' as const,

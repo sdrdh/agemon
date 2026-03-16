@@ -71,6 +71,11 @@ export function updateSessionName(id: string, name: string): void {
   db.run('UPDATE agent_sessions SET name = ? WHERE id = ?', [name, id]);
 }
 
+export function updateSessionLastMessage(id: string, lastMessage: string): void {
+  const db = getDb();
+  db.run('UPDATE agent_sessions SET last_message = ? WHERE id = ?', [lastMessage, id]);
+}
+
 export function updateSessionArchived(id: string, archived: boolean): AgentSession | null {
   const db = getDb();
   db.run('UPDATE agent_sessions SET archived = ? WHERE id = ?', [archived ? 1 : 0, id]);

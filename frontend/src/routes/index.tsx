@@ -25,7 +25,6 @@ export default function DashboardPage() {
   );
   const pendingInputs = useWsStore((s) => s.pendingInputs);
   const connected = useWsStore((s) => s.connected);
-  const chatMessages = useWsStore((s) => s.chatMessages);
 
   // Track dismissed completed sessions (client-side, resets on page reload)
   const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<string>>(new Set());
@@ -140,7 +139,6 @@ export default function DashboardPage() {
               inputs={pendingInputs}
               taskMap={taskMap}
               sessionMap={sessionMap}
-              chatMessages={chatMessages}
               connected={connected}
               onApprovalDecision={handleApprovalDecision}
               onInputSubmit={handleInputSubmit}

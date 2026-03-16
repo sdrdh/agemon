@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ChevronsDown, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ChatBubble } from '@/components/custom/chat-bubble';
@@ -9,14 +10,14 @@ import type { ChatItem } from '@/lib/chat-utils';
 import type { AgentSessionState, PendingApproval, ApprovalDecision } from '@agemon/shared';
 
 /** Subscribes to a single tool call by ID — only re-renders when that entry changes. */
-function ToolCallCardItem({ toolCallId, sessionId }: { toolCallId: string; sessionId: string }) {
+const ToolCallCardItem = memo(function ToolCallCardItem({ toolCallId, sessionId }: { toolCallId: string; sessionId: string }) {
   const toolCall = useWsStore((s) => {
     const list = s.toolCalls[sessionId] ?? EMPTY_TOOL_CALLS;
     return list.find((tc) => tc.toolCallId === toolCallId) ?? null;
   });
   if (!toolCall) return null;
   return <ToolCardShell toolCall={toolCall} />;
-}
+});
 
 export function ChatMessagesArea({
   sessionReady,

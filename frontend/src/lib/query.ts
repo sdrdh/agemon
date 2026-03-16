@@ -76,7 +76,7 @@ export function taskSessionsQuery(taskId: string, includeArchived = false) {
   };
 }
 
-export function sessionChatQuery(sessionId: string, limit = 500) {
+export function sessionChatQuery(sessionId: string, limit = 200) {
   return {
     queryKey: sessionKeys.chat(sessionId),
     queryFn: (): Promise<ChatHistoryResponse> => api.getSessionChat(sessionId, limit),

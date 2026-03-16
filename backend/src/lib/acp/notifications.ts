@@ -76,6 +76,16 @@ export function flushCurrentMessage(sessionId: string, taskId: string): void {
     console.error(`[acp] failed to persist message ${rs.currentMessageId} for session ${sessionId}:`, err);
   }
 
+  // Update last_message on agent visible messages only (not thoughts or tool calls)
+  if (rs.currentMessageType === 'action') {
+    const text = rs.currentMessageText;
+    // Skip tool-call JSON and [tool] prefixed lines — they're not readable messages
+    if (!text.startsWith('{') && !text.startsWith('[tool')) {
+      const preview = text.length > 100 ? text.slice(0, 97) + '...' : text;
+      db.updateSessionLastMessage(sessionId, preview);
+    }
+  }
+
   // Always reset buffer so subsequent flushes don't cascade-fail with duplicate IDs
   rs.currentMessageId = null;
   rs.currentMessageText = '';

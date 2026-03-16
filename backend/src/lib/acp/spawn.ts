@@ -3,7 +3,7 @@ import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions, type RunningSession } from './session-registry.ts';
 import { handleNotification } from './notifications.ts';
-import { extractToolName, extractToolContext } from './tool-helpers.ts';
+import { extractToolName, extractToolContext, buildOptionLabel } from './tool-helpers.ts';
 import { pendingApprovalResolvers } from './approvals.ts';
 import { handleExit } from './lifecycle.ts';
 import { JsonRpcTransport } from '../jsonrpc.ts';
@@ -80,12 +80,18 @@ export function spawnProcess(
         }
       }
 
-      // Map ACP options to our ApprovalOption format
-      const mappedOptions: ApprovalOption[] = options.map(o => ({
-        kind: o.kind,
-        optionId: o.optionId,
-        label: o.label ?? o.name ?? o.kind.replace(/_/g, ' '),
-      }));
+      // Map ACP options to our ApprovalOption format.
+      // Build descriptive labels from tool context when the agent only sends
+      // generic names like "Allow once" / "Always allow".
+      const mappedOptions: ApprovalOption[] = options.map(o => {
+        // Normalize reject_once → deny (OpenCode uses reject_once)
+        const kind = o.kind === 'reject_once' || o.kind === 'reject_always' ? 'deny' : o.kind;
+        return {
+          kind,
+          optionId: o.optionId,
+          label: o.label ?? buildOptionLabel(kind, toolName, toolTitle, context),
+        };
+      });
 
       // Create pending approval
       const approvalId = randomUUID();

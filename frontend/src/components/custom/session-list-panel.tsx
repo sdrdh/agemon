@@ -135,14 +135,16 @@ export function SessionListPanel({
                 </span>
 
                 <div className="relative flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{label}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {stateLabel}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium truncate">{label}</span>
                     {ctxPct !== null && (
-                      <span className={`ml-1.5 tabular-nums ${ctxPct >= 70 ? 'text-red-500 font-medium' : ''}`}>
-                        · {ctxPct}% ctx
+                      <span className={`text-[10px] tabular-nums shrink-0 ${ctxPct >= 70 ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                        {ctxPct}%
                       </span>
                     )}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {session.last_message ?? stateLabel}
                   </div>
                 </div>
 

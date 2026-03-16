@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { memo, useState, useCallback } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -38,7 +38,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function ChatBubble({ message, approvalLookup, onApprovalDecision, connected }: {
+export const ChatBubble = memo(function ChatBubble({ message, approvalLookup, onApprovalDecision, connected }: {
   message: ChatMessage;
   approvalLookup?: Map<string, PendingApproval>;
   onApprovalDecision?: (approvalId: string, decision: ApprovalDecision) => void;
@@ -105,4 +105,4 @@ export function ChatBubble({ message, approvalLookup, onApprovalDecision, connec
       </div>
     </div>
   );
-}
+});

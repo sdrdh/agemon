@@ -66,6 +66,10 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     db.updateSessionName(sessionId, name);
   }
 
+  // Update last_message with user prompt
+  const lastMsg = content.length > 100 ? content.slice(0, 97) + '...' : content;
+  db.updateSessionLastMessage(sessionId, lastMsg);
+
   // On the first prompt, inject task context for agents that don't auto-load CLAUDE.md
   let promptContent = content;
   const isFirstPrompt = entry.promptsSent === 0;

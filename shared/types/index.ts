@@ -38,6 +38,7 @@ export interface AgentSession {
   ended_at: string | null;
   exit_code: number | null;
   usage?: SessionUsage; // Latest token usage snapshot; undefined until first usage_update
+  last_message?: string | null; // Short preview of last user/agent message
 }
 
 export interface ACPEvent {

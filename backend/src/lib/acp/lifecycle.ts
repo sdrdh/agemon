@@ -2,7 +2,7 @@ import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions, userStopped, KILL_TIMEOUT_MS, SHUTDOWN_REQUEST_TIMEOUT_MS } from './session-registry.ts';
 import { deriveTaskStatus } from './task-status.ts';
-import { resolveApproval } from './approvals.ts';
+import { resolveApproval, pendingApprovalResolvers } from './approvals.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
 import type { AgentSessionState, AgentSession } from '@agemon/shared';
 
@@ -24,6 +24,15 @@ export async function handleExit(
   const pendingApprovals = db.listPendingApprovalsBySession(sessionId);
   for (const approval of pendingApprovals) {
     resolveApproval(approval.id, 'deny');
+  }
+
+  // Clean up any resolver map entries for this session that weren't resolved via DB
+  // (e.g., approval was registered in the map but DB insert hadn't completed yet)
+  for (const [approvalId, entry] of pendingApprovalResolvers) {
+    if (entry.sessionId === sessionId) {
+      entry.resolve({ outcome: { outcome: 'cancelled' } });
+      pendingApprovalResolvers.delete(approvalId);
+    }
   }
 
   db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });

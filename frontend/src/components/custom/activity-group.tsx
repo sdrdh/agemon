@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { ChevronRight, Brain, Wrench, Zap } from 'lucide-react';
 import { ToolStatusIcon } from '@/components/custom/tool-cards/tool-icons';
 import { parseActivityMessages, shortenToolLabel } from '@/lib/chat-utils';
@@ -44,7 +44,7 @@ function shortPath(p: string): string {
   return parts.length > 2 ? '\u2026/' + parts.slice(-2).join('/') : p;
 }
 
-export function ActivityGroup({ messages, isLast, sessionId }: { messages: ChatMessage[]; isLast: boolean; sessionId?: string | null }) {
+export const ActivityGroup = memo(function ActivityGroup({ messages, isLast, sessionId }: { messages: ChatMessage[]; isLast: boolean; sessionId?: string | null }) {
   const [expanded, setExpanded] = useState(false);
   const storeToolCalls = useWsStore((s) =>
     sessionId ? (s.toolCalls[sessionId] ?? EMPTY_TOOL_CALLS) : EMPTY_TOOL_CALLS
@@ -165,4 +165,4 @@ export function ActivityGroup({ messages, isLast, sessionId }: { messages: ChatM
       </div>
     </div>
   );
-}
+});

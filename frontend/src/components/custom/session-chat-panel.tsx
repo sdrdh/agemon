@@ -175,11 +175,29 @@ export function SessionChatPanel({
     }
   }, []);
 
-  // Auto-scroll only when near bottom
+  // Auto-scroll only when near bottom.
+  // Uses 'instant' to avoid smooth-scroll animations racing with rapid streaming
+  // (each smooth scroll targets a position that becomes stale as new content arrives).
+  // We also track the previous groupedItems length to distinguish new content
+  // (should auto-scroll) from regrouping (should not).
+  const prevGroupedLenRef = useRef(groupedItems.length);
   useEffect(() => {
-    if (isNearBottomRef.current) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else {
+    const prevLen = prevGroupedLenRef.current;
+    prevGroupedLenRef.current = groupedItems.length;
+
+    // Skip if length decreased (regrouping collapse) — don't jump scroll
+    if (groupedItems.length < prevLen) return;
+
+    // Compute nearBottom fresh — the ref can be stale when content is added
+    // without a user scroll event (scrollHeight grows, scrollTop stays the same).
+    const el = scrollContainerRef.current;
+    const nearBottom = el
+      ? el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD
+      : isNearBottomRef.current;
+
+    if (nearBottom) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else if (groupedItems.length > prevLen) {
       setShowNewMessages(true);
     }
   }, [groupedItems.length, agentActivity, chatEndRef]);

@@ -50,3 +50,76 @@ export function extractToolContext(toolCall: Record<string, unknown> | undefined
   }
   return ctx;
 }
+
+/**
+ * Build a descriptive label for an approval option based on tool context.
+ * Produces labels like:
+ *   "Allow Bash(git branch -a)"
+ *   "Always allow Write to /tmp/test.txt"
+ *   "Always allow Edit in src/App.tsx"
+ *   "Deny"
+ */
+export function buildOptionLabel(
+  kind: string,
+  toolName: string,
+  toolTitle: string,
+  context: Record<string, string>,
+): string {
+  const verb = kind === 'allow_once' ? 'Allow'
+    : kind === 'allow_always' ? 'Always allow'
+    : kind === 'deny' ? 'Deny'
+    : kind.replace(/_/g, ' ');
+
+  // For deny, keep it short
+  if (kind === 'deny') return 'Deny';
+
+  // Build a concise description of what's being approved
+  const detail = buildToolDetail(toolName, toolTitle, context);
+  return detail ? `${verb} ${detail}` : verb;
+}
+
+function buildToolDetail(
+  toolName: string,
+  toolTitle: string,
+  ctx: Record<string, string>,
+): string {
+  const file = ctx.filePath || ctx.path || '';
+  const shortFile = file ? shortenPath(file) : '';
+  const cmd = ctx.command || '';
+
+  switch (toolName.toLowerCase()) {
+    case 'bash':
+    case 'execute': {
+      if (cmd) {
+        // Show first meaningful token(s) of the command
+        const short = cmd.length > 40 ? cmd.slice(0, 37) + '...' : cmd;
+        return `Bash(${short})`;
+      }
+      return 'Bash command';
+    }
+    case 'write': {
+      if (shortFile) return `Write to ${shortFile}`;
+      return 'file write';
+    }
+    case 'edit': {
+      if (shortFile) return `Edit in ${shortFile}`;
+      return 'file edit';
+    }
+    case 'read': {
+      if (shortFile) return `Read ${shortFile}`;
+      return 'file read';
+    }
+    default: {
+      // Use toolTitle if it's more descriptive than the name (e.g. "external_directory")
+      const title = toolTitle !== toolName ? toolTitle.replace(/_/g, ' ') : '';
+      if (shortFile) return title ? `${title} (${shortFile})` : shortFile;
+      if (cmd) return title ? `${title}: ${cmd.slice(0, 30)}` : cmd.slice(0, 40);
+      return title || toolName;
+    }
+  }
+}
+
+function shortenPath(p: string): string {
+  const parts = p.split('/');
+  return parts.length > 3 ? '.../' + parts.slice(-2).join('/') : p;
+}

@@ -275,6 +275,15 @@ function flushCurrentMessage(sessionId: string, taskId: string): void {
     console.error(`[acp] failed to persist message ${rs.currentMessageId} for session ${sessionId}:`, err);
   }
 
+  // Update last_message on agent visible messages only (not thoughts or tool calls)
+  if (rs.currentMessageType === 'action') {
+    const text = rs.currentMessageText;
+    if (!text.startsWith('{') && !text.startsWith('[tool')) {
+      const preview = text.length > 100 ? text.slice(0, 97) + '...' : text;
+      db.updateSessionLastMessage(sessionId, preview);
+    }
+  }
+
   // Always reset buffer so subsequent flushes don't cascade-fail with duplicate IDs
   rs.currentMessageId = null;
   rs.currentMessageText = '';
@@ -576,12 +585,17 @@ function spawnProcess(
         }
       }
 
-      // Map ACP options to our ApprovalOption format
-      const mappedOptions: ApprovalOption[] = options.map(o => ({
-        kind: o.kind,
-        optionId: o.optionId,
-        label: o.label ?? o.name ?? o.kind.replace(/_/g, ' '),
-      }));
+      // Map ACP options to our ApprovalOption format.
+      // Build descriptive labels from tool context when the agent only sends
+      // generic names like "Allow once" / "Always allow".
+      const mappedOptions: ApprovalOption[] = options.map(o => {
+        const kind = o.kind === 'reject_once' || o.kind === 'reject_always' ? 'deny' : o.kind;
+        return {
+          kind,
+          optionId: o.optionId,
+          label: o.label ?? buildOptionLabel(kind, toolName, toolTitle, context),
+        };
+      });
 
       // Create pending approval
       const approvalId = randomUUID();
@@ -668,6 +682,55 @@ function extractToolContext(toolCall: Record<string, unknown> | undefined): Reco
     if (!ctx.filePath && !ctx.path) ctx.filePath = locations[0].path;
   }
   return ctx;
+}
+
+function buildOptionLabel(
+  kind: string,
+  toolName: string,
+  toolTitle: string,
+  context: Record<string, string>,
+): string {
+  const verb = kind === 'allow_once' ? 'Allow'
+    : kind === 'allow_always' ? 'Always allow'
+    : kind === 'deny' ? 'Deny'
+    : kind.replace(/_/g, ' ');
+  if (kind === 'deny') return 'Deny';
+  const detail = buildToolDetail(toolName, toolTitle, context);
+  return detail ? `${verb} ${detail}` : verb;
+}
+
+function buildToolDetail(
+  toolName: string,
+  toolTitle: string,
+  ctx: Record<string, string>,
+): string {
+  const file = ctx.filePath || ctx.path || '';
+  const shortFile = file ? shortenPath(file) : '';
+  const cmd = ctx.command || '';
+  switch (toolName.toLowerCase()) {
+    case 'bash':
+    case 'execute': {
+      if (cmd) {
+        const short = cmd.length > 40 ? cmd.slice(0, 37) + '...' : cmd;
+        return `Bash(${short})`;
+      }
+      return 'Bash command';
+    }
+    case 'write': return shortFile ? `Write to ${shortFile}` : 'file write';
+    case 'edit': return shortFile ? `Edit in ${shortFile}` : 'file edit';
+    case 'read': return shortFile ? `Read ${shortFile}` : 'file read';
+    default: {
+      const title = toolTitle !== toolName ? toolTitle.replace(/_/g, ' ') : '';
+      if (shortFile) return title ? `${title} (${shortFile})` : shortFile;
+      if (cmd) return title ? `${title}: ${cmd.slice(0, 30)}` : cmd.slice(0, 40);
+      return title || toolName;
+    }
+  }
+}
+
+function shortenPath(p: string): string {
+  const parts = p.split('/');
+  return parts.length > 3 ? '.../' + parts.slice(-2).join('/') : p;
 }
 
 /**
@@ -816,6 +879,10 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     const name = content.length > 50 ? content.slice(0, 47) + '...' : content;
     db.updateSessionName(sessionId, name);
   }
+
+  // Update last_message with user prompt
+  const lastMsg = content.length > 100 ? content.slice(0, 97) + '...' : content;
+  db.updateSessionLastMessage(sessionId, lastMsg);
 
   // On the first prompt, inject task context for agents that don't auto-load CLAUDE.md
   let promptContent = content;

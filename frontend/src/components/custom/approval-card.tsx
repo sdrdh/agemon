@@ -1,6 +1,27 @@
 import { useState } from 'react';
 import { Shield, Check, X, ShieldCheck, ShieldX } from 'lucide-react';
-import type { PendingApproval, ApprovalDecision } from '@agemon/shared';
+import type { PendingApproval, ApprovalDecision, ApprovalOption } from '@agemon/shared';
+
+/** Map option kind → icon, text color, and hover bg for the button. */
+function optionStyle(kind: string) {
+  switch (kind) {
+    case 'allow_once':
+      return { Icon: Check, text: 'text-foreground', hover: 'hover:bg-primary/10' };
+    case 'allow_always':
+      return { Icon: ShieldCheck, text: 'text-muted-foreground', hover: 'hover:bg-primary/10' };
+    case 'deny':
+      return { Icon: X, text: 'text-red-600 dark:text-red-400', hover: 'hover:bg-red-500/10' };
+    default:
+      return { Icon: Check, text: 'text-foreground', hover: 'hover:bg-primary/10' };
+  }
+}
+
+/** Fallback options when the server doesn't provide any (backward compat). */
+const FALLBACK_OPTIONS: ApprovalOption[] = [
+  { kind: 'allow_once', optionId: '', label: 'Allow' },
+  { kind: 'allow_always', optionId: '', label: 'Always Allow' },
+  { kind: 'deny', optionId: '', label: 'Deny' },
+];
 
 interface ApprovalCardProps {
   approval: PendingApproval;
@@ -40,6 +61,8 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
       ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
       : 'bg-red-50/20 dark:bg-red-950/10';
 
+  const options = approval.options?.length > 0 ? approval.options : FALLBACK_OPTIONS;
+
   // Resolved state — single compact line
   if (!isPending) {
     return (
@@ -65,7 +88,7 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
     );
   }
 
-  // Pending state — compact card with inline buttons
+  // Pending state — compact card with option list
   return (
     <div className={`my-1.5 rounded-md border ${borderColor} ${bgColor} overflow-hidden`}>
       {/* Tool info row */}
@@ -127,37 +150,23 @@ export function ApprovalCard({ approval, onDecision, connected }: ApprovalCardPr
         </div>
       )}
 
-      {/* Action buttons — compact row */}
-      <div className="flex border-t border-inherit">
-        <button
-          type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-foreground"
-          onClick={() => handleClick('allow_once')}
-          disabled={submitting || !connected}
-        >
-          <Check className="h-3 w-3" />
-          Allow
-        </button>
-        <span className="w-px bg-inherit border-l border-inherit" />
-        <button
-          type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-muted-foreground"
-          onClick={() => handleClick('allow_always')}
-          disabled={submitting || !connected}
-        >
-          <ShieldCheck className="h-3 w-3" />
-          Always
-        </button>
-        <span className="w-px bg-inherit border-l border-inherit" />
-        <button
-          type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-red-500/10 transition-colors text-red-600 dark:text-red-400"
-          onClick={() => handleClick('deny')}
-          disabled={submitting || !connected}
-        >
-          <X className="h-3 w-3" />
-          Deny
-        </button>
+      {/* Action options — vertical list */}
+      <div className="border-t border-inherit">
+        {options.map((opt) => {
+          const { Icon, text, hover } = optionStyle(opt.kind);
+          return (
+            <button
+              key={opt.optionId || opt.kind}
+              type="button"
+              className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs font-medium min-h-[44px] ${hover} transition-colors ${text} border-b border-inherit last:border-b-0`}
+              onClick={() => handleClick(opt.kind as ApprovalDecision)}
+              disabled={submitting || !connected}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span className="text-left">{opt.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
