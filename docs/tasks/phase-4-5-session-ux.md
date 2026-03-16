@@ -382,3 +382,33 @@
 **Dependencies:** Task 4.5 (session chat history), Task 4.7 (scroll-up pagination)
 
 ---
+
+### Task 4.36: Dashboard Active Session Cards
+
+**Priority:** P1
+**Estimated Time:** 2 days
+
+**Deliverables:**
+- [ ] Add a backend endpoint `GET /api/dashboard/active` returning two lists:
+  - `blocked`: all sessions with pending `awaiting_input` rows (no time filter), with the question and the last agent message before the question as context
+  - `idle`: sessions in `running` state with no pending input, last active within 6 hours, with their last agent message
+- [ ] Seed the dashboard from this endpoint on page load so cards appear correctly after a hard refresh — not just from live WS events
+- [ ] Show **blocked** cards with: preceding agent message as context, the question, and an inline textarea + send button to respond
+- [ ] Show **idle** cards with: last agent message and a textarea to send the next message
+- [ ] Both card types include **Stop** and **Archive** inline actions
+- [ ] Responding or stopping from a card removes it immediately (optimistic update); WS events keep remaining cards in sync
+- [ ] On WS reconnect, invalidate the dashboard query so cards re-seed from the endpoint rather than relying solely on ring buffer replay
+
+**Key Considerations:**
+- `awaiting_input.created_at` determines age of blocked sessions; idle sessions use `acp_events.created_at` of their last event for the 6-hour cutoff
+- The 6-hour idle filter prevents the dashboard filling with sessions from yesterday; blocked sessions are always shown because the user must explicitly resolve them
+- Dedup on `inputId` / `sessionId` between REST-seeded state and live WS events to avoid duplicates
+- `full_sync_required` WS event currently only invalidates React Query — it must also trigger a re-fetch of the dashboard endpoint to recover `pendingInputs` Zustand state after ring buffer overflow
+- Archiving a session marks it archived in DB and removes the card; stopping sends stop signal and moves card to idle (then ages out after 6h)
+- The existing `QuestionInputCard` and `send_input` WS event handle the respond flow — extend rather than rebuild
+
+**Affected Areas:** backend (new dashboard route, `db/inputs.ts`, `db/events.ts`), frontend (dashboard route, store shape, ws-provider full_sync handling, new/extended card components)
+
+**Dependencies:** Task 4.5, existing awaiting_input WS flow
+
+---
