@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
@@ -7,10 +8,22 @@ import type { AgentType } from '@agemon/shared';
 
 export function useTaskDetail(taskId: string) {
   const qc = useQueryClient();
+  const [showArchived, setShowArchived] = useState(false);
 
   // ── Data queries ──────────────────────────────────────────────────────
+  // Always fetch all sessions (including archived) so we can show the archived count/toggle.
+  // Filtering is done client-side via showArchived.
   const { data: task, isLoading, error } = useQuery(taskDetailQuery(taskId));
-  const { data: sessions = [] } = useQuery(taskSessionsQuery(taskId));
+  const { data: allSessions = [] } = useQuery(taskSessionsQuery(taskId, true));
+
+  const sessions = useMemo(
+    () => showArchived ? allSessions : allSessions.filter((s) => !s.archived),
+    [allSessions, showArchived],
+  );
+  const archivedCount = useMemo(
+    () => allSessions.filter((s) => s.archived).length,
+    [allSessions],
+  );
 
   // ── Mutations ─────────────────────────────────────────────────────────
   const createSessionMutation = useMutation({
@@ -101,6 +114,9 @@ export function useTaskDetail(taskId: string) {
     hasSessions,
     hasActiveSessions,
     actionLoading,
+    showArchived,
+    setShowArchived,
+    archivedCount,
     createSessionMutation,
     stopMutation,
     resumeMutation,

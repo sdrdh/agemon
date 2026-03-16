@@ -24,15 +24,18 @@ export function SkillsManager({
   const [previewing, setPreviewing] = useState(false);
   const [previewSkills, setPreviewSkills] = useState<SkillPreview[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const [installing, setInstalling] = useState(false);
+
+  // Stable primitive for useCallback dep — avoids re-creating `load` on every render
+  // when scope is an object with a new reference.
+  const taskId = scope === 'global' ? null : scope.taskId;
 
   const load = useCallback(async () => {
     try {
-      if (scope === 'global') {
+      if (taskId === null) {
         const result = await api.listGlobalSkills();
         setSkills(result.skills);
       } else {
-        const result = await api.listTaskSkills(scope.taskId);
+        const result = await api.listTaskSkills(taskId);
         setSkills(result.task);
         setGlobalSkills(result.global);
       }
@@ -41,7 +44,7 @@ export function SkillsManager({
     } finally {
       setLoading(false);
     }
-  }, [scope]);
+  }, [taskId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -53,7 +56,6 @@ export function SkillsManager({
     setSelectedSkills(new Set());
     setError('');
     setPreviewing(false);
-    setInstalling(false);
   }
 
   async function handlePreview() {
@@ -96,16 +98,15 @@ export function SkillsManager({
 
   async function handleInstall() {
     if (selectedSkills.size === 0) return;
-    setInstalling(true);
     setAddStep('installing');
     setError('');
     try {
       const skillNames = selectedSkills.size === previewSkills.length
         ? undefined  // install all — no need to filter
         : [...selectedSkills];
-      const result = scope === 'global'
+      const result = taskId === null
         ? await api.installGlobalSkill(source.trim(), skillNames)
-        : await api.installTaskSkill(scope.taskId, source.trim(), skillNames);
+        : await api.installTaskSkill(taskId, source.trim(), skillNames);
       if (!result.ok) {
         setError(result.error ?? 'Installation failed');
         setAddStep('preview');
@@ -116,8 +117,6 @@ export function SkillsManager({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Installation failed');
       setAddStep('preview');
-    } finally {
-      setInstalling(false);
     }
   }
 
@@ -125,10 +124,10 @@ export function SkillsManager({
     setDeletingName(skill.name);
     setError('');
     try {
-      if (scope === 'global') {
+      if (taskId === null) {
         await api.removeGlobalSkill(skill.name);
       } else {
-        await api.removeTaskSkill(scope.taskId, skill.name);
+        await api.removeTaskSkill(taskId, skill.name);
       }
       await load();
     } catch (err) {

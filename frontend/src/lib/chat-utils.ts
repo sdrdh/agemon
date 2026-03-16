@@ -18,7 +18,12 @@ export interface ToolCallItem {
   sessionId: string;
 }
 
-export type ChatItem = ChatBubbleItem | ActivityGroupItem | ToolCallItem;
+export interface ApprovalGroupItem {
+  kind: 'approval-group';
+  approvalIds: string[];
+}
+
+export type ChatItem = ChatBubbleItem | ActivityGroupItem | ToolCallItem | ApprovalGroupItem;
 
 // ─── Tool call types ──────────────────────────────────────────────────
 
@@ -99,6 +104,12 @@ export function isCollapsibleActivity(msg: ChatMessage): boolean {
   return false;
 }
 
+/** Extract approvalId from an approval_request message content ("approvalId:status:toolName"). */
+function extractApprovalId(content: string): string {
+  const firstColon = content.indexOf(':');
+  return firstColon >= 0 ? content.slice(0, firstColon) : content;
+}
+
 export function groupMessages(messages: ChatMessage[], sessionId?: string): ChatItem[] {
   const items: ChatItem[] = [];
   let currentGroup: ChatMessage[] = [];
@@ -107,6 +118,21 @@ export function groupMessages(messages: ChatMessage[], sessionId?: string): Chat
   let groupThoughts: ChatMessage[] = [];
   // Maps each message index in currentGroup to its toolCallId (or null)
   let groupMsgToolIds: (string | null)[] = [];
+  // Consecutive approval_request accumulator
+  let approvalIds: string[] = [];
+  let approvalMsgs: ChatMessage[] = [];
+
+  function flushApprovalGroup() {
+    if (approvalIds.length === 0) return;
+    if (approvalIds.length === 1) {
+      // Single approval → render as regular bubble
+      items.push({ kind: 'bubble', message: approvalMsgs[0] });
+    } else {
+      items.push({ kind: 'approval-group', approvalIds: [...approvalIds] });
+    }
+    approvalIds = [];
+    approvalMsgs = [];
+  }
 
   function flushGroup() {
     if (currentGroup.length === 0) return;
@@ -135,6 +161,17 @@ export function groupMessages(messages: ChatMessage[], sessionId?: string): Chat
   }
 
   for (const msg of messages) {
+    if (msg.eventType === 'approval_request') {
+      // Flush activity group before accumulating approvals
+      flushGroup();
+      approvalIds.push(extractApprovalId(msg.content));
+      approvalMsgs.push(msg);
+      continue;
+    }
+
+    // Non-approval message: flush any accumulated approvals
+    flushApprovalGroup();
+
     if (isCollapsibleActivity(msg)) {
       currentGroup.push(msg);
       // Track toolCallId in a single pass (no separate extractToolCallIds)
@@ -154,7 +191,10 @@ export function groupMessages(messages: ChatMessage[], sessionId?: string): Chat
       items.push({ kind: 'bubble', message: msg });
     }
   }
+
+  // Flush remaining
   flushGroup();
+  flushApprovalGroup();
 
   return items;
 }

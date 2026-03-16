@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
+import { Plus, RotateCcw, CheckCircle2, Square, Archive, Eye, EyeOff } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType, AgentSession, SessionUsage } from '@agemon/shared';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,9 @@ export function SessionListPanel({
   onResume,
   onMarkDone,
   onArchiveSession,
+  showArchived,
+  onToggleArchived,
+  archivedCount = 0,
   newDisabled,
   isDone,
   hasActiveSessions,
@@ -58,6 +61,9 @@ export function SessionListPanel({
   onResume: (id: string) => void;
   onMarkDone: () => void;
   onArchiveSession?: (id: string, archived: boolean) => void;
+  showArchived?: boolean;
+  onToggleArchived?: () => void;
+  archivedCount?: number;
   newDisabled: boolean;
   isDone: boolean;
   hasActiveSessions: boolean;
@@ -93,7 +99,9 @@ export function SessionListPanel({
           sessions.forEach((s, i) => { labelMap.set(s.id, sessionLabels[i]); });
 
           const activeSessions = sessions.filter(s => isSessionActive(s.state));
-          const previousSessions = sessions.filter(s => isSessionTerminal(s.state));
+          const nonArchivedPrevious = sessions.filter(s => isSessionTerminal(s.state) && !s.archived);
+          const archivedSessions = sessions.filter(s => s.archived);
+          const previousSessions = nonArchivedPrevious;
 
           const renderSession = (session: AgentSession) => {
             const label = labelMap.get(session.id) ?? '';
@@ -224,6 +232,29 @@ export function SessionListPanel({
                 <>
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Previous</div>
                   {previousSessions.map(renderSession)}
+                </>
+              )}
+              {/* Archived toggle */}
+              {archivedCount > 0 && onToggleArchived && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onToggleArchived}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                  >
+                    {showArchived ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {showArchived ? 'Hide archived' : `Show ${archivedCount} archived`}
+                  </button>
+                  {showArchived && archivedSessions.length > 0 && (
+                    <>
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Archived</div>
+                      {archivedSessions.map((s) => (
+                        <div key={s.id} className="opacity-50">
+                          {renderSession(s)}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
             </>

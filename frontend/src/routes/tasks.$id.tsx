@@ -33,6 +33,9 @@ export default function TaskDetailView() {
     hasSessions,
     hasActiveSessions,
     actionLoading,
+    showArchived,
+    setShowArchived,
+    archivedCount,
     createSessionMutation,
     stopMutation,
     resumeMutation,
@@ -148,6 +151,9 @@ export default function TaskDetailView() {
             onResume={(sid) => resumeMutation.mutate(sid)}
             onMarkDone={() => markDoneMutation.mutate()}
             onArchiveSession={(sid, archived) => archiveSessionMutation.mutate({ sessionId: sid, archived })}
+            showArchived={showArchived}
+            onToggleArchived={() => setShowArchived((v) => !v)}
+            archivedCount={archivedCount}
             newDisabled={isDone || actionLoading}
             isDone={isDone}
             hasActiveSessions={hasActiveSessions}

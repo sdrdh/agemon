@@ -8,6 +8,7 @@ import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errors';
+import { isSessionActive } from '@/lib/chat-utils';
 import { SummaryStrip } from '@/components/custom/dashboard/summary-strip';
 import { NeedsInputSection } from '@/components/custom/dashboard/needs-input-section';
 import { RecentlyCompletedSection } from '@/components/custom/dashboard/recently-completed-section';
@@ -23,11 +24,7 @@ export default function DashboardPage() {
   const { data: dashboardActive } = useQuery(dashboardActiveQuery());
 
   const allApprovals = useWsStore((s) => s.pendingApprovals);
-  const pendingApprovals = useMemo(
-    () => allApprovals.filter((a) => a.status === 'pending'),
-    [allApprovals],
-  );
-  const pendingInputs = useWsStore((s) => s.pendingInputs);
+  const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const connected = useWsStore((s) => s.connected);
 
   // Track dismissed completed sessions (client-side, resets on page reload)
@@ -44,6 +41,24 @@ export default function DashboardPage() {
     for (const s of sessions ?? []) map.set(s.id, s);
     return map;
   }, [sessions]);
+
+  // Filter approvals and inputs to only those with active sessions
+  const pendingApprovals = useMemo(
+    () => allApprovals.filter((a) => {
+      if (a.status !== 'pending') return false;
+      const session = sessionMap.get(a.sessionId);
+      return session && isSessionActive(session.state);
+    }),
+    [allApprovals, sessionMap],
+  );
+
+  const pendingInputs = useMemo(
+    () => allPendingInputs.filter((p) => {
+      const session = sessionMap.get(p.sessionId);
+      return session && isSessionActive(session.state);
+    }),
+    [allPendingInputs, sessionMap],
+  );
 
   const runningSessions = useMemo(
     () => (sessions ?? []).filter((s) => s.state === 'running'),

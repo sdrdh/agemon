@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { ChevronsDown, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
+import { ApprovalGroupCard } from '@/components/custom/approval-group-card';
 import { ChatBubble } from '@/components/custom/chat-bubble';
 import { ToolCardShell } from '@/components/custom/tool-cards/tool-card-shell';
 import { isSessionActive } from '@/lib/chat-utils';
@@ -147,6 +148,16 @@ export function ChatMessagesArea({
     if (item.kind === 'tool-call') {
       return <ToolCallCardItem toolCallId={item.toolCallId} sessionId={item.sessionId} />;
     }
+    if (item.kind === 'approval-group') {
+      return (
+        <ApprovalGroupCard
+          approvalIds={item.approvalIds}
+          approvalLookup={approvalLookup}
+          onApprovalDecision={onApprovalDecision}
+          connected={connected}
+        />
+      );
+    }
     return (
       <ChatBubble
         message={item.message}
@@ -161,6 +172,7 @@ export function ChatMessagesArea({
   const computeItemKey = useCallback((_index: number, item: ChatItem) => {
     if (item.kind === 'activity-group') return `ag-${item.messages[0].id}`;
     if (item.kind === 'tool-call') return `tc-${item.toolCallId}`;
+    if (item.kind === 'approval-group') return `apg-${item.approvalIds[0]}`;
     return item.message.id;
   }, []);
 
