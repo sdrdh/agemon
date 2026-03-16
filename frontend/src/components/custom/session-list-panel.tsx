@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Plus, RotateCcw, CheckCircle2, Square, Archive } from 'lucide-react';
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType, AgentSession, SessionUsage } from '@agemon/shared';
@@ -11,6 +11,142 @@ function contextFillPct(usage: SessionUsage): number {
   const total = usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens;
   return Math.min(100, Math.round((total / usage.contextWindow) * 100));
 }
+
+const SessionRow = memo(function SessionRow({
+  session,
+  label,
+  isActiveItem,
+  hasUnread,
+  needsAttention,
+  canStop,
+  canResume,
+  isDone,
+  actionLoading,
+  ctxPct,
+  ctxBg,
+  onSelect,
+  onStop,
+  onResume,
+  onArchiveSession,
+}: {
+  session: AgentSession;
+  label: string;
+  isActiveItem: boolean;
+  hasUnread: boolean;
+  needsAttention: boolean;
+  canStop: boolean;
+  canResume: boolean;
+  isDone: boolean;
+  actionLoading: boolean;
+  ctxPct: number | null;
+  ctxBg: string | null;
+  onSelect: (id: string) => void;
+  onStop: (id: string) => void;
+  onResume: (id: string) => void;
+  onArchiveSession?: (id: string, archived: boolean) => void;
+}) {
+  const dotColor = SESSION_STATE_DOT[session.state];
+  const stateLabel = SESSION_STATE_LABEL[session.state];
+
+  return (
+    <button
+      key={session.id}
+      type="button"
+      onClick={() => onSelect(session.id)}
+      className={`relative w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left transition-colors border-b overflow-hidden ${
+        isActiveItem
+          ? 'border-l-2 border-l-primary'
+          : 'hover:bg-accent/50 border-l-2 border-l-transparent'
+      }`}
+    >
+      {/* Context fill background */}
+      {ctxPct !== null && (
+        <span
+          aria-hidden="true"
+          className={`absolute inset-y-0 left-0 transition-all ${ctxBg ?? ''}`}
+          style={{ width: `${ctxPct}%` }}
+        />
+      )}
+      <span className="relative shrink-0">
+        <AgentIcon agentType={session.agent_type} className={`h-5 w-5 ${AGENT_COLORS[session.agent_type] ?? 'text-muted-foreground'}`} />
+        <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ${dotColor} ring-1 ring-background`} />
+      </span>
+
+      <div className="relative flex-1 min-w-0">
+        <div className="text-sm font-medium truncate">{label}</div>
+        <div className="text-xs text-muted-foreground">
+          {stateLabel}
+          {ctxPct !== null && (
+            <span className={`ml-1.5 tabular-nums ${ctxPct >= 70 ? 'text-red-500 font-medium' : ''}`}>
+              · {ctxPct}% ctx
+            </span>
+          )}
+        </div>
+      </div>
+
+      {needsAttention && (
+        <span className="flex h-2.5 w-2.5 shrink-0" role="status">
+          <span className="sr-only">Awaiting input</span>
+          <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-amber-400/75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+        </span>
+      )}
+      {hasUnread && !needsAttention && (
+        <span className="flex h-2 w-2 shrink-0" role="status">
+          <span className="sr-only">New activity</span>
+          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary/60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+        </span>
+      )}
+
+      {canStop && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0 shrink-0 hover:bg-accent/50"
+          aria-label={`Stop ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onStop(session.id);
+          }}
+          disabled={actionLoading}
+        >
+          <Square className="h-3.5 w-3.5 fill-current" style={{ color: 'var(--stop-color)' }} />
+        </Button>
+      )}
+      {canResume && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0 shrink-0 text-primary hover:bg-primary/10"
+          aria-label={`Resume ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onResume(session.id);
+          }}
+          disabled={actionLoading}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {isSessionTerminal(session.state) && onArchiveSession && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className={`h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50 ${session.archived ? 'opacity-50' : ''}`}
+          aria-label={session.archived ? `Unarchive ${label}` : `Archive ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchiveSession(session.id, !session.archived);
+          }}
+          disabled={actionLoading}
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </button>
+  );
+});
 
 function AgentTypeSelector({ value, onValueChange }: { value: AgentType; onValueChange: (v: AgentType) => void }) {
   return (
@@ -95,12 +231,10 @@ export function SessionListPanel({
           const activeSessions = sessions.filter(s => isSessionActive(s.state));
           const previousSessions = sessions.filter(s => isSessionTerminal(s.state));
 
-          const renderSession = (session: AgentSession) => {
+          const renderRow = (session: AgentSession) => {
             const label = labelMap.get(session.id) ?? '';
             const isActiveItem = session.id === activeSessionId;
-            const dotColor = SESSION_STATE_DOT[session.state];
-            const stateLabel = SESSION_STATE_LABEL[session.state];
-            const hasUnread = !isActiveItem && unreadSessions[session.id];
+            const hasUnread = !isActiveItem && !!unreadSessions[session.id];
             const needsAttention = !isActiveItem && pendingInputSessionIds.has(session.id);
             const canStop = isSessionActive(session.state);
             const canResume = isSessionTerminal(session.state) && !isDone;
@@ -111,102 +245,24 @@ export function SessionListPanel({
               : null;
 
             return (
-              <button
+              <SessionRow
                 key={session.id}
-                type="button"
-                onClick={() => onSelect(session.id)}
-                className={`relative w-full flex items-center gap-3 px-4 py-3 min-h-[56px] text-left transition-colors border-b overflow-hidden ${
-                  isActiveItem
-                    ? 'border-l-2 border-l-primary'
-                    : 'hover:bg-accent/50 border-l-2 border-l-transparent'
-                }`}
-              >
-                {/* Context fill background */}
-                {ctxPct !== null && (
-                  <span
-                    aria-hidden="true"
-                    className={`absolute inset-y-0 left-0 transition-all ${ctxBg ?? ''}`}
-                    style={{ width: `${ctxPct}%` }}
-                  />
-                )}
-                <span className="relative shrink-0">
-                  <AgentIcon agentType={session.agent_type} className={`h-5 w-5 ${AGENT_COLORS[session.agent_type] ?? 'text-muted-foreground'}`} />
-                  <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ${dotColor} ring-1 ring-background`} />
-                </span>
-
-                <div className="relative flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{label}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {stateLabel}
-                    {ctxPct !== null && (
-                      <span className={`ml-1.5 tabular-nums ${ctxPct >= 70 ? 'text-red-500 font-medium' : ''}`}>
-                        · {ctxPct}% ctx
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {needsAttention && (
-                  <span className="flex h-2.5 w-2.5 shrink-0" role="status">
-                    <span className="sr-only">Awaiting input</span>
-                    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-amber-400/75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                  </span>
-                )}
-                {hasUnread && !needsAttention && (
-                  <span className="flex h-2 w-2 shrink-0" role="status">
-                    <span className="sr-only">New activity</span>
-                    <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary/60" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                  </span>
-                )}
-
-                {canStop && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 shrink-0 hover:bg-accent/50"
-                    aria-label={`Stop ${label}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onStop(session.id);
-                    }}
-                    disabled={actionLoading}
-                  >
-                    <Square className="h-3.5 w-3.5 fill-current" style={{ color: 'var(--stop-color)' }} />
-                  </Button>
-                )}
-                {canResume && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 shrink-0 text-primary hover:bg-primary/10"
-                    aria-label={`Resume ${label}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onResume(session.id);
-                    }}
-                    disabled={actionLoading}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                {isSessionTerminal(session.state) && onArchiveSession && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className={`h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent/50 ${session.archived ? 'opacity-50' : ''}`}
-                    aria-label={session.archived ? `Unarchive ${label}` : `Archive ${label}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onArchiveSession(session.id, !session.archived);
-                    }}
-                    disabled={actionLoading}
-                  >
-                    <Archive className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </button>
+                session={session}
+                label={label}
+                isActiveItem={isActiveItem}
+                hasUnread={hasUnread}
+                needsAttention={needsAttention}
+                canStop={canStop}
+                canResume={canResume}
+                isDone={isDone}
+                actionLoading={actionLoading}
+                ctxPct={ctxPct}
+                ctxBg={ctxBg}
+                onSelect={onSelect}
+                onStop={onStop}
+                onResume={onResume}
+                onArchiveSession={onArchiveSession}
+              />
             );
           };
 
@@ -215,13 +271,13 @@ export function SessionListPanel({
               {activeSessions.length > 0 && (
                 <>
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Active</div>
-                  {activeSessions.map(renderSession)}
+                  {activeSessions.map(renderRow)}
                 </>
               )}
               {previousSessions.length > 0 && (
                 <>
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-2">Previous</div>
-                  {previousSessions.map(renderSession)}
+                  {previousSessions.map(renderRow)}
                 </>
               )}
             </>

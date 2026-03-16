@@ -214,6 +214,13 @@ export function SessionChatPanel({
     if (nearBottom) setShowNewMessages(false);
   }, []);
 
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
   // Auto-scroll only when near bottom
   useEffect(() => {
     if (isNearBottomRef.current) {
@@ -221,7 +228,7 @@ export function SessionChatPanel({
     } else {
       setShowNewMessages(true);
     }
-  }, [groupedItems.length, agentActivity, chatEndRef]);
+  }, [groupedItems.length, chatEndRef]);
 
   const scrollToBottom = useCallback(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -277,7 +284,6 @@ export function SessionChatPanel({
       <div className="relative flex-1 overflow-hidden">
         <div
           ref={scrollContainerRef}
-          onScroll={handleScroll}
           className="h-full overflow-y-auto px-4 py-3"
         >
           {groupedItems.length === 0 && (
@@ -294,7 +300,7 @@ export function SessionChatPanel({
 
           {groupedItems.map((item, idx) => {
             if (item.kind === 'activity-group') {
-              return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} />;
+              return <ActivityGroup key={`ag-${item.messages[0].id}`} messages={item.messages} isLast={idx === groupedItems.length - 1} approvalLookup={approvalLookup} onApprovalDecision={onApprovalDecision} />;
             }
             return (
               <ChatBubble

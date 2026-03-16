@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatMessage, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, PendingApproval } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -105,6 +105,10 @@ export const api = {
     request<void>(`/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
   testMcpServer: (body: TestMcpServerBody) =>
     request<TestMcpServerResult>('/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
+
+  // Approvals
+  getTaskApprovals: (taskId: string) =>
+    request<PendingApproval[]>(`/tasks/${taskId}/approvals?all=1`),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

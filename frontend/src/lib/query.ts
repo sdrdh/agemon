@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import type { Task, TasksByProject, ACPEvent, ChatMessage, AgentSession } from '@agemon/shared';
+import type { Task, TasksByProject, ACPEvent, ChatMessage, AgentSession, PendingApproval } from '@agemon/shared';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +20,7 @@ export const taskKeys = {
   lists: (includeArchived?: boolean) => [...taskKeys.listsPrefix(), { includeArchived }] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
   events: (id: string) => [...taskKeys.all, 'events', id] as const,
+  approvals: (id: string) => [...taskKeys.all, 'approvals', id] as const,
 };
 
 export function tasksListQuery(includeArchived = false) {
@@ -72,6 +73,14 @@ export function taskSessionsQuery(taskId: string, includeArchived = false) {
   return {
     queryKey: sessionKeys.forTask(taskId, includeArchived),
     queryFn: (): Promise<AgentSession[]> => api.getTaskSessions(taskId, includeArchived),
+    enabled: !!taskId,
+  };
+}
+
+export function taskApprovalsQuery(taskId: string) {
+  return {
+    queryKey: taskKeys.approvals(taskId),
+    queryFn: (): Promise<PendingApproval[]> => api.getTaskApprovals(taskId),
     enabled: !!taskId,
   };
 }

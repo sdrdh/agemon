@@ -82,6 +82,7 @@ export function isSessionTerminal(state: AgentSessionState): boolean {
 // ─── Grouping logic ────────────────────────────────────────────────────────
 
 export function isCollapsibleActivity(msg: ChatMessage): boolean {
+  if (msg.eventType === 'approval_request') return true;
   if (msg.role !== 'agent') return false;
   if (msg.eventType === 'thought') return true;
   if (msg.eventType === 'action') {

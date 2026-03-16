@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
-import { ChevronRight, Check, X, Loader2, Brain, Wrench, Zap } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { ChevronRight, Check, X, Loader2, Brain, Wrench, Zap, Shield } from 'lucide-react';
 import { parseActivityMessages, shortenToolLabel } from '@/lib/chat-utils';
+import { ApprovalCard } from '@/components/custom/approval-card';
 import type { ToolCallEntry } from '@/lib/chat-utils';
-import type { ChatMessage } from '@agemon/shared';
+import type { ChatMessage, PendingApproval, ApprovalDecision } from '@agemon/shared';
+
+const PREVIEW_COUNT = 2;
 
 /** Render a one-line detail string for a tool call based on its kind and args. */
 function toolDetail(tc: ToolCallEntry): string | null {
@@ -26,7 +29,6 @@ function toolDetail(tc: ToolCallEntry): string | null {
     case 'Agent':
       return a.preview ? truncate(a.preview, 60) : null;
     default:
-      // Generic: show filePath or command if available
       return a.filePath ? shortPath(a.filePath) : a.command ? truncate(a.command, 60) : null;
   }
 }
@@ -40,7 +42,17 @@ function shortPath(p: string): string {
   return parts.length > 2 ? '\u2026/' + parts.slice(-2).join('/') : p;
 }
 
-export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; isLast: boolean }) {
+export function ActivityGroup({
+  messages,
+  isLast,
+  approvalLookup,
+  onApprovalDecision,
+}: {
+  messages: ChatMessage[];
+  isLast: boolean;
+  approvalLookup?: Map<string, PendingApproval>;
+  onApprovalDecision?: (approvalId: string, decision: ApprovalDecision) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { toolCalls, thoughts } = useMemo(() => {
     const result = parseActivityMessages(messages);
@@ -52,8 +64,33 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
     return result;
   }, [messages, isLast]);
 
-  const toolCount = toolCalls.filter((tc) => tc.kind === 'tool').length;
-  const skillCount = toolCalls.filter((tc) => tc.kind === 'skill').length;
+  // Separate approval messages from regular thoughts
+  const approvalMessages = useMemo(
+    () => thoughts.filter(m => m.eventType === 'approval_request'),
+    [thoughts],
+  );
+  const regularThoughts = useMemo(
+    () => thoughts.filter(m => m.eventType !== 'approval_request'),
+    [thoughts],
+  );
+
+  // Force-expand when there's a pending approval that needs action
+  const hasPendingApproval = useMemo(() => {
+    if (!approvalLookup || approvalMessages.length === 0) return false;
+    return approvalMessages.some(m => {
+      const firstColon = m.content.indexOf(':');
+      const approvalId = firstColon >= 0 ? m.content.slice(0, firstColon) : m.content;
+      return approvalLookup.get(approvalId)?.status === 'pending';
+    });
+  }, [approvalMessages, approvalLookup]);
+
+  useEffect(() => {
+    if (hasPendingApproval) setExpanded(true);
+  }, [hasPendingApproval]);
+
+  // expanded OR force-open for pending approvals
+  const isExpanded = expanded || hasPendingApproval;
+
   const completedCount = toolCalls.filter((tc) => tc.status === 'completed').length;
   const failedCount = toolCalls.filter((tc) => tc.status === 'failed').length;
   const pendingCount = toolCalls.filter((tc) => tc.status === 'pending').length;
@@ -72,6 +109,10 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
 
   const borderColor = failedCount > 0 ? 'border-red-400/50' : 'border-muted';
 
+  // Show last PREVIEW_COUNT tool calls in the header; hide the rest behind expand
+  const previewCalls = toolCalls.slice(-PREVIEW_COUNT);
+  const hiddenCount = Math.max(0, toolCalls.length - PREVIEW_COUNT);
+
   return (
     <div
       className={`border-l-2 ${borderColor} pl-3 my-1 cursor-pointer select-none`}
@@ -86,31 +127,42 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
       }}
     >
       {/* Collapsed summary with rotating chevron */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground min-h-[44px]">
+      <div className="flex items-center gap-1.5 text-sm text-muted-foreground min-h-[44px] min-w-0">
         <ChevronRight
-          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
         />
-        <div className="flex items-center gap-2 flex-wrap">
-          {toolCount > 0 && (
-            <span className="flex items-center gap-1">
-              <Wrench className="h-3 w-3 shrink-0" />
-              <span>{toolCount} tool{toolCount !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          {/* Preview of last 1-2 tool calls */}
+          {previewCalls.map((tc) => (
+            <span key={tc.id} className="flex items-center gap-1 min-w-0">
+              {tc.kind === 'skill' ? (
+                <Zap className="h-3 w-3 text-amber-500 shrink-0" />
+              ) : (
+                <Wrench className="h-3 w-3 shrink-0 opacity-50" />
+              )}
+              {tc.status === 'completed' && <Check className="h-3 w-3 text-emerald-500 shrink-0" />}
+              {tc.status === 'failed' && <X className="h-3 w-3 text-red-500 shrink-0" />}
+              {tc.status === 'pending' && <Loader2 className="h-3 w-3 animate-spin shrink-0" />}
+              <span className="font-mono text-xs truncate max-w-[100px]">{shortenToolLabel(tc.label)}</span>
             </span>
+          ))}
+          {hiddenCount > 0 && (
+            <span className="text-xs text-muted-foreground/60">+{hiddenCount}</span>
           )}
-          {skillCount > 0 && (
-            <span className="flex items-center gap-1 text-amber-500">
-              <Zap className="h-3 w-3 shrink-0" />
-              <span>{skillCount} skill{skillCount !== 1 ? 's' : ''}</span>
-            </span>
-          )}
-          {thoughts.length > 0 && (
+          {regularThoughts.length > 0 && (
             <span className="flex items-center gap-1">
               <Brain className="h-3 w-3 shrink-0" />
-              <span>{thoughts.length} thought{thoughts.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs">{regularThoughts.length} thought{regularThoughts.length !== 1 ? 's' : ''}</span>
+            </span>
+          )}
+          {approvalMessages.length > 0 && (
+            <span className="flex items-center gap-1 text-amber-500">
+              <Shield className="h-3 w-3 shrink-0" />
+              <span className="text-xs">{approvalMessages.length} approval{approvalMessages.length !== 1 ? 's' : ''}</span>
             </span>
           )}
           {statusSuffix && (
-            <span className={failedCount > 0 ? 'text-red-400' : 'text-emerald-500'}>{statusSuffix}</span>
+            <span className={`text-xs ${failedCount > 0 ? 'text-red-400' : 'text-emerald-500'}`}>{statusSuffix}</span>
           )}
         </div>
       </div>
@@ -118,7 +170,7 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
       {/* Animated expanded detail view using CSS grid */}
       <div
         className="grid transition-[grid-template-rows] duration-200 ease-out"
-        style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
+        style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">
           <div className="space-y-0.5 pb-2" onClick={(e) => e.stopPropagation()}>
@@ -141,9 +193,32 @@ export function ActivityGroup({ messages, isLast }: { messages: ChatMessage[]; i
                 </div>
               );
             })}
-            {thoughts.length > 0 && (
+            {/* Approval cards */}
+            {approvalMessages.length > 0 && (
+              <div className="mt-1 space-y-1">
+                {approvalMessages.map((m) => {
+                  const firstColon = m.content.indexOf(':');
+                  const secondColon = firstColon >= 0 ? m.content.indexOf(':', firstColon + 1) : -1;
+                  const approvalId = firstColon >= 0 ? m.content.slice(0, firstColon) : m.content;
+                  const toolName = secondColon >= 0 ? m.content.slice(secondColon + 1) : undefined;
+                  if (approvalLookup && onApprovalDecision) {
+                    const approval = approvalLookup.get(approvalId);
+                    if (approval) {
+                      return <ApprovalCard key={m.id} approval={approval} onDecision={onApprovalDecision} />;
+                    }
+                  }
+                  return (
+                    <div key={m.id} className="flex justify-center my-1">
+                      <span className="text-xs text-muted-foreground italic">{toolName ?? 'Tool approval'} — loading…</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Thoughts */}
+            {regularThoughts.length > 0 && (
               <div className="mt-1.5 space-y-1 border-t border-muted/50 pt-1.5">
-                {thoughts.map((m) => (
+                {regularThoughts.map((m) => (
                   <div key={m.id} className="flex items-start gap-1.5 text-xs text-muted-foreground/70 break-words">
                     <Brain className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-50" />
                     <span className="whitespace-pre-wrap">{m.content}</span>

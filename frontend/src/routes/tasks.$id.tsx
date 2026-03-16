@@ -13,7 +13,7 @@ import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { sendClientEvent } from '@/lib/ws';
-import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, sessionKeys } from '@/lib/query';
+import { taskDetailQuery, taskKeys, taskSessionsQuery, sessionChatQuery, sessionKeys, taskApprovalsQuery } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 import { friendlyError } from '@/lib/errors';
 import type { ChatMessage, ApprovalDecision, PendingApproval, AgentType } from '@agemon/shared';
@@ -120,17 +120,10 @@ export default function TaskDetailView() {
     [allPendingApprovals, selectedSessionId],
   );
 
+  const { data: fetchedApprovals } = useQuery(taskApprovalsQuery(taskId));
   useEffect(() => {
-    if (!taskId) return;
-    fetch(`/api/tasks/${taskId}/approvals?all=1`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('agemon_key') ?? ''}` },
-    })
-      .then(r => r.ok ? r.json() : [])
-      .then((approvals: PendingApproval[]) => {
-        mergePendingApprovals(taskId, approvals);
-      })
-      .catch(() => { /* ignore */ });
-  }, [taskId, mergePendingApprovals]);
+    if (fetchedApprovals) mergePendingApprovals(taskId, fetchedApprovals);
+  }, [fetchedApprovals, taskId, mergePendingApprovals]);
 
   // ── Clear unread for the active session ─────────────────────────────
   useEffect(() => {

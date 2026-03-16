@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Shield, Archive, ArchiveRestore } from 'lucide-react';
 import type { Task } from '@agemon/shared';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,7 +11,7 @@ interface TaskCardProps {
   onArchive?: (archived: boolean) => void;
 }
 
-export function TaskCard({ task, onClick, pendingApprovalCount = 0, onArchive }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, onClick, pendingApprovalCount = 0, onArchive }: TaskCardProps) {
   return (
     <Card
       role="button"
@@ -52,4 +53,4 @@ export function TaskCard({ task, onClick, pendingApprovalCount = 0, onArchive }:
       </CardHeader>
     </Card>
   );
-}
+});

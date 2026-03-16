@@ -18,13 +18,18 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
     onDecision(approval.id, decision);
   };
 
-  const { context, toolName, toolTitle } = approval;
+  const { context, toolName, toolTitle, options } = approval;
   const filePath = context.filePath || context.path || '';
   const command = context.command || '';
   const hasOldNew = context.oldString || context.newString;
 
   // Compact context line: "fetch · exe.dev platform 2026" or "Edit · src/App.tsx"
   const contextLine = filePath || (toolTitle !== toolName ? toolTitle : '');
+
+  // Label for "allow always" — use the ACP-provided label so it shows the exact scope
+  // e.g. "Allow always for git *" or "Trust all Bash commands"
+  const allowAlwaysOption = options.find(o => o.kind === 'allow_always');
+  const allowAlwaysLabel = allowAlwaysOption?.label ?? `Allow always · ${toolName}`;
 
   const borderColor = isPending
     ? 'border-amber-400/50'
@@ -60,7 +65,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
     );
   }
 
-  // Pending state — compact card with inline buttons
+  // Pending state — card with vertical action buttons
   return (
     <div className={`my-1.5 rounded-md border ${borderColor} ${bgColor} overflow-hidden`}>
       {/* Tool info row */}
@@ -113,35 +118,33 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps) {
         </div>
       )}
 
-      {/* Action buttons — compact row */}
-      <div className="flex border-t border-inherit">
+      {/* Action buttons — vertical stack */}
+      <div className="flex flex-col border-t border-inherit divide-y divide-inherit">
         <button
           type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-foreground"
+          className="flex items-center gap-2 px-3 py-2.5 text-xs font-medium min-h-[44px] hover:bg-primary/10 transition-colors text-foreground text-left"
           onClick={() => handleClick('allow_once')}
           disabled={submitting}
         >
-          <Check className="h-3 w-3" />
-          Allow
+          <Check className="h-3.5 w-3.5 shrink-0" />
+          Allow once
         </button>
-        <span className="w-px bg-inherit border-l border-inherit" />
         <button
           type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-primary/10 transition-colors text-muted-foreground"
+          className="flex items-center gap-2 px-3 py-2.5 text-xs font-medium min-h-[44px] hover:bg-primary/10 transition-colors text-muted-foreground text-left"
           onClick={() => handleClick('allow_always')}
           disabled={submitting}
         >
-          <ShieldCheck className="h-3 w-3" />
-          Always
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate">{allowAlwaysLabel}</span>
         </button>
-        <span className="w-px bg-inherit border-l border-inherit" />
         <button
           type="button"
-          className="flex-1 flex items-center justify-center gap-1 py-2 text-xs font-medium min-h-[36px] hover:bg-red-500/10 transition-colors text-red-600 dark:text-red-400"
+          className="flex items-center gap-2 px-3 py-2.5 text-xs font-medium min-h-[44px] hover:bg-red-500/10 transition-colors text-red-600 dark:text-red-400 text-left"
           onClick={() => handleClick('deny')}
           disabled={submitting}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5 shrink-0" />
           Deny
         </button>
       </div>
