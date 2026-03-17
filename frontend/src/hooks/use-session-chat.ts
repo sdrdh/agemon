@@ -158,7 +158,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
-      const response = await api.getSessionChat(selectedSessionId, 200, earliest);
+      const response = await api.getSessionChat(selectedSessionId, 50, earliest);
       prependChatMessages(selectedSessionId, response.messages);
       setHasMore(response.hasMore);
       hasMoreRef.current = response.hasMore;

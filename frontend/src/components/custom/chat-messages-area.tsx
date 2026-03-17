@@ -1,6 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import { ChevronsDown, Loader2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronsDown, ChevronsUp, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
 import { ApprovalGroupCard } from '@/components/custom/approval-group-card';
 import { ChatBubble } from '@/components/custom/chat-bubble';
@@ -21,38 +20,19 @@ const ToolCallCardItem = memo(function ToolCallCardItem({ toolCallId, sessionId 
   return <ToolCardShell toolCall={toolCall} />;
 });
 
-/** Large start index so prepends don't go negative. */
-const START_INDEX = 100_000;
+function itemKey(item: ChatItem): string {
+  if (item.kind === 'activity-group') return `ag-${item.messages[0].id}`;
+  if (item.kind === 'tool-call') return `tc-${item.toolCallId}`;
+  if (item.kind === 'approval-group') return `apg-${item.approvalIds[0]}`;
+  return item.message.id;
+}
 
-/** Stable Header component — receives isLoadingMore via context (Virtuoso re-mounts if reference changes). */
-const ListHeader = memo(function ListHeader({ context }: { context?: { isLoadingMore?: boolean } }) {
-  if (!context?.isLoadingMore) return null;
-  return (
-    <div className="flex items-center justify-center py-3">
-      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-      <span className="ml-2 text-xs text-muted-foreground">Loading older messages...</span>
-    </div>
-  );
-});
+/** Get the key of the last item — used to detect appends vs prepends. */
+function lastItemKey(items: ChatItem[]): string | null {
+  return items.length > 0 ? itemKey(items[items.length - 1]) : null;
+}
 
-/** Stable Footer component — renders agent activity indicator. */
-const ListFooter = memo(function ListFooter({ context }: { context?: { agentActivity: string | null; sessionRunning: boolean } }) {
-  const { agentActivity, sessionRunning } = context ?? { agentActivity: null, sessionRunning: false };
-  if (!agentActivity || !sessionRunning || agentActivity.startsWith('Waiting for approval')) return null;
-  return (
-    <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
-      <span className="relative flex h-2 w-2">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
-      </span>
-      <span className="truncate">{agentActivity}</span>
-    </div>
-  );
-});
-
-const STABLE_COMPONENTS = { Header: ListHeader, Footer: ListFooter };
-
-export function ChatMessagesArea({
+export const ChatMessagesArea = memo(function ChatMessagesArea({
   sessionReady,
   sessionRunning,
   sessionState,
@@ -65,7 +45,6 @@ export function ChatMessagesArea({
   isLoadingMore,
   hasMore,
   onFetchOlderMessages,
-  virtuosoRef,
 }: {
   sessionReady: boolean;
   sessionRunning: boolean;
@@ -79,69 +58,74 @@ export function ChatMessagesArea({
   isLoadingMore?: boolean;
   hasMore?: boolean;
   onFetchOlderMessages?: () => Promise<void>;
-  virtuosoRef: React.RefObject<VirtuosoHandle>;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const [showNewMessages, setShowNewMessages] = useState(false);
-
-  // firstItemIndex should only change on prepend, not on append.
-  // Track the baseline count at which firstItemIndex was last set.
-  const baselineRef = useRef(groupedItems.length);
-  const firstItemIndexRef = useRef(START_INDEX - groupedItems.length);
-
-  // On prepend: items were added before baseline, shift firstItemIndex down
-  // On append/regroup: baseline grows, firstItemIndex stays the same
-  if (groupedItems.length > baselineRef.current) {
-    // Could be prepend or append — check if firstItemIndex needs adjustment
-    // Virtuoso guarantees: if firstItemIndex decreases, it's a prepend
-    const newFirstIndex = START_INDEX - groupedItems.length;
-    if (newFirstIndex < firstItemIndexRef.current) {
-      firstItemIndexRef.current = newFirstIndex;
-    }
-    baselineRef.current = groupedItems.length;
-  } else if (groupedItems.length < baselineRef.current) {
-    // Items removed (regroup collapse) — recalculate
-    baselineRef.current = groupedItems.length;
-    firstItemIndexRef.current = START_INDEX - groupedItems.length;
-  }
-
-  // Use refs for atTopStateChange to avoid stale closures and callback recreation
-  const hasMoreRef = useRef(hasMore);
-  const isLoadingMoreRef = useRef(isLoadingMore);
-  const fetchRef = useRef(onFetchOlderMessages);
-  hasMoreRef.current = hasMore;
-  isLoadingMoreRef.current = isLoadingMore;
-  fetchRef.current = onFetchOlderMessages;
-
-  const handleAtTopStateChange = useCallback((atTop: boolean) => {
-    if (atTop && hasMoreRef.current && !isLoadingMoreRef.current && fetchRef.current) {
-      fetchRef.current();
-    }
-  }, []);
-
-  const isAtBottomRef = useRef(true);
-  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
-    isAtBottomRef.current = atBottom;
-    if (atBottom) setShowNewMessages(false);
-  }, []);
-
-  // Show "New messages" when items are appended and user isn't at bottom
+  const isNearBottomRef = useRef(true);
+  // Track last-item key and length to distinguish appends from prepends
+  const prevLastKeyRef = useRef(lastItemKey(groupedItems));
   const prevLengthRef = useRef(groupedItems.length);
+
+  // Track whether user is near the bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    isNearBottomRef.current = nearBottom;
+    if (nearBottom) setShowNewMessages(false);
+  }, []);
+
+  // Handle scroll behavior when items change
   useEffect(() => {
-    if (groupedItems.length > prevLengthRef.current && !isAtBottomRef.current) {
-      const expectedAppendFirst = START_INDEX - groupedItems.length;
-      if (expectedAppendFirst >= firstItemIndexRef.current) {
+    const curLastKey = lastItemKey(groupedItems);
+    const wasAppend = curLastKey !== prevLastKeyRef.current && groupedItems.length > prevLengthRef.current;
+    const wasPrepend = curLastKey === prevLastKeyRef.current && groupedItems.length > prevLengthRef.current;
+
+    if (wasAppend) {
+      // New messages at the bottom
+      if (isNearBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
         setShowNewMessages(true);
       }
+    } else if (wasPrepend) {
+      // Older messages loaded at the top — preserve scroll position.
+      // The DOM has already shifted; restore by adjusting scrollTop by the height delta.
+      const el = scrollRef.current;
+      if (el) {
+        // Use requestAnimationFrame to measure after React has committed the DOM update
+        requestAnimationFrame(() => {
+          // The scroll container's scrollHeight grew by the prepended content.
+          // We need to offset scrollTop by the difference so the viewport doesn't jump.
+          // Since this effect runs after render, the new items are already in the DOM.
+          // The browser keeps scrollTop at the same pixel offset from the top,
+          // but the content above grew — so the user sees a jump downward.
+          // Actually, with the items already rendered, scrollTop is already shifted.
+          // We don't need to do anything if the browser preserves the scroll anchor.
+          // Modern browsers with overflow-anchor: auto handle this automatically.
+        });
+      }
     }
+
+    prevLastKeyRef.current = curLastKey;
     prevLengthRef.current = groupedItems.length;
-  }, [groupedItems.length]);
+  }, [groupedItems]);
+
+  // Scroll to bottom on initial mount / session switch
+  useEffect(() => {
+    // Use rAF to ensure DOM has rendered the new session's messages
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView();
+    });
+  }, [selectedSessionId]);
 
   const scrollToBottom = useCallback(() => {
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     setShowNewMessages(false);
-  }, [virtuosoRef]);
+  }, []);
 
-  const renderItem = useCallback((_index: number, item: ChatItem) => {
+  const renderItem = useCallback((item: ChatItem) => {
     if (item.kind === 'activity-group') {
       return <ActivityGroup messages={item.messages} isLast={false} sessionId={selectedSessionId} />;
     }
@@ -168,21 +152,6 @@ export function ChatMessagesArea({
     );
   }, [selectedSessionId, approvalLookup, onApprovalDecision, connected]);
 
-  // Stable key computation for Virtuoso — uses item identity rather than index
-  const computeItemKey = useCallback((_index: number, item: ChatItem) => {
-    if (item.kind === 'activity-group') return `ag-${item.messages[0].id}`;
-    if (item.kind === 'tool-call') return `tc-${item.toolCallId}`;
-    if (item.kind === 'approval-group') return `apg-${item.approvalIds[0]}`;
-    return item.message.id;
-  }, []);
-
-  // Context for Header/Footer (avoids inline component recreation)
-  const context = useMemo(() => ({
-    isLoadingMore,
-    agentActivity,
-    sessionRunning,
-  }), [isLoadingMore, agentActivity, sessionRunning]);
-
   if (groupedItems.length === 0) {
     return (
       <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -199,32 +168,66 @@ export function ChatMessagesArea({
     );
   }
 
+  const showActivity = agentActivity && sessionRunning && !agentActivity.startsWith('Waiting for approval');
+
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">
-      <Virtuoso
-        ref={virtuosoRef}
-        data={groupedItems}
-        defaultItemHeight={80}
-        firstItemIndex={firstItemIndexRef.current}
-        initialTopMostItemIndex={groupedItems.length - 1}
-        itemContent={renderItem}
-        computeItemKey={computeItemKey}
-        alignToBottom
-        followOutput="auto"
-        atTopStateChange={handleAtTopStateChange}
-        atBottomStateChange={handleAtBottomStateChange}
-        className="h-full"
-        overscan={{ main: 300, reverse: 300 }}
-        context={context}
-        components={STABLE_COMPONENTS}
-        increaseViewportBy={{ top: 200, bottom: 100 }}
-      />
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto overscroll-contain px-1"
+        style={{ overflowAnchor: 'auto' }}
+      >
+        {/* Load older messages button */}
+        {hasMore && onFetchOlderMessages && (
+          <div className="sticky top-0 z-10 flex justify-center py-1.5">
+            <button
+              type="button"
+              onClick={onFetchOlderMessages}
+              disabled={isLoadingMore}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-muted/90 backdrop-blur text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px] shadow-sm"
+            >
+              {isLoadingMore ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <ChevronsUp className="h-3.5 w-3.5" />
+                  Load older messages
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
+        {/* Messages */}
+        {groupedItems.map((item) => (
+          <div key={itemKey(item)}>{renderItem(item)}</div>
+        ))}
+
+        {/* Activity indicator */}
+        {showActivity && (
+          <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
+            </span>
+            <span className="truncate">{agentActivity}</span>
+          </div>
+        )}
+
+        {/* Scroll anchor */}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* New messages pill */}
       {showNewMessages && (
         <button
           type="button"
           onClick={scrollToBottom}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:bg-primary/90 transition-colors min-h-[32px]"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-2 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:bg-primary/90 transition-colors min-h-[44px]"
         >
           <ChevronsDown className="h-3.5 w-3.5" />
           New messages
@@ -232,4 +235,4 @@ export function ChatMessagesArea({
       )}
     </div>
   );
-}
+});

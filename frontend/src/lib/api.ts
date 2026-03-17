@@ -70,7 +70,7 @@ export const api = {
     request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
     request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
-  getSessionChat: (sessionId: string, limit = 500, before?: string) =>
+  getSessionChat: (sessionId: string, limit = 50, before?: string) =>
     request<ChatHistoryResponse>(
       `/sessions/${sessionId}/chat?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`
     ),

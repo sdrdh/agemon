@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import type { VirtuosoHandle } from 'react-virtuoso';
 import { SessionMobileHeader } from '@/components/custom/session-mobile-header';
 import { ChatMessagesArea } from '@/components/custom/chat-messages-area';
 import { ChatInputArea } from '@/components/custom/chat-input-area';
@@ -140,9 +139,6 @@ export function SessionChatPanel({
     hasNavigatedRef.current = false;
   }, [setInputText]);
 
-  // ── Virtuoso ref for scroll control ────────────────────────────────────
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-
   const approvalLookup = useMemo(() => {
     const map = new Map<string, PendingApproval>();
     for (const a of pendingApprovals) map.set(a.id, a);
@@ -190,7 +186,6 @@ export function SessionChatPanel({
         isLoadingMore={isLoadingMore}
         hasMore={hasMore}
         onFetchOlderMessages={onFetchOlderMessages}
-        virtuosoRef={virtuosoRef}
       />
 
       <div className="border-t bg-background">

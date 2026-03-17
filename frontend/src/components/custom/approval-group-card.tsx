@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { ChevronRight, Shield, ShieldCheck, ShieldX } from 'lucide-react';
 import { ApprovalCard } from '@/components/custom/approval-card';
 import type { PendingApproval, ApprovalDecision } from '@agemon/shared';
@@ -10,7 +10,7 @@ interface ApprovalGroupCardProps {
   connected: boolean;
 }
 
-export function ApprovalGroupCard({ approvalIds, approvalLookup, onApprovalDecision, connected }: ApprovalGroupCardProps) {
+export const ApprovalGroupCard = memo(function ApprovalGroupCard({ approvalIds, approvalLookup, onApprovalDecision, connected }: ApprovalGroupCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const approvals = useMemo(
@@ -85,4 +85,4 @@ export function ApprovalGroupCard({ approvalIds, approvalLookup, onApprovalDecis
       </div>
     </div>
   );
-}
+});
