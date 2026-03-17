@@ -188,7 +188,7 @@ export function SessionChatPanel({
         onFetchOlderMessages={onFetchOlderMessages}
       />
 
-      <div className="border-t bg-background">
+      <div className="border-t bg-background shrink-0">
         {contextPct !== null && (
           <div className="flex items-center gap-2 px-4 pt-2">
             <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">

@@ -18,12 +18,7 @@ export interface ToolCallItem {
   sessionId: string;
 }
 
-export interface ApprovalGroupItem {
-  kind: 'approval-group';
-  approvalIds: string[];
-}
-
-export type ChatItem = ChatBubbleItem | ActivityGroupItem | ToolCallItem | ApprovalGroupItem;
+export type ChatItem = ChatBubbleItem | ActivityGroupItem | ToolCallItem;
 
 // ─── Tool call types ──────────────────────────────────────────────────
 
@@ -93,6 +88,8 @@ export function isSessionTerminal(state: AgentSessionState): boolean {
 // ─── Grouping logic ────────────────────────────────────────────────────────
 
 export function isCollapsibleActivity(msg: ChatMessage): boolean {
+  // Approvals have role 'system' but should still collapse into activity groups
+  if (msg.eventType === 'approval_request' || msg.eventType === 'approval_resolved') return true;
   if (msg.role !== 'agent') return false;
   if (msg.eventType === 'thought') return true;
   if (msg.eventType === 'action') {
@@ -105,97 +102,31 @@ export function isCollapsibleActivity(msg: ChatMessage): boolean {
 }
 
 /** Extract approvalId from an approval_request message content ("approvalId:status:toolName"). */
-function extractApprovalId(content: string): string {
+export function extractApprovalId(content: string): string {
   const firstColon = content.indexOf(':');
   return firstColon >= 0 ? content.slice(0, firstColon) : content;
 }
 
-export function groupMessages(messages: ChatMessage[], sessionId?: string): ChatItem[] {
+export function groupMessages(messages: ChatMessage[]): ChatItem[] {
   const items: ChatItem[] = [];
   let currentGroup: ChatMessage[] = [];
-  // Pre-parsed tool call IDs for the current group (avoids double-parse)
-  let groupToolCallIds = new Set<string>();
-  let groupThoughts: ChatMessage[] = [];
-  // Maps each message index in currentGroup to its toolCallId (or null)
-  let groupMsgToolIds: (string | null)[] = [];
-  // Consecutive approval_request accumulator
-  let approvalIds: string[] = [];
-  let approvalMsgs: ChatMessage[] = [];
-
-  function flushApprovalGroup() {
-    if (approvalIds.length === 0) return;
-    if (approvalIds.length === 1) {
-      // Single approval → render as regular bubble
-      items.push({ kind: 'bubble', message: approvalMsgs[0] });
-    } else {
-      items.push({ kind: 'approval-group', approvalIds: [...approvalIds] });
-    }
-    approvalIds = [];
-    approvalMsgs = [];
-  }
 
   function flushGroup() {
     if (currentGroup.length === 0) return;
-
-    // 1-3 unique tool calls → emit individual ToolCallItems + remaining as activity group
-    if (sessionId && groupToolCallIds.size >= 1 && groupToolCallIds.size <= 3) {
-      const emittedIds = new Set<string>();
-      for (let i = 0; i < currentGroup.length; i++) {
-        const tcId = groupMsgToolIds[i];
-        if (tcId && !emittedIds.has(tcId)) {
-          emittedIds.add(tcId);
-          items.push({ kind: 'tool-call', toolCallId: tcId, sessionId });
-        }
-      }
-      if (groupThoughts.length > 0) {
-        items.push({ kind: 'activity-group', messages: groupThoughts });
-      }
-    } else {
-      // 0 or 4+ tool calls → standard activity group
-      items.push({ kind: 'activity-group', messages: [...currentGroup] });
-    }
+    items.push({ kind: 'activity-group', messages: [...currentGroup] });
     currentGroup = [];
-    groupToolCallIds = new Set();
-    groupThoughts = [];
-    groupMsgToolIds = [];
   }
 
   for (const msg of messages) {
-    if (msg.eventType === 'approval_request') {
-      // Flush activity group before accumulating approvals
-      flushGroup();
-      approvalIds.push(extractApprovalId(msg.content));
-      approvalMsgs.push(msg);
-      continue;
-    }
-
-    // Non-approval message: flush any accumulated approvals
-    flushApprovalGroup();
-
     if (isCollapsibleActivity(msg)) {
       currentGroup.push(msg);
-      // Track toolCallId in a single pass (no separate extractToolCallIds)
-      let tcId: string | null = null;
-      try {
-        const obj = JSON.parse(msg.content);
-        if (obj && typeof obj.toolCallId === 'string') tcId = obj.toolCallId;
-      } catch { /* not JSON */ }
-      groupMsgToolIds.push(tcId);
-      if (tcId) {
-        groupToolCallIds.add(tcId);
-      } else {
-        groupThoughts.push(msg);
-      }
     } else {
       flushGroup();
       items.push({ kind: 'bubble', message: msg });
     }
   }
 
-  // Flush remaining
   flushGroup();
-  flushApprovalGroup();
-
   return items;
 }
 

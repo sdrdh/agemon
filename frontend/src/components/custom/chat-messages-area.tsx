@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronsDown, ChevronsUp, Loader2 } from 'lucide-react';
 import { ActivityGroup } from '@/components/custom/activity-group';
-import { ApprovalGroupCard } from '@/components/custom/approval-group-card';
 import { ChatBubble } from '@/components/custom/chat-bubble';
 import { ToolCardShell } from '@/components/custom/tool-cards/tool-card-shell';
 import { isSessionActive } from '@/lib/chat-utils';
@@ -23,7 +22,6 @@ const ToolCallCardItem = memo(function ToolCallCardItem({ toolCallId, sessionId 
 function itemKey(item: ChatItem): string {
   if (item.kind === 'activity-group') return `ag-${item.messages[0].id}`;
   if (item.kind === 'tool-call') return `tc-${item.toolCallId}`;
-  if (item.kind === 'approval-group') return `apg-${item.approvalIds[0]}`;
   return item.message.id;
 }
 
@@ -80,7 +78,7 @@ export const ChatMessagesArea = memo(function ChatMessagesArea({
   useEffect(() => {
     const curLastKey = lastItemKey(groupedItems);
     const wasAppend = curLastKey !== prevLastKeyRef.current && groupedItems.length > prevLengthRef.current;
-    const wasPrepend = curLastKey === prevLastKeyRef.current && groupedItems.length > prevLengthRef.current;
+    // Prepend (older messages): overflow-anchor: auto handles scroll preservation.
 
     if (wasAppend) {
       // New messages at the bottom
@@ -89,24 +87,8 @@ export const ChatMessagesArea = memo(function ChatMessagesArea({
       } else {
         setShowNewMessages(true);
       }
-    } else if (wasPrepend) {
-      // Older messages loaded at the top — preserve scroll position.
-      // The DOM has already shifted; restore by adjusting scrollTop by the height delta.
-      const el = scrollRef.current;
-      if (el) {
-        // Use requestAnimationFrame to measure after React has committed the DOM update
-        requestAnimationFrame(() => {
-          // The scroll container's scrollHeight grew by the prepended content.
-          // We need to offset scrollTop by the difference so the viewport doesn't jump.
-          // Since this effect runs after render, the new items are already in the DOM.
-          // The browser keeps scrollTop at the same pixel offset from the top,
-          // but the content above grew — so the user sees a jump downward.
-          // Actually, with the items already rendered, scrollTop is already shifted.
-          // We don't need to do anything if the browser preserves the scroll anchor.
-          // Modern browsers with overflow-anchor: auto handle this automatically.
-        });
-      }
     }
+    // Prepend (older messages loaded): overflow-anchor: auto handles scroll preservation.
 
     prevLastKeyRef.current = curLastKey;
     prevLengthRef.current = groupedItems.length;
@@ -125,22 +107,21 @@ export const ChatMessagesArea = memo(function ChatMessagesArea({
     setShowNewMessages(false);
   }, []);
 
-  const renderItem = useCallback((item: ChatItem) => {
+  const renderItem = useCallback((item: ChatItem, isLast: boolean) => {
     if (item.kind === 'activity-group') {
-      return <ActivityGroup messages={item.messages} isLast={false} sessionId={selectedSessionId} />;
-    }
-    if (item.kind === 'tool-call') {
-      return <ToolCallCardItem toolCallId={item.toolCallId} sessionId={item.sessionId} />;
-    }
-    if (item.kind === 'approval-group') {
       return (
-        <ApprovalGroupCard
-          approvalIds={item.approvalIds}
+        <ActivityGroup
+          messages={item.messages}
+          isLast={isLast}
+          sessionId={selectedSessionId}
           approvalLookup={approvalLookup}
           onApprovalDecision={onApprovalDecision}
           connected={connected}
         />
       );
+    }
+    if (item.kind === 'tool-call') {
+      return <ToolCallCardItem toolCallId={item.toolCallId} sessionId={item.sessionId} />;
     }
     return (
       <ChatBubble
@@ -180,12 +161,12 @@ export const ChatMessagesArea = memo(function ChatMessagesArea({
       >
         {/* Load older messages button */}
         {hasMore && onFetchOlderMessages && (
-          <div className="sticky top-0 z-10 flex justify-center py-1.5">
+          <div className="flex justify-center py-2">
             <button
               type="button"
               onClick={onFetchOlderMessages}
               disabled={isLoadingMore}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-muted/90 backdrop-blur text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px] shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-muted text-muted-foreground text-xs font-medium hover:bg-accent hover:text-foreground transition-colors min-h-[44px]"
             >
               {isLoadingMore ? (
                 <>
@@ -203,18 +184,18 @@ export const ChatMessagesArea = memo(function ChatMessagesArea({
         )}
 
         {/* Messages */}
-        {groupedItems.map((item) => (
-          <div key={itemKey(item)}>{renderItem(item)}</div>
+        {groupedItems.map((item, idx) => (
+          <div key={itemKey(item)}>{renderItem(item, idx === groupedItems.length - 1)}</div>
         ))}
 
         {/* Activity indicator */}
         {showActivity && (
           <div className="flex items-center gap-2 py-2 px-1 text-sm text-muted-foreground">
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary/80" />
             </span>
-            <span className="truncate">{agentActivity}</span>
+            <span className="truncate animate-pulse">{agentActivity}</span>
           </div>
         )}
 

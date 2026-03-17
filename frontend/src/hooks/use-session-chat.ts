@@ -173,7 +173,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
   }, [selectedSessionId, prependChatMessages, upsertToolCall]);
 
   // ── Grouped items ─────────────────────────────────────────────────────
-  const groupedItems = useMemo(() => groupMessages(chatMessages, selectedSessionId ?? undefined), [chatMessages, selectedSessionId]);
+  const groupedItems = useMemo(() => groupMessages(chatMessages), [chatMessages]);
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleSend = useCallback((inputText: string) => {
