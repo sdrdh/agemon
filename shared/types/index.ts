@@ -388,3 +388,7 @@ export interface SkillInstallResult {
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */
 export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
+
+// ─── Plugin Types ────────────────────────────────────────────────────────────
+
+export type { PluginManifest } from './plugin.ts';

@@ -5,7 +5,8 @@
   "workspaces": [
     "backend",
     "frontend",
-    "shared"
+    "shared",
+    "plugins/*"
   ],
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --prefix-colors 'cyan,magenta' --names 'API,WEB' 'bun run --filter @agemon/backend dev' 'bun run --filter @agemon/frontend dev'",

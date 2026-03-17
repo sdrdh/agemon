@@ -1,0 +1,8 @@
+{
+  "id": "memory-cms",
+  "name": "Memory CMS",
+  "version": "0.1.0",
+  "description": "Read-only viewer for task memory and summary files",
+  "entryPoint": "index.ts",
+  "hasPages": true
+}

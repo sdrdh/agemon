@@ -16,8 +16,11 @@ export function hasApiKey(): boolean {
   return !!localStorage.getItem(STORAGE_KEY);
 }
 
-export function clearApiKey() {
+export async function clearApiKey() {
   localStorage.removeItem(STORAGE_KEY);
+  try {
+    await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch { /* best effort */ }
 }
 
 function headers() {
@@ -51,6 +54,20 @@ export async function validateKey(key: string): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** Set the auth cookie via POST /api/auth. Called after successful key validation. */
+export async function setAuthCookie(key: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/auth`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${key}` },
+    });
+  } catch {
+    // Non-critical — Bearer header still works for SPA API calls
+    console.warn('Failed to set auth cookie');
   }
 }
 

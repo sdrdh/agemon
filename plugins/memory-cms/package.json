@@ -1,0 +1,10 @@
+{
+  "name": "@agemon/plugin-memory-cms",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "hono": "^4.6.0",
+    "marked": "^17.0.0",
+    "@agemon/shared": "workspace:*"
+  }
+}

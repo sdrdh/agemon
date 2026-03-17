@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap } from 'lucide-react';
+import { useNavigate, useRouter } from '@tanstack/react-router';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
@@ -163,7 +163,7 @@ function SkillsSection() {
 const RESTART_POLL_INTERVAL_MS = 2000;
 const RESTART_POLL_MAX_ATTEMPTS = 30;
 
-function AboutSection() {
+function AboutSection({ onLogout }: { onLogout: () => void }) {
   const { versionInfo, loading: checkLoading, error: checkError, check } = useVersionChecker();
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [isSystemd, setIsSystemd] = useState(false);
@@ -442,6 +442,17 @@ function AboutSection() {
           </label>
         </div>
       )}
+
+      <div className="pt-4 border-t">
+        <Button
+          variant="outline"
+          className="min-h-[44px] text-destructive hover:text-destructive"
+          onClick={onLogout}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Log out
+        </Button>
+      </div>
     </section>
   );
 }
@@ -450,6 +461,7 @@ function AboutSection() {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { options: { context } } = useRouter();
   const [activeSection, setActiveSection] = useState<Section>('appearance');
 
   return (
@@ -507,7 +519,7 @@ export default function SettingsPage() {
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
           {activeSection === 'skills' && <SkillsSection />}
-          {activeSection === 'about' && <AboutSection />}
+          {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
         </div>
       </div>
     </div>

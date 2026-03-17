@@ -9,7 +9,7 @@ import {
   useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Home, KanbanSquare, TerminalSquare, Settings } from 'lucide-react';
+import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
@@ -26,6 +26,7 @@ const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
+const PluginsPage = lazy(() => import('./routes/plugins'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
   { to: '/' as const, label: 'Home', icon: Home, exact: true },
   { to: '/kanban' as const, label: 'Kanban', icon: KanbanSquare, exact: false },
   { to: '/sessions' as const, label: 'Sessions', icon: TerminalSquare, exact: false },
+  { to: '/plugins' as const, label: 'Plugins', icon: Puzzle, exact: false },
   { to: '/settings' as const, label: 'Settings', icon: Settings, exact: false },
 ] as const;
 
@@ -159,6 +161,12 @@ const projectsRoute = createRoute({
   component: ProjectsPage,
 });
 
+const pluginsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/plugins',
+  component: PluginsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   taskNewRoute,
@@ -167,6 +175,7 @@ const routeTree = rootRoute.addChildren([
   sessionsRoute,
   settingsRoute,
   projectsRoute,
+  pluginsRoute,
 ]);
 
 const router = createRouter({

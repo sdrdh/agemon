@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { setApiKey, validateKey } from '@/lib/api';
+import { setApiKey, validateKey, setAuthCookie } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     }
 
     setApiKey(trimmed);
+    await setAuthCookie(trimmed);
     onLogin();
   }
 
