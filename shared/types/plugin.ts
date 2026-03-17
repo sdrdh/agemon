@@ -10,6 +10,13 @@ export interface PluginManifest {
   hasPages?: boolean;       // true → plugin serves full-page HTML at /p/{id}/
   navLabel?: string;        // if set, appears in bottom nav at /p/{id}/
   navIcon?: string;         // lucide icon name
+  /**
+   * Skill subdirectory names inside the plugin's skills/ folder.
+   * Each listed skill is symlinked into ~/.agemon/skills/{pluginId}--{skillName}/
+   * making it discoverable by all agents via the existing agemon skills symlink.
+   * e.g. ["memory-recall"] → plugin ships skills/memory-recall/SKILL.md
+   */
+  skills?: string[];
 }
 
 // ─── Custom Renderers ─────────────────────────────────────────────────

@@ -1,32 +1,35 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
 
 export default function PluginPage() {
-  const { id } = useParams({ strict: false }) as { id?: string; pluginId?: string; 0?: string; 1?: string; 2?: string; 3?: string; 4?: string };
-  
-  // Support both /p/:id and /p/:pluginId/* patterns
-  const pluginId = id ?? '';
-  
-  // Build path from remaining params (for catch-all routes)
-  const pathParts: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const p = (i === 0 ? id : undefined) as unknown as string | undefined;
-    if (p && p !== pluginId) pathParts.push(p);
-  }
-  const pagePath = pathParts.join('/') || '';
-  
+  // Route is /p/$pluginId/* — TanStack Router gives { pluginId, _splat }
+  const params = useParams({ strict: false }) as { pluginId?: string; _splat?: string };
+  const pluginId = params.pluginId ?? '';
+  const pagePath = params._splat ?? '';
+
   const [Component, setComponent] = useState<React.ComponentType<unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const loadedRef = useRef(false);
 
   useEffect(() => {
-    if (loadedRef.current || !pluginId) return;
-    loadedRef.current = true;
+    if (!pluginId) return;
 
-    const componentName = pagePath || 'index';
+    setLoading(true);
+    setComponent(null);
+    setError(null);
 
-    import(/* @vite-ignore */ `/api/renderers/pages/${pluginId}/${componentName}.js`)
+    // Fetch built JS from backend, create a blob URL, and dynamic-import it
+    const url = `/api/renderers/pages/${pluginId}/page.js?path=${encodeURIComponent(pagePath)}`;
+    fetch(url, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        return res.text();
+      })
+      .then((code) => {
+        const blob = new Blob([code], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        return import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+      })
       .then((mod) => {
         setComponent(() => mod.default);
         setLoading(false);
@@ -40,7 +43,7 @@ export default function PluginPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full p-8">
         <span className="text-muted-foreground">Loading...</span>
       </div>
     );
@@ -48,7 +51,7 @@ export default function PluginPage() {
 
   if (error || !Component) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full p-8">
         <span className="text-destructive">{error || 'Page not found'}</span>
       </div>
     );

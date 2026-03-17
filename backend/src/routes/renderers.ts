@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { getAllRenderers, getRendererByMessageType, getAllPages, getPluginPage } from '../lib/plugins/registry.ts';
+import { getBuiltRenderer, getBuiltPage, buildPluginRenderers } from '../lib/plugins/builder.ts';
 
 function agemonDir(): string {
   return process.env.AGEMON_DIR ? resolve(process.env.AGEMON_DIR) : join(homedir(), '.agemon');
@@ -29,21 +30,18 @@ renderers.get('/:messageType.js', async (c) => {
     return c.text('Renderer not found', 404);
   }
 
-  // Look up the renderer component in the plugin's renderers directory
-  const pluginDir = renderer.dir;
-  const componentPath = join(pluginDir, 'renderers', `${messageType}.tsx`);
-  
-  try {
-    const content = await readFile(componentPath, 'utf-8');
-    return c.body(content, {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Cache-Control': 'no-cache',
-      },
-    });
-  } catch {
-    return c.text('Renderer component not found', 404);
+  const built = getBuiltRenderer(messageType);
+  if (!built) {
+    return c.text('Renderer not built — restart server', 404);
   }
+
+  return c.body(built.code, {
+    headers: {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'ETag': `"${built.hash}"`,
+    },
+  });
 });
 
 // Plugin pages registry
@@ -57,33 +55,36 @@ renderers.get('/pages/registry', (c) => {
   });
 });
 
-// Serve plugin page component
-renderers.get('/pages/:pluginId/:component.js', async (c) => {
+// Serve plugin page component — resolves URL path → component → built JS
+// e.g. GET /pages/memory-cms/page.js         → path "/" (root)
+//      GET /pages/memory-cms/page.js?path=foo → path "/foo"
+renderers.get('/pages/:pluginId/page.js', async (c) => {
   const pluginId = c.req.param('pluginId') ?? '';
-  const component = c.req.param('component') ?? '';
+  const pathParam = c.req.query('path') ?? '';
 
-  if (!/^[a-zA-Z0-9-]+$/.test(pluginId) || !/^[a-zA-Z0-9-]+$/.test(component)) {
-    return c.text('Invalid parameters', 400);
+  if (!/^[a-zA-Z0-9-]+$/.test(pluginId)) {
+    return c.text('Invalid plugin ID', 400);
   }
 
-  const page = getPluginPage(pluginId, `/${component}`);
+  // Resolve "/" for root, "/foo" for subpaths
+  const pagePath = '/' + pathParam;
+  const page = getPluginPage(pluginId, pagePath);
   if (!page) {
-    return c.text('Page not found', 404);
+    return c.text(`Page not found: ${pagePath}`, 404);
   }
 
-  const componentPath = join(page.dir, 'renderers', `${component}.tsx`);
-  
-  try {
-    const content = await readFile(componentPath, 'utf-8');
-    return c.body(content, {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Cache-Control': 'no-cache',
-      },
-    });
-  } catch {
-    return c.text('Component not found', 404);
+  const built = getBuiltPage(pluginId, page.componentName);
+  if (!built) {
+    return c.text('Component not built — restart server', 404);
   }
+
+  return c.body(built.code, {
+    headers: {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'ETag': `"${built.hash}"`,
+    },
+  });
 });
 
 // Memory API endpoint
@@ -102,8 +103,9 @@ memory.get('/:taskId/:type', async (c) => {
   }
 
   const tasksDir = join(agemonDir(), 'tasks');
-  const filename = type === 'memory' ? 'MEMORY.md' : 'TASK_SUMMARY.md';
-  const filePath = join(tasksDir, taskId, filename);
+  // memory lives at {taskDir}/memory/MEMORY.md (Claude Code's cwd/memory/ convention)
+  const subpath = type === 'memory' ? 'memory/MEMORY.md' : 'TASK_SUMMARY.md';
+  const filePath = join(tasksDir, taskId, subpath);
 
   try {
     const content = await readFile(filePath, 'utf-8');

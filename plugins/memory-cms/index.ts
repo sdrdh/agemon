@@ -4,9 +4,6 @@ import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
 import { renderTaskList, renderTaskFiles, renderFile } from './views.ts';
-import { renderer as memoryViewRenderer } from './renderers/memory-view.tsx';
-
-export { renderer };
 
 /** Reject path segments that could traverse directories. */
 function isSafeSegment(s: string): boolean {
@@ -16,13 +13,15 @@ function isSafeSegment(s: string): boolean {
 export interface MemoryFile {
   taskId: string;
   type: 'memory' | 'summary';
-  filename: string;
-  path: string;
+  subpath: string;  // relative to task dir, e.g. "memory/MEMORY.md"
+  path: string;     // absolute path
 }
 
-const KNOWN_FILES: { filename: string; type: MemoryFile['type'] }[] = [
-  { filename: 'MEMORY.md', type: 'memory' },
-  { filename: 'TASK_SUMMARY.md', type: 'summary' },
+// Claude Code stores memory at {taskDir}/memory/MEMORY.md (cwd/memory/MEMORY.md).
+// TASK_SUMMARY.md sits directly in the task dir (written by Agemon, not Claude).
+const KNOWN_FILES: { subpath: string; type: MemoryFile['type'] }[] = [
+  { subpath: 'memory/MEMORY.md', type: 'memory' },
+  { subpath: 'TASK_SUMMARY.md', type: 'summary' },
 ];
 
 async function discoverFiles(tasksDir: string): Promise<MemoryFile[]> {
@@ -43,10 +42,10 @@ async function discoverFiles(tasksDir: string): Promise<MemoryFile[]> {
       if (!s.isDirectory()) continue;
     } catch { continue; }
 
-    for (const { filename, type } of KNOWN_FILES) {
-      const filePath = join(taskDir, filename);
+    for (const { subpath, type } of KNOWN_FILES) {
+      const filePath = join(taskDir, subpath);
       if (await Bun.file(filePath).exists()) {
-        files.push({ taskId, type, filename, path: filePath });
+        files.push({ taskId, type, subpath, path: filePath });
       }
     }
   }
@@ -58,10 +57,10 @@ async function discoverTaskFiles(tasksDir: string, taskId: string): Promise<Memo
   const files: MemoryFile[] = [];
   const taskDir = join(tasksDir, taskId);
 
-  for (const { filename, type } of KNOWN_FILES) {
-    const filePath = join(taskDir, filename);
+  for (const { subpath, type } of KNOWN_FILES) {
+    const filePath = join(taskDir, subpath);
     if (await Bun.file(filePath).exists()) {
-      files.push({ taskId, type, filename, path: filePath });
+      files.push({ taskId, type, subpath, path: filePath });
     }
   }
 
@@ -70,6 +69,14 @@ async function discoverTaskFiles(tasksDir: string, taskId: string): Promise<Memo
 
 export function onLoad(ctx: PluginContext): PluginExports {
   const tasksDir = join(ctx.agemonDir, 'tasks');
+
+  // API routes
+  const api = new Hono();
+  api.get('/files', async (c) => {
+    const files = await discoverFiles(tasksDir);
+    return c.json(files);
+  });
+
   const pages = new Hono();
   pages.use(trimTrailingSlash());
 
@@ -92,18 +99,16 @@ export function onLoad(ctx: PluginContext): PluginExports {
     return c.html(renderTaskFiles(taskId, files));
   });
 
-  // GET /tasks/:taskId/:filename — render a specific file
-  pages.get('/tasks/:taskId/:filename', async (c) => {
+  // GET /tasks/:taskId/:type — render memory or summary for a task (type = 'memory' | 'summary')
+  pages.get('/tasks/:taskId/:type', async (c) => {
     const taskId = c.req.param('taskId');
-    const filename = c.req.param('filename');
+    const type = c.req.param('type') as MemoryFile['type'];
     if (!isSafeSegment(taskId)) return c.text('Invalid task ID', 400);
 
-    // Validate filename against known files (also prevents traversal)
-    if (!KNOWN_FILES.some(f => f.filename === filename)) {
-      return c.text('Unknown file', 404);
-    }
+    const known = KNOWN_FILES.find(f => f.type === type);
+    if (!known) return c.text('Unknown type', 404);
 
-    const filePath = resolve(tasksDir, taskId, filename);
+    const filePath = resolve(tasksDir, taskId, known.subpath);
     if (!filePath.startsWith(tasksDir)) return c.text('Invalid path', 400);
     const file = Bun.file(filePath);
     if (!await file.exists()) {
@@ -111,20 +116,14 @@ export function onLoad(ctx: PluginContext): PluginExports {
     }
 
     const content = await file.text();
-    return c.html(renderFile(taskId, filename, content));
+    return c.html(renderFile(taskId, known.subpath, content));
   });
 
-  return { 
+  return {
+    apiRoutes: api,
     pageRoutes: pages,
-    renderers: [
-      { 
-        manifest: memoryViewRenderer.manifest, 
-        component: memoryViewRenderer,
-        dir: ctx.pluginDir,
-      },
-    ],
     pages: [
-      { path: '/memory', component: 'memory-view' },
+      { path: '/', component: 'memory-view' },
     ],
   };
 }

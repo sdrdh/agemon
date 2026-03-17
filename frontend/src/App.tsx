@@ -9,8 +9,8 @@ import {
   useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle } from 'lucide-react';
-import { hasApiKey, clearApiKey, getKey } from './lib/api';
+import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle, icons as lucideIcons } from 'lucide-react';
+import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
 import { useWsStore } from './lib/store';
@@ -26,7 +26,6 @@ const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
-const PluginsPage = lazy(() => import('./routes/plugins'));
 const PluginPage = lazy(() => import('./routes/plugin'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
@@ -44,23 +43,21 @@ interface NavItem {
   exact: boolean;
 }
 
-const BASE_NAV_ITEMS: NavItem[] = [
+const NAV_START: NavItem[] = [
   { to: '/', label: 'Home', icon: Home, exact: true },
   { to: '/kanban', label: 'Kanban', icon: KanbanSquare, exact: false },
   { to: '/sessions', label: 'Sessions', icon: TerminalSquare, exact: false },
-  { to: '/plugins', label: 'Plugins', icon: Puzzle, exact: false },
-  { to: '/settings', label: 'Settings', icon: Settings, exact: false },
 ];
+const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
 
+/** Resolve a lucide icon name (kebab-case like "brain" or PascalCase like "Brain") to a component. */
 function getIconByName(name: string | undefined): React.ComponentType<{ className?: string }> {
-  const icons: Record<string, React.ComponentType<{ className?: string }>> = {
-    home: Home,
-    kanban: KanbanSquare,
-    sessions: TerminalSquare,
-    puzzle: Puzzle,
-    settings: Settings,
-  };
-  return icons[name?.toLowerCase() ?? ''] ?? Puzzle;
+  if (!name) return Puzzle;
+  // Try PascalCase first (e.g. "Brain"), then convert kebab-case (e.g. "brain" → "Brain", "arrow-left" → "ArrowLeft")
+  const pascal = name.includes('-')
+    ? name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
+    : name.charAt(0).toUpperCase() + name.slice(1);
+  return (lucideIcons as Record<string, React.ComponentType<{ className?: string }>>)[pascal] ?? Puzzle;
 }
 
 function BottomNav() {
@@ -70,7 +67,7 @@ function BottomNav() {
   const [pluginNavItems, setPluginNavItems] = useState<NavItem[]>([]);
 
   useEffect(() => {
-    fetch('/api/plugins', { headers: { Authorization: `Bearer ${getKey()}` } })
+    fetch('/api/plugins', { credentials: 'include' })
       .then(res => res.json())
       .then((plugins: { id: string; navLabel: string | null; navIcon: string | null }[]) => {
         const items: NavItem[] = [];
@@ -91,7 +88,7 @@ function BottomNav() {
 
   if (isTaskDetail) return null;
 
-  const navItems = [...BASE_NAV_ITEMS, ...pluginNavItems];
+  const navItems = [...NAV_START, ...pluginNavItems, NAV_END];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
@@ -204,15 +201,17 @@ const projectsRoute = createRoute({
   component: ProjectsPage,
 });
 
-const pluginsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/plugins',
-  component: PluginsPage,
-});
-
+// Root of a plugin: /p/memory-cms
 const pluginPageRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/p/$pluginId/*',
+  path: '/p/$pluginId',
+  component: PluginPage,
+});
+
+// Sub-pages of a plugin: /p/memory-cms/foo/bar
+const pluginSubPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$pluginId/$',
   component: PluginPage,
 });
 
@@ -224,8 +223,8 @@ const routeTree = rootRoute.addChildren([
   sessionsRoute,
   settingsRoute,
   projectsRoute,
-  pluginsRoute,
   pluginPageRoute,
+  pluginSubPageRoute,
 ]);
 
 const router = createRouter({

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
@@ -11,12 +12,13 @@ import { api } from '@/lib/api';
 import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
 import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers' | 'skills' | 'about';
+type Section = 'appearance' | 'mcp-servers' | 'skills' | 'plugins' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Zap },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'about', label: 'About', icon: Info },
 ];
 
@@ -154,6 +156,82 @@ function SkillsSection() {
         </p>
       </div>
       <SkillsManager scope="global" />
+    </section>
+  );
+}
+
+// ─── Plugins Section ────────────────────────────────────────────────────────
+
+interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  hasPages: boolean;
+  navLabel?: string | null;
+}
+
+function PluginsSection() {
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/plugins', { credentials: 'include' })
+      .then(res => res.json())
+      .then(setPlugins)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Plugins</h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Drop a plugin folder into <span className="font-mono">~/.agemon/plugins/</span> and restart the server to install.
+        </p>
+      </div>
+
+      {loading && (
+        <div className="space-y-2">
+          <div className="h-14 rounded-lg bg-muted animate-pulse" />
+          <div className="h-14 rounded-lg bg-muted animate-pulse" />
+        </div>
+      )}
+
+      {!loading && plugins.length === 0 && (
+        <div className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
+          <Puzzle className="h-6 w-6 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No plugins installed</p>
+        </div>
+      )}
+
+      {!loading && plugins.length > 0 && (
+        <ul className="space-y-2">
+          {plugins.map((p) => (
+            <li key={p.id} className="flex items-center justify-between px-4 py-3 bg-card rounded-lg border">
+              <div className="min-w-0">
+                <div className="font-medium text-sm">{p.name}</div>
+                {p.description && (
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 ml-3 shrink-0">
+                <span className="text-xs text-muted-foreground font-mono">{p.version}</span>
+                {p.hasPages && (
+                  <Link
+                    to={`/p/${p.id}`}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={`Open ${p.name}`}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -519,6 +597,7 @@ export default function SettingsPage() {
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
           {activeSection === 'skills' && <SkillsSection />}
+          {activeSection === 'plugins' && <PluginsSection />}
           {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
         </div>
       </div>

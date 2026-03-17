@@ -1,9 +1,51 @@
-import { readdir } from 'fs/promises';
+import { readdir, symlink, lstat, stat } from 'fs/promises';
 import { join } from 'path';
 import { getDb } from '../../db/client.ts';
 import { getSetting } from '../../db/settings.ts';
 import type { PluginManifest } from '@agemon/shared';
 import type { LoadedPlugin, PluginContext, PluginExports } from './types.ts';
+
+/**
+ * Symlink a plugin's declared skills into ~/.agemon/skills/ so agents discover them.
+ * Each skill becomes ~/.agemon/skills/{pluginId}--{skillName} → {pluginDir}/skills/{skillName}
+ */
+async function wirePluginSkills(manifest: { id: string; skills?: string[] }, pluginDir: string, agemonDir: string): Promise<void> {
+  if (!manifest.skills?.length) return;
+
+  const agemonSkillsDir = join(agemonDir, 'skills');
+
+  for (const skillName of manifest.skills) {
+    const skillSrc = join(pluginDir, 'skills', skillName);
+
+    try {
+      const s = await stat(skillSrc);
+      if (!s.isDirectory()) {
+        console.warn(`[plugin:${manifest.id}] skill "${skillName}" is not a directory, skipping`);
+        continue;
+      }
+    } catch {
+      console.warn(`[plugin:${manifest.id}] skill "${skillName}" not found at ${skillSrc}, skipping`);
+      continue;
+    }
+
+    const linkName = `${manifest.id}--${skillName}`;
+    const linkPath = join(agemonSkillsDir, linkName);
+
+    try {
+      await lstat(linkPath);
+      // Already wired — skip
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        try {
+          await symlink(skillSrc, linkPath);
+          console.info(`[plugin:${manifest.id}] wired skill: ${skillName}`);
+        } catch (symlinkErr) {
+          console.warn(`[plugin:${manifest.id}] could not wire skill "${skillName}":`, (symlinkErr as Error).message);
+        }
+      }
+    }
+  }
+}
 
 /**
  * Scan ~/.agemon/plugins/ for plugin directories containing agemon-plugin.json.
@@ -64,6 +106,7 @@ export async function scanPlugins(agemonDir: string): Promise<LoadedPlugin[]> {
         exports = await onLoad(ctx);
       }
 
+      await wirePluginSkills(manifest, dir, agemonDir);
       loaded.push({ manifest, dir, exports });
       console.info(`[plugin:${manifest.id}] loaded (v${manifest.version})`);
     } catch (err) {
