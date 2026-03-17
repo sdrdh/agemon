@@ -404,3 +404,29 @@
 **Dependencies:** Task 4.5, existing awaiting_input WS flow
 
 ---
+
+### Task 4.37: Preview URL Proxy
+
+**Priority:** P1
+**Estimated Time:** 2 days
+
+**Deliverables:**
+- [ ] MCP tool `agemon_add_preview(url, label?)` — agent registers any locally-running server; Agemon stores it in-memory and broadcasts a WS event
+- [ ] In-memory preview registry keyed by session ID — entries cleared automatically when session stops or crashes
+- [ ] HTTP reverse proxy endpoint `GET /preview/:previewId/*` that forwards requests to the registered upstream URL, streaming headers and body back
+- [ ] REST endpoints: `GET /tasks/:id/previews` and `GET /previews` (global list across all active sessions)
+- [ ] Task detail view: previews section listing registered URLs as tappable links (opens device browser)
+- [ ] Global `/previews` frontend route: all active previews grouped by task
+
+**Key Considerations:**
+- Previews are ephemeral — no DB table needed; in-memory store is cleared on session end
+- Works because Agemon and agents share the same host — registered `127.0.0.1` URLs are always reachable from the Hono proxy layer
+- Hono fetch is sufficient for simple HTTP; complex apps (WebSocket upgrades, path-sensitive routing, nested reverse proxies) may need Caddy dynamic route registration via its admin API — design the proxy abstraction to be swappable without changing the MCP tool or frontend
+- Proxy must preserve full path + query string so client-side routing works correctly
+- Proxy endpoint should require `AGEMON_KEY` to prevent unauthenticated access to arbitrary local ports
+
+**Affected Areas:** backend (MCP server, proxy route, in-memory registry), frontend (task detail previews section, new `/previews` route), shared/types (WS preview events)
+
+**Dependencies:** Phase 3.5 (MCP infrastructure)
+
+---
