@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { PendingApproval, ApprovalDecision, AgentSession, Task, ChatMessage } from '@agemon/shared';
 import type { PendingInput } from '@/lib/store';
 import { useWsStore } from '@/lib/store';
-import { SectionHeader } from './section-header';
 import { DashboardApprovalCard } from './dashboard-approval-card';
 import { QuestionInputCard } from './question-input-card';
 
@@ -62,15 +61,13 @@ export function NeedsInputSection({
     return [...approvalItems, ...inputItems].sort((a, b) => b.timestamp - a.timestamp);
   }, [approvals, inputs]);
 
-  if (sorted.length === 0) return null;
-
-  const totalCount = approvals.length + inputs.length;
+  if (sorted.length === 0) {
+    return <p className="text-sm text-muted-foreground">Nothing blocked right now.</p>;
+  }
 
   return (
     <div className="space-y-2">
-      <SectionHeader title="Needs Your Input" colorClass="text-warning" count={totalCount} />
-      <div className="space-y-2">
-        {sorted.map((entry) => {
+      {sorted.map((entry) => {
           if (entry.type === 'approval') {
             const approval = entry.item as PendingApproval;
             const task = taskMap.get(approval.taskId);
@@ -117,7 +114,6 @@ export function NeedsInputSection({
             );
           }
         })}
-      </div>
     </div>
   );
 }

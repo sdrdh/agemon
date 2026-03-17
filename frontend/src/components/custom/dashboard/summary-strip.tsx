@@ -3,39 +3,31 @@ interface SummaryStripProps {
   active: number;
   completed: number;
   tasks: number;
+  onScrollTo?: (section: 'blocked' | 'active' | 'completed') => void;
+  onNavigateToTasks?: () => void;
 }
 
-export function SummaryStrip({ blocked, active, completed, tasks }: SummaryStripProps) {
+function Cell({ value, label, colorClass, onClick }: { value: number; label: string; colorClass: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center justify-center py-3 px-2 min-h-[44px] active:bg-muted/50 transition-colors"
+      aria-label={`${value} ${label.toLowerCase()}`}
+    >
+      <span className={`text-2xl font-bold leading-none ${colorClass}`}>{value}</span>
+      <span className="text-[11px] text-muted-foreground mt-1">{label}</span>
+    </button>
+  );
+}
+
+export function SummaryStrip({ blocked, active, completed, tasks, onScrollTo, onNavigateToTasks }: SummaryStripProps) {
   return (
     <div className="bg-muted/30 border-b grid grid-cols-4">
-      <div
-        className="flex flex-col items-center justify-center py-3 px-2"
-        aria-label={`${blocked} blocked`}
-      >
-        <span className="text-2xl font-bold text-warning leading-none">{blocked}</span>
-        <span className="text-[11px] text-muted-foreground mt-1">Blocked</span>
-      </div>
-      <div
-        className="flex flex-col items-center justify-center py-3 px-2"
-        aria-label={`${active} active`}
-      >
-        <span className="text-2xl font-bold text-success leading-none">{active}</span>
-        <span className="text-[11px] text-muted-foreground mt-1">Active</span>
-      </div>
-      <div
-        className="flex flex-col items-center justify-center py-3 px-2"
-        aria-label={`${completed} completed`}
-      >
-        <span className="text-2xl font-bold text-muted-foreground leading-none">{completed}</span>
-        <span className="text-[11px] text-muted-foreground mt-1">Completed</span>
-      </div>
-      <div
-        className="flex flex-col items-center justify-center py-3 px-2"
-        aria-label={`${tasks} tasks`}
-      >
-        <span className="text-2xl font-bold text-foreground leading-none">{tasks}</span>
-        <span className="text-[11px] text-muted-foreground mt-1">Tasks</span>
-      </div>
+      <Cell value={blocked} label="Blocked" colorClass="text-warning" onClick={() => onScrollTo?.('blocked')} />
+      <Cell value={active} label="Active" colorClass="text-success" onClick={() => onScrollTo?.('active')} />
+      <Cell value={completed} label="Completed" colorClass="text-muted-foreground" onClick={() => onScrollTo?.('completed')} />
+      <Cell value={tasks} label="Tasks" colorClass="text-foreground" onClick={onNavigateToTasks} />
     </div>
   );
 }

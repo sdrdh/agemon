@@ -1,8 +1,10 @@
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useRef } from 'react';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { sessionsListQuery, tasksListQuery, dashboardActiveQuery, queryClient, dashboardKeys, sessionKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
@@ -11,10 +13,23 @@ import { friendlyError } from '@/lib/errors';
 import { isSessionActive } from '@/lib/chat-utils';
 import { SummaryStrip } from '@/components/custom/dashboard/summary-strip';
 import { NeedsInputSection } from '@/components/custom/dashboard/needs-input-section';
+import { ActiveSessionsSection } from '@/components/custom/dashboard/active-sessions-section';
 import { RecentlyCompletedSection } from '@/components/custom/dashboard/recently-completed-section';
 import { IdleSessionCard } from '@/components/custom/dashboard/idle-session-card';
-import { SectionHeader } from '@/components/custom/dashboard/section-header';
 import type { Task, AgentSession, ApprovalDecision } from '@agemon/shared';
+
+function SectionTrigger({ title, count, colorClass }: { title: string; count: number; colorClass: string }) {
+  return (
+    <AccordionTrigger className="hover:no-underline py-3">
+      <div className="flex items-center gap-2">
+        <span className={`text-sm font-semibold ${colorClass}`}>{title}</span>
+        <Badge variant="outline" className="text-xs px-1.5 py-0 h-5">
+          {count}
+        </Badge>
+      </div>
+    </AccordionTrigger>
+  );
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -26,6 +41,11 @@ export default function DashboardPage() {
   const allApprovals = useWsStore((s) => s.pendingApprovals);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
   const connected = useWsStore((s) => s.connected);
+
+  // Section refs for scroll-to from summary strip
+  const blockedRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLDivElement>(null);
+  const completedRef = useRef<HTMLDivElement>(null);
 
   // Track dismissed completed sessions (client-side, resets on page reload)
   const [dismissedSessionIds, setDismissedSessionIds] = useState<Set<string>>(new Set());
@@ -91,6 +111,15 @@ export default function DashboardPage() {
     navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: sessionId } });
   }, [navigate]);
 
+  const handleScrollTo = useCallback((section: 'blocked' | 'active' | 'completed') => {
+    const ref = section === 'blocked' ? blockedRef : section === 'active' ? activeRef : completedRef;
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const handleNavigateToTasks = useCallback(() => {
+    navigate({ to: '/kanban' });
+  }, [navigate]);
+
   const handleDismissSession = useCallback((sessionId: string) => {
     setDismissedSessionIds((prev) => {
       const next = new Set(prev);
@@ -148,12 +177,6 @@ export default function DashboardPage() {
     );
   }
 
-  const nothingActionable =
-    pendingApprovals.length === 0 &&
-    pendingInputs.length === 0 &&
-    idleSessions.length === 0 &&
-    recentlyCompleted.length === 0;
-
   return (
     <div className="pb-20">
       <SummaryStrip
@@ -161,37 +184,50 @@ export default function DashboardPage() {
         active={runningSessions.length}
         completed={recentlyCompleted.length}
         tasks={activeTaskCount}
+        onScrollTo={handleScrollTo}
+        onNavigateToTasks={handleNavigateToTasks}
       />
-      <div className="p-4 space-y-6">
+      <div className="px-4">
         {activeTaskCount === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
+          <div className="text-center py-6 text-muted-foreground">
             <p>No tasks yet.</p>
             <Button variant="link" onClick={() => navigate({ to: '/tasks/new' })}>
               Create your first task
             </Button>
           </div>
-        ) : nothingActionable ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <p className="text-base font-medium text-foreground/70">All clear</p>
-            <p className="text-sm mt-1">Your agents are working. Nothing needs your attention.</p>
-          </div>
-        ) : (
-          <>
-            <NeedsInputSection
-              approvals={pendingApprovals}
-              inputs={pendingInputs}
-              taskMap={taskMap}
-              sessionMap={sessionMap}
-              connected={connected}
-              onApprovalDecision={handleApprovalDecision}
-              onInputSubmit={handleInputSubmit}
-              onNavigateToTask={handleNavigateToTask}
-              onStopSession={handleStopSession}
-              onArchiveSession={handleArchiveSession}
-            />
-            {idleSessions.length > 0 && (
-              <div className="space-y-2">
-                <SectionHeader title="Idle Sessions" colorClass="text-success" count={idleSessions.length} />
+        ) : null}
+        <Accordion type="multiple" defaultValue={['blocked', 'active', 'idle', 'completed']}>
+          <AccordionItem value="blocked" ref={blockedRef}>
+            <SectionTrigger title="Needs Your Input" count={pendingApprovals.length + pendingInputs.length} colorClass="text-warning" />
+            <AccordionContent>
+              <NeedsInputSection
+                approvals={pendingApprovals}
+                inputs={pendingInputs}
+                taskMap={taskMap}
+                sessionMap={sessionMap}
+                connected={connected}
+                onApprovalDecision={handleApprovalDecision}
+                onInputSubmit={handleInputSubmit}
+                onNavigateToTask={handleNavigateToTask}
+                onStopSession={handleStopSession}
+                onArchiveSession={handleArchiveSession}
+              />
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="active" ref={activeRef}>
+            <SectionTrigger title="Active Sessions" count={runningSessions.length} colorClass="text-success" />
+            <AccordionContent>
+              <ActiveSessionsSection
+                sessions={runningSessions}
+                taskMap={taskMap}
+                onNavigateToTask={handleNavigateToTask}
+              />
+            </AccordionContent>
+          </AccordionItem>
+          {idleSessions.length > 0 && (
+            <AccordionItem value="idle">
+              <SectionTrigger title="Idle Sessions" count={idleSessions.length} colorClass="text-success" />
+              <AccordionContent>
                 <div className="space-y-2">
                   {idleSessions.map((entry) => (
                     <IdleSessionCard
@@ -205,20 +241,26 @@ export default function DashboardPage() {
                     />
                   ))}
                 </div>
-              </div>
-            )}
-            <RecentlyCompletedSection
-              sessions={recentlyCompleted}
-              taskMap={taskMap}
-              onNavigateToTask={handleNavigateToTask}
-              onDismiss={handleDismissSession}
-            />
-          </>
-        )}
+              </AccordionContent>
+            </AccordionItem>
+          )}
+          <AccordionItem value="completed" ref={completedRef}>
+            <SectionTrigger title="Recently Completed" count={recentlyCompleted.length} colorClass="text-muted-foreground" />
+            <AccordionContent>
+              <RecentlyCompletedSection
+                sessions={recentlyCompleted}
+                taskMap={taskMap}
+                onNavigateToTask={handleNavigateToTask}
+                onDismiss={handleDismissSession}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
       {/* FAB */}
       <Link
         to="/tasks/new"
+        aria-label="Create new task"
         className="fixed bottom-20 right-4 z-40 h-[52px] w-[52px] rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
       >
         <Plus className="h-6 w-6" />
