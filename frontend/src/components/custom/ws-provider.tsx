@@ -245,6 +245,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
           useWsStore.getState().setUpdateAvailable(true);
           break;
         }
+        case 'plugins_changed': {
+          store().bumpPluginsRevision();
+          break;
+        }
         case 'server_restarting': {
           // Could show a toast/banner, for now just log
           console.info('[ws] server is restarting...');

@@ -3,6 +3,7 @@ import { readdir, readFile } from 'fs/promises';
 import { watch } from 'fs';
 import { createHash } from 'crypto';
 import type { LoadedPlugin } from './types.ts';
+import type { ServerEventPayload } from '@agemon/shared';
 
 // ─── In-memory cache of built renderer/page modules ─────────────────────────
 
@@ -137,7 +138,7 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
  * watched — all without a server restart. Removed plugins are not unloaded
  * (Hono routes can't be unregistered; restart required for removal).
  */
-export function watchPluginsDir(agemonDir: string): void {
+export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEventPayload) => void): void {
   const pluginsDir = join(agemonDir, 'plugins');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -165,6 +166,7 @@ export function watchPluginsDir(agemonDir: string): void {
           watchPlugins(newPlugins);
 
           console.info(`[plugins] hot-loaded: ${newPlugins.map(p => p.manifest.id).join(', ')}`);
+          broadcast?.({ type: 'plugins_changed', pluginIds: newPlugins.map(p => p.manifest.id) });
         } catch (err) {
           console.error('[plugins] hot-load failed:', (err as Error).message);
         }

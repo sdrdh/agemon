@@ -9,7 +9,7 @@ import {
   useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle, icons as lucideIcons } from 'lucide-react';
+import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
@@ -50,33 +50,41 @@ const NAV_START: NavItem[] = [
 ];
 const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
 
-/** Resolve a lucide icon name (kebab-case like "brain" or PascalCase like "Brain") to a component. */
-function getIconByName(name: string | undefined): React.ComponentType<{ className?: string }> {
-  if (!name) return Puzzle;
-  // Try PascalCase first (e.g. "Brain"), then convert kebab-case (e.g. "brain" → "Brain", "arrow-left" → "ArrowLeft")
+
+/** Resolve a lucide icon name to a component. Lazy-imports lucide to avoid bundling all ~1500 icons. */
+async function resolveIcon(name: string): Promise<React.ComponentType<{ className?: string }>> {
   const pascal = name.includes('-')
     ? name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
     : name.charAt(0).toUpperCase() + name.slice(1);
-  return (lucideIcons as Record<string, React.ComponentType<{ className?: string }>>)[pascal] ?? Puzzle;
+  try {
+    const mod = await import('lucide-react') as Record<string, unknown>;
+    return (mod[pascal] as React.ComponentType<{ className?: string }>) ?? Puzzle;
+  } catch {
+    return Puzzle;
+  }
 }
 
 function BottomNav() {
   const matches = useMatches();
   const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
+  const pluginsRevision = useWsStore(s => s.pluginsRevision);
   const [pluginNavItems, setPluginNavItems] = useState<NavItem[]>([]);
 
+  // Refetch when WS reconnects (server restart) or when server signals plugins changed
   useEffect(() => {
+    if (!connected) return;
     fetch('/api/plugins', { credentials: 'include' })
       .then(res => res.json())
-      .then((plugins: { id: string; navLabel: string | null; navIcon: string | null }[]) => {
+      .then(async (plugins: { id: string; navLabel: string | null; navIcon: string | null }[]) => {
         const items: NavItem[] = [];
         for (const p of plugins) {
           if (p.navLabel) {
             items.push({
               to: `/p/${p.id}`,
               label: p.navLabel,
-              icon: getIconByName(p.navIcon ?? undefined),
+              icon: p.navIcon ? await resolveIcon(p.navIcon) : Puzzle,
               exact: true,
             });
           }
@@ -84,7 +92,7 @@ function BottomNav() {
         setPluginNavItems(items);
       })
       .catch(console.error);
-  }, []);
+  }, [connected, pluginsRevision]);
 
   if (isTaskDetail) return null;
 

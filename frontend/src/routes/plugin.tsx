@@ -18,9 +18,10 @@ export default function PluginPage() {
     setComponent(null);
     setError(null);
 
-    // Fetch built JS from backend, create a blob URL, and dynamic-import it
+    const controller = new AbortController();
     const url = `/api/renderers/pages/${pluginId}/page.js?path=${encodeURIComponent(pagePath)}`;
-    fetch(url, { credentials: 'include' })
+
+    fetch(url, { credentials: 'include', signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return res.text();
@@ -35,10 +36,13 @@ export default function PluginPage() {
         setLoading(false);
       })
       .catch((err) => {
+        if (err.name === 'AbortError') return;
         console.error('Failed to load plugin page:', err);
         setError('Failed to load page');
         setLoading(false);
       });
+
+    return () => controller.abort();
   }, [pluginId, pagePath]);
 
   if (loading) {

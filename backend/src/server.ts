@@ -145,7 +145,7 @@ console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': '
 const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
 await buildPluginRenderers(plugins);
 watchPlugins(plugins);
-watchPluginsDir(AGEMON_DIR);
+watchPluginsDir(AGEMON_DIR, broadcast);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.
