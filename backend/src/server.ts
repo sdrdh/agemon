@@ -137,19 +137,6 @@ setPlugins(plugins);
 mountPluginRoutes(app, plugins);
 console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
 
-// ─── MCP Server ──────────────────────────────────────────────────────────────
-const { getMcpServer, getMcpTransport } = await import('./lib/mcp/server.ts');
-const mcpTransport = getMcpTransport();
-const mcpServer = getMcpServer();
-
-// app.all is required: MCP Streamable HTTP uses POST for RPC, GET for SSE, DELETE for session teardown
-app.all('/mcp', async (c) => {
-  if (!mcpServer.isConnected()) {
-    await mcpServer.connect(mcpTransport);
-  }
-  return mcpTransport.handleRequest(c);
-});
-
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.
 const FRONTEND_DIST = join(import.meta.dir, '../../frontend/dist');
@@ -163,7 +150,7 @@ if (frontendExists) {
     const urlPath = new URL(c.req.url).pathname;
 
     // Let API, WS, and MCP routes pass through to their handlers
-    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/mcp') || urlPath.startsWith('/p/')) {
+    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/p/')) {
       return next();
     }
 

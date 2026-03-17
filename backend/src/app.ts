@@ -64,8 +64,8 @@ export function createApp(opts: AppOptions): AppContext {
     // /ws has its own token-based auth via query param
     // /api/auth is the login endpoint — must be accessible without auth
     if (path === '/ws' || path === '/api/health' || path === '/api/version' || path === '/api/auth' || path === '/api/auth/logout') return next();
-    // Only protect /api/*, /mcp*, and /p/* routes
-    if (!path.startsWith('/api') && !path.startsWith('/mcp') && !path.startsWith('/p/')) return next();
+    // Only protect /api/* and /p/* routes
+    if (!path.startsWith('/api') && !path.startsWith('/p/')) return next();
 
     // Check Bearer header first, then fall back to cookie
     const auth = c.req.header('authorization') ?? '';

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
-import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions, getSessionAvailableCommands } from '../lib/acp/index.ts';
+import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions, getSessionAvailableCommands, sendPromptTurn } from '../lib/acp/index.ts';
 import { gitManager } from '../lib/git.ts';
 import { sendError, requireTask } from './shared.ts';
 import type { CreateSessionBody } from '@agemon/shared';
@@ -61,6 +61,15 @@ sessionsRoutes.get('/tasks/:id/sessions', (c) => {
 });
 
 /**
+ * GET /sessions/:id — get a single session by ID.
+ */
+sessionsRoutes.get('/sessions/:id', (c) => {
+  const session = db.getSession(c.req.param('id'));
+  if (!session) sendError(404, 'Session not found');
+  return c.json(session);
+});
+
+/**
  * GET /sessions/:id/chat — get chat history for a specific session.
  */
 sessionsRoutes.get('/sessions/:id/chat', (c) => {
@@ -88,6 +97,28 @@ sessionsRoutes.post('/sessions/:id/stop', (c) => {
   try {
     stopAgent(sessionId);
     return c.json({ message: 'Stop signal sent', sessionId });
+  } catch (err) {
+    sendError(500, (err as Error).message);
+  }
+});
+
+/**
+ * POST /sessions/:id/message — send a prompt message to a running session.
+ */
+sessionsRoutes.post('/sessions/:id/message', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) sendError(404, 'Session not found');
+  if (session!.state !== 'running' && session!.state !== 'ready') {
+    sendError(400, `Session is in state ${session!.state}, not accepting messages`);
+  }
+  const body = await c.req.json<{ content: string }>();
+  if (!body.content || typeof body.content !== 'string') {
+    sendError(400, 'content is required');
+  }
+  try {
+    await sendPromptTurn(sessionId, body.content);
+    return c.json({ message: 'Message sent', sessionId });
   } catch (err) {
     sendError(500, (err as Error).message);
   }
