@@ -389,9 +389,14 @@ function AboutSection() {
       </div>
 
       {updateResult && (
-        <p className={`text-xs ${updateResult.ok ? 'text-success' : 'text-destructive'}`}>
-          {updateResult.message}
-        </p>
+        updateResult.ok ? (
+          <p className="text-xs text-success">{updateResult.message}</p>
+        ) : (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+            <p className="text-sm font-medium text-destructive">Update failed</p>
+            <p className="text-xs text-destructive/80 mt-0.5">{updateResult.message}</p>
+          </div>
+        )
       )}
       {restartError && (
         <p className="text-xs text-destructive">{restartError}</p>
