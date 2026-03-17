@@ -4,7 +4,7 @@ const BASE = '/api';
 
 export const STORAGE_KEY = 'agemon_key' as const;
 
-function getKey(): string {
+export function getKey(): string {
   return localStorage.getItem(STORAGE_KEY) ?? '';
 }
 

@@ -127,6 +127,10 @@ app.route('/api', dashboardRoutes);
 const { systemRoutes } = await import('./routes/system.ts');
 app.route('/api', systemRoutes);
 
+const { renderersRoutes } = await import('./routes/renderers.ts');
+app.route('/api/renderers', renderersRoutes);
+app.route('/api/memory', renderersRoutes);
+
 // ─── Plugins ─────────────────────────────────────────────────────────────────
 const { scanPlugins } = await import('./lib/plugins/loader.ts');
 const { setPlugins } = await import('./lib/plugins/registry.ts');

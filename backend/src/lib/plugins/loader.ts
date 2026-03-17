@@ -51,6 +51,7 @@ export async function scanPlugins(agemonDir: string): Promise<LoadedPlugin[]> {
 
         const ctx: PluginContext = {
           agemonDir,
+          pluginDir: dir,
           db: getDb(),
           getSetting,
           logger: {

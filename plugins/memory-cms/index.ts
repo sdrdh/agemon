@@ -4,6 +4,9 @@ import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
 import { renderTaskList, renderTaskFiles, renderFile } from './views.ts';
+import { renderer as memoryViewRenderer } from './renderers/memory-view.tsx';
+
+export { renderer };
 
 /** Reject path segments that could traverse directories. */
 function isSafeSegment(s: string): boolean {
@@ -111,5 +114,17 @@ export function onLoad(ctx: PluginContext): PluginExports {
     return c.html(renderFile(taskId, filename, content));
   });
 
-  return { pageRoutes: pages };
+  return { 
+    pageRoutes: pages,
+    renderers: [
+      { 
+        manifest: memoryViewRenderer.manifest, 
+        component: memoryViewRenderer,
+        dir: ctx.pluginDir,
+      },
+    ],
+    pages: [
+      { path: '/memory', component: 'memory-view' },
+    ],
+  };
 }

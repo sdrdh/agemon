@@ -1,14 +1,54 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Copy, Check } from 'lucide-react';
 import { ApprovalCard } from '@/components/custom/approval-card';
 import { showToast } from '@/lib/toast';
-import type { ChatMessage, PendingApproval, ApprovalDecision } from '@agemon/shared';
+import type { ChatMessage, PendingApproval, ApprovalDecision, CustomRendererManifest } from '@agemon/shared';
+import { getKey } from '@/lib/api';
 
 const rehypePlugins = [rehypeHighlight];
 const remarkPlugins = [remarkGfm];
+
+const customRenderersCache = new Map<string, React.ComponentType<{ message: unknown }>>();
+
+async function loadCustomRenderers(): Promise<Map<string, CustomRendererManifest>> {
+  try {
+    const res = await fetch('/api/renderers/registry', {
+      headers: { Authorization: `Bearer ${getKey()}` },
+    });
+    if (!res.ok) throw new Error('Failed');
+    const data = await res.json() as { renderers: CustomRendererManifest[] };
+    const map = new Map<string, CustomRendererManifest>();
+    for (const r of data.renderers) {
+      map.set(r.messageType, r);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+async function loadRenderer(messageType: string): Promise<React.ComponentType<{ message: unknown }> | null> {
+  if (customRenderersCache.has(messageType)) {
+    return customRenderersCache.get(messageType)!;
+  }
+
+  const registry = await loadCustomRenderers();
+  const manifest = registry.get(messageType);
+  if (!manifest) return null;
+
+  try {
+    const mod = await import(/* @vite-ignore */ `/api/renderers/${manifest.name}.js`);
+    const Component = mod.default as React.ComponentType<{ message: unknown }>;
+    customRenderersCache.set(messageType, Component);
+    return Component;
+  } catch (err) {
+    console.error(`Failed to load renderer ${manifest.name}:`, err);
+    return null;
+  }
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -36,6 +76,51 @@ function CopyButton({ text }: { text: string }) {
       )}
     </button>
   );
+}
+
+const knownCustomEventTypes = new Set([
+  'memory-view',
+  'task-summary',
+]);
+
+function CustomRendererWrapper({ 
+  eventType, 
+  message,
+}: { 
+  eventType: string; 
+  message: ChatMessage;
+}) {
+  const [Component, setComponent] = useState<React.ComponentType<{ message: unknown }> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (loadedRef.current) return;
+    if (!knownCustomEventTypes.has(eventType)) {
+      setLoading(false);
+      return;
+    }
+    loadedRef.current = true;
+
+    loadRenderer(eventType).then((c) => {
+      setComponent(() => c);
+      setLoading(false);
+    });
+  }, [eventType]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+        <span className="animate-pulse">Loading {eventType}...</span>
+      </div>
+    );
+  }
+
+  if (!Component) {
+    return null;
+  }
+
+  return <Component message={message} />;
 }
 
 export const ChatBubble = memo(function ChatBubble({ message, approvalLookup, onApprovalDecision, connected }: {
@@ -93,6 +178,14 @@ export const ChatBubble = memo(function ChatBubble({ message, approvalLookup, on
           <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</Markdown>
           <CopyButton text={content} />
         </div>
+      </div>
+    );
+  }
+
+  if (knownCustomEventTypes.has(eventType)) {
+    return (
+      <div className="flex justify-start my-2 max-w-[85%]">
+        <CustomRendererWrapper eventType={eventType} message={message} />
       </div>
     );
   }

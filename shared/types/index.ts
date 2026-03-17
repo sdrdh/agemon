@@ -391,4 +391,4 @@ export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
 
 // ─── Plugin Types ────────────────────────────────────────────────────────────
 
-export type { PluginManifest } from './plugin.ts';
+export type { PluginManifest, CustomRendererManifest } from './plugin.ts';

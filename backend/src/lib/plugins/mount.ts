@@ -29,6 +29,8 @@ export function mountPluginRoutes(app: Hono, plugins: LoadedPlugin[]): void {
       version: p.manifest.version,
       description: p.manifest.description,
       hasPages: p.manifest.hasPages ?? false,
+      navLabel: p.manifest.navLabel ?? null,
+      navIcon: p.manifest.navIcon ?? null,
     })));
   });
 }
