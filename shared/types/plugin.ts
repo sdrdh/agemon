@@ -11,6 +11,12 @@ export interface PluginManifest {
   navLabel?: string;        // if set, appears in bottom nav at /p/{id}/
   navIcon?: string;         // lucide icon name
   /**
+   * Whether this plugin appears in Settings → Plugins list. Defaults to true.
+   * Set to false for headless/background plugins that shouldn't be user-visible.
+   * Nav visibility is controlled independently via navLabel.
+   */
+  showInSettings?: boolean;
+  /**
    * Skill subdirectory names inside the plugin's skills/ folder.
    * Each listed skill is symlinked into ~/.agemon/skills/{pluginId}--{skillName}/
    * making it discoverable by all agents via the existing agemon skills symlink.

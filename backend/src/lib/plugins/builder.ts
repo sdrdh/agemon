@@ -16,6 +16,12 @@ interface BuiltModule {
 const builtRenderers = new Map<string, BuiltModule>();
 const builtPages = new Map<string, BuiltModule>();
 
+// Plugins currently being rebuilt — prevents concurrent rebuilds for the same plugin
+const rebuildingPlugins = new Set<string>();
+
+// Max allowed size for a built renderer/page JS file (2MB)
+const MAX_MODULE_SIZE = 2 * 1024 * 1024;
+
 export function getBuiltRenderer(messageType: string): BuiltModule | undefined {
   return builtRenderers.get(messageType);
 }
@@ -96,6 +102,10 @@ async function loadBuiltFiles(pluginDir: string, pluginId: string): Promise<Map<
     try {
       const filePath = join(distDir, file);
       const code = await readFile(filePath, 'utf-8');
+      if (Buffer.byteLength(code, 'utf-8') > MAX_MODULE_SIZE) {
+        console.warn(`[plugin:${pluginId}] ${file} exceeds 2MB size limit, skipping`);
+        continue;
+      }
       const hash = createHash('md5').update(code).digest('hex').slice(0, 12);
       modules.set(name, { code, hash });
     } catch (err) {
@@ -108,28 +118,40 @@ async function loadBuiltFiles(pluginDir: string, pluginId: string): Promise<Map<
 
 /**
  * Rebuild a single plugin and reload its modules into cache.
+ * Skips if a rebuild is already in progress for this plugin.
  */
 async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
   const { exports, dir, manifest } = plugin;
-  const ok = await runPluginBuild(dir, manifest.id);
-  if (!ok) return;
 
-  const modules = await loadBuiltFiles(dir, manifest.id);
-
-  if (exports.renderers) {
-    for (const renderer of exports.renderers) {
-      const mod = modules.get(renderer.manifest.name);
-      if (mod) builtRenderers.set(renderer.manifest.messageType, mod);
-    }
+  if (rebuildingPlugins.has(manifest.id)) {
+    console.info(`[plugin:${manifest.id}] rebuild already in progress, skipping`);
+    return;
   }
-  if (exports.pages) {
-    for (const page of exports.pages) {
-      const mod = modules.get(page.component);
-      if (mod) builtPages.set(`${manifest.id}:${page.component}`, mod);
-    }
-  }
+  rebuildingPlugins.add(manifest.id);
 
-  console.info(`[plugin:${manifest.id}] hot reloaded`);
+  try {
+    const ok = await runPluginBuild(dir, manifest.id);
+    if (!ok) return;
+
+    const modules = await loadBuiltFiles(dir, manifest.id);
+
+    if (exports.renderers) {
+      for (const renderer of exports.renderers) {
+        const mod = modules.get(renderer.manifest.name);
+        if (mod) builtRenderers.set(renderer.manifest.messageType, mod);
+      }
+    }
+    if (exports.pages) {
+      for (const page of exports.pages) {
+        const mod = modules.get(page.component);
+        if (mod) builtPages.set(`${manifest.id}:${page.component}`, mod);
+      }
+    }
+
+    console.info(`[plugin:${manifest.id}] hot reloaded`);
+  } finally {
+    rebuildingPlugins.delete(manifest.id);
+  }
 }
 
 /**

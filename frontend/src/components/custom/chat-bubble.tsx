@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect } from 'react';
+import { memo, useState, useCallback, useEffect, Component, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -15,6 +15,12 @@ const remarkPlugins = [remarkGfm];
 let registryPromise: Promise<Map<string, CustomRendererManifest>> | null = null;
 const componentCache = new Map<string, React.ComponentType<{ message: unknown }>>();
 
+/** Reset the renderer cache — call when new plugins are hot-loaded. */
+export function invalidateRendererCache(): void {
+  registryPromise = null;
+  componentCache.clear();
+}
+
 function getRegistry(): Promise<Map<string, CustomRendererManifest>> {
   if (!registryPromise) {
     registryPromise = fetch('/api/renderers/registry', { credentials: 'include' })
@@ -30,6 +36,33 @@ function getRegistry(): Promise<Map<string, CustomRendererManifest>> {
       .catch(() => new Map<string, CustomRendererManifest>());
   }
   return registryPromise;
+}
+
+// ─── Error Boundary for custom renderers ─────────────────────────────────────
+
+class RendererErrorBoundary extends Component<
+  { children: ReactNode; messageType: string },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode; messageType: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex justify-start my-2 max-w-[85%]">
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground italic">
+            Renderer error ({this.props.messageType})
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 async function loadRenderer(messageType: string): Promise<React.ComponentType<{ message: unknown }> | null> {
@@ -122,9 +155,11 @@ function MaybeCustomBubble({ message }: { message: ChatMessage }) {
 
   if (Component) {
     return (
-      <div className="flex justify-start my-2 max-w-[85%]">
-        <Component message={message} />
-      </div>
+      <RendererErrorBoundary messageType={message.eventType}>
+        <div className="flex justify-start my-2 max-w-[85%]">
+          <Component message={message} />
+        </div>
+      </RendererErrorBoundary>
     );
   }
 

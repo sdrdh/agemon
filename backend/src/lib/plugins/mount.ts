@@ -30,6 +30,7 @@ export function mountPluginRoutes(app: Hono, _plugins: LoadedPlugin[]): void {
       hasPages: p.manifest.hasPages ?? false,
       navLabel: p.manifest.navLabel ?? null,
       navIcon: p.manifest.navIcon ?? null,
+      showInSettings: p.manifest.showInSettings ?? true,
     })));
   });
 }

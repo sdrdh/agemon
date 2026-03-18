@@ -169,6 +169,7 @@ interface PluginInfo {
   description?: string;
   hasPages: boolean;
   navLabel?: string | null;
+  showInSettings: boolean;
 }
 
 function PluginsSection() {
@@ -178,7 +179,7 @@ function PluginsSection() {
   useEffect(() => {
     fetch('/api/plugins', { credentials: 'include' })
       .then(res => res.json())
-      .then(setPlugins)
+      .then((all: PluginInfo[]) => setPlugins(all.filter(p => p.showInSettings !== false)))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);

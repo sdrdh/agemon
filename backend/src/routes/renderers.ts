@@ -2,6 +2,12 @@ import { Hono } from 'hono';
 import { getAllRenderers, getRendererByMessageType, getAllPages, getPluginPage } from '../lib/plugins/registry.ts';
 import { getBuiltRenderer, getBuiltPage, buildPluginRenderers } from '../lib/plugins/builder.ts';
 
+const JS_HEADERS = {
+  'Content-Type': 'application/javascript; charset=utf-8',
+  'Cache-Control': 'no-cache',
+  'X-Content-Type-Options': 'nosniff',
+} as const;
+
 const renderers = new Hono();
 
 renderers.get('/registry', (c) => {
@@ -29,11 +35,7 @@ renderers.get('/:messageType.js', async (c) => {
   }
 
   return c.body(built.code, {
-    headers: {
-      'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      'ETag': `"${built.hash}"`,
-    },
+    headers: { ...JS_HEADERS, 'ETag': `"${built.hash}"` },
   });
 });
 
@@ -59,8 +61,13 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
     return c.text('Invalid plugin ID', 400);
   }
 
-  // Resolve "/" for root, "/foo" for subpaths
-  const pagePath = '/' + pathParam;
+  // Sanitize path — strip traversal segments before registry lookup
+  const safePath = pathParam
+    .split('/')
+    .filter(s => s && s !== '.' && s !== '..')
+    .join('/');
+  const pagePath = '/' + safePath;
+
   const page = getPluginPage(pluginId, pagePath);
   if (!page) {
     return c.text(`Page not found: ${pagePath}`, 404);
@@ -72,11 +79,7 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
   }
 
   return c.body(built.code, {
-    headers: {
-      'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      'ETag': `"${built.hash}"`,
-    },
+    headers: { ...JS_HEADERS, 'ETag': `"${built.hash}"` },
   });
 });
 

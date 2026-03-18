@@ -4,6 +4,7 @@ import { useWsStore } from '@/lib/store';
 import { queryClient, taskKeys, sessionKeys, dashboardKeys } from '@/lib/query';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
 import { api } from '@/lib/api';
+import { invalidateRendererCache } from '@/components/custom/chat-bubble';
 import type { ServerEvent } from '@agemon/shared';
 
 /** Shorten a file path to just the filename. */
@@ -246,6 +247,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           break;
         }
         case 'plugins_changed': {
+          invalidateRendererCache();
           store().bumpPluginsRevision();
           break;
         }
