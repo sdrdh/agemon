@@ -59,7 +59,7 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
   console.info(`[plugin:${pluginId}] running bun install...`);
   const install = Bun.spawn(['bun', 'install'], {
     cwd: pluginDir,
-    stdout: 'pipe',
+    stdout: 'ignore',
     stderr: 'pipe',
   });
   const installExit = await install.exited;
@@ -73,7 +73,7 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
   console.info(`[plugin:${pluginId}] running bun run build...`);
   const build = Bun.spawn(['bun', 'run', 'build'], {
     cwd: pluginDir,
-    stdout: 'pipe',
+    stdout: 'ignore',
     stderr: 'pipe',
   });
   const buildExit = await build.exited;
@@ -111,7 +111,7 @@ async function loadBuiltFiles(pluginDir: string, pluginId: string): Promise<Map<
         console.warn(`[plugin:${pluginId}] ${file} exceeds 2MB size limit, skipping`);
         continue;
       }
-      const hash = createHash('md5').update(code).digest('hex').slice(0, 12);
+      const hash = createHash('sha256').update(code).digest('hex').slice(0, 12);
       modules.set(name, { code, hash });
     } catch (err) {
       console.error(`[plugin:${pluginId}] failed to read ${file}:`, (err as Error).message);
@@ -139,6 +139,17 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
     if (!ok) return;
 
     const modules = await loadBuiltFiles(dir, manifest.id);
+
+    // Clear stale entries for this plugin before re-populating
+    if (exports.renderers) {
+      for (const renderer of exports.renderers) {
+        builtRenderers.delete(renderer.manifest.messageType);
+      }
+    }
+    for (const key of builtPages.keys()) {
+      if (key.startsWith(`${manifest.id}:`)) builtPages.delete(key);
+    }
+    builtIcons.delete(manifest.id);
 
     if (exports.renderers) {
       for (const renderer of exports.renderers) {
