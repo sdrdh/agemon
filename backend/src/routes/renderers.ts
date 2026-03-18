@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getAllRenderers, getRendererByMessageType, getAllPages, getPluginPage } from '../lib/plugins/registry.ts';
-import { getBuiltRenderer, getBuiltPage, buildPluginRenderers } from '../lib/plugins/builder.ts';
+import { getBuiltRenderer, getBuiltPage, getBuiltIcon, buildPluginRenderers } from '../lib/plugins/builder.ts';
 
 const JS_HEADERS = {
   'Content-Type': 'application/javascript; charset=utf-8',
@@ -80,6 +80,28 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
 
   return c.body(built.code, {
     headers: { ...JS_HEADERS, 'ETag': `"${built.hash}"` },
+  });
+});
+
+// Serve plugin nav icon component
+renderers.get('/icons/:pluginId.js', async (c) => {
+  const pluginId = c.req.param('pluginId') ?? '';
+
+  if (!/^[a-zA-Z0-9-]+$/.test(pluginId)) {
+    return c.text('Invalid plugin ID', 400);
+  }
+
+  const built = getBuiltIcon(pluginId);
+  if (!built) {
+    return c.text('Icon not found', 404);
+  }
+
+  return c.body(built.code, {
+    headers: {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'ETag': `"${built.hash}"`,
+    },
   });
 });
 

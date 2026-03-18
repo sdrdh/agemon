@@ -51,14 +51,16 @@ const NAV_START: NavItem[] = [
 const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
 
 
-/** Resolve a lucide icon name to a component. Lazy-imports lucide to avoid bundling all ~1500 icons. */
-async function resolveIcon(name: string): Promise<React.ComponentType<{ className?: string }>> {
-  const pascal = name.includes('-')
-    ? name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
-    : name.charAt(0).toUpperCase() + name.slice(1);
+/** Fetch a plugin's compiled icon component from the backend. */
+async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ className?: string }>> {
   try {
-    const mod = await import('lucide-react') as Record<string, unknown>;
-    return (mod[pascal] as React.ComponentType<{ className?: string }>) ?? Puzzle;
+    const res = await fetch(`/api/renderers/icons/${pluginId}.js`, { credentials: 'include' });
+    if (!res.ok) return Puzzle;
+    const code = await res.text();
+    const blob = new Blob([code], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const mod = await import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+    return (mod.default as React.ComponentType<{ className?: string }>) ?? Puzzle;
   } catch {
     return Puzzle;
   }
@@ -75,23 +77,23 @@ function BottomNav() {
   // Refetch when WS reconnects (server restart) or when server signals plugins changed
   useEffect(() => {
     if (!connected) return;
-    fetch('/api/plugins', { credentials: 'include' })
+    const controller = new AbortController();
+    fetch('/api/plugins', { credentials: 'include', signal: controller.signal })
       .then(res => res.json())
-      .then(async (plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
-        const items: NavItem[] = [];
-        for (const p of plugins) {
-          if (p.navLabel && p.navEnabled) {
-            items.push({
-              to: `/p/${p.id}`,
-              label: p.navLabel,
-              icon: p.navIcon ? await resolveIcon(p.navIcon) : Puzzle,
-              exact: true,
-            });
-          }
-        }
-        setPluginNavItems(items);
+      .then((plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
+        const navPlugins = plugins.filter(p => p.navLabel && p.navEnabled);
+        return Promise.all(
+          navPlugins.map(async p => ({
+            to: `/p/${p.id}`,
+            label: p.navLabel!,
+            icon: p.navIcon ? await fetchPluginIcon(p.id) : Puzzle,
+            exact: true,
+          }))
+        );
       })
-      .catch(console.error);
+      .then(setPluginNavItems)
+      .catch(err => { if (err.name !== 'AbortError') console.error(err); });
+    return () => controller.abort();
   }, [connected, pluginsRevision]);
 
   if (isTaskDetail) return null;
