@@ -127,6 +127,9 @@ app.route('/api', dashboardRoutes);
 const { systemRoutes } = await import('./routes/system.ts');
 app.route('/api', systemRoutes);
 
+const { renderersRoutes } = await import('./routes/renderers.ts');
+app.route('/api/renderers', renderersRoutes);
+
 // ─── Plugins ─────────────────────────────────────────────────────────────────
 const { scanPlugins } = await import('./lib/plugins/loader.ts');
 const { setPlugins } = await import('./lib/plugins/registry.ts');
@@ -136,6 +139,12 @@ const plugins = await scanPlugins(AGEMON_DIR);
 setPlugins(plugins);
 mountPluginRoutes(app, plugins);
 console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
+
+// Build plugin renderers and watch for changes
+const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
+await buildPluginRenderers(plugins);
+watchPlugins(plugins);
+watchPluginsDir(AGEMON_DIR, broadcast);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.

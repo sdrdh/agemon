@@ -1,4 +1,4 @@
-import { Suspense, Component, lazy, useState, type ReactNode } from 'react';
+import { Suspense, Component, lazy, useState, useEffect, type ReactNode } from 'react';
 import {
   createRouter,
   createRootRouteWithContext,
@@ -26,7 +26,7 @@ const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
-const PluginsPage = lazy(() => import('./routes/plugins'));
+const PluginPage = lazy(() => import('./routes/plugin'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
 
@@ -36,32 +36,80 @@ interface RouterContext {
 
 // ─── Bottom Nav ──────────────────────────────────────────────────────────────
 
-const NAV_ITEMS = [
-  { to: '/' as const, label: 'Home', icon: Home, exact: true },
-  { to: '/kanban' as const, label: 'Kanban', icon: KanbanSquare, exact: false },
-  { to: '/sessions' as const, label: 'Sessions', icon: TerminalSquare, exact: false },
-  { to: '/plugins' as const, label: 'Plugins', icon: Puzzle, exact: false },
-  { to: '/settings' as const, label: 'Settings', icon: Settings, exact: false },
-] as const;
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact: boolean;
+}
+
+const NAV_START: NavItem[] = [
+  { to: '/', label: 'Home', icon: Home, exact: true },
+  { to: '/kanban', label: 'Kanban', icon: KanbanSquare, exact: false },
+  { to: '/sessions', label: 'Sessions', icon: TerminalSquare, exact: false },
+];
+const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
+
+
+/** Resolve a lucide icon name to a component. Lazy-imports lucide to avoid bundling all ~1500 icons. */
+async function resolveIcon(name: string): Promise<React.ComponentType<{ className?: string }>> {
+  const pascal = name.includes('-')
+    ? name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
+    : name.charAt(0).toUpperCase() + name.slice(1);
+  try {
+    const mod = await import('lucide-react') as Record<string, unknown>;
+    return (mod[pascal] as React.ComponentType<{ className?: string }>) ?? Puzzle;
+  } catch {
+    return Puzzle;
+  }
+}
 
 function BottomNav() {
   const matches = useMatches();
   const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
+  const pluginsRevision = useWsStore(s => s.pluginsRevision);
+  const [pluginNavItems, setPluginNavItems] = useState<NavItem[]>([]);
+
+  // Refetch when WS reconnects (server restart) or when server signals plugins changed
+  useEffect(() => {
+    if (!connected) return;
+    fetch('/api/plugins', { credentials: 'include' })
+      .then(res => res.json())
+      .then(async (plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
+        const items: NavItem[] = [];
+        for (const p of plugins) {
+          if (p.navLabel && p.navEnabled) {
+            items.push({
+              to: `/p/${p.id}`,
+              label: p.navLabel,
+              icon: p.navIcon ? await resolveIcon(p.navIcon) : Puzzle,
+              exact: true,
+            });
+          }
+        }
+        setPluginNavItems(items);
+      })
+      .catch(console.error);
+  }, [connected, pluginsRevision]);
+
   if (isTaskDetail) return null;
+
+  const navItems = [...NAV_START, ...pluginNavItems, NAV_END];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-center justify-around h-14 max-w-5xl mx-auto">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, exact }) => (
+      <div className="flex items-center justify-around h-14 max-w-5xl mx-auto overflow-x-auto">
+        {navItems.map(({ to, label, icon: Icon, exact }) => (
           <Link
             key={to}
             to={to}
             activeOptions={{ exact }}
-            className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors"
+            className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors shrink-0"
             activeProps={{
               className:
-                'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors',
+                'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors shrink-0',
             }}
           >
             <span className="relative">
@@ -161,10 +209,18 @@ const projectsRoute = createRoute({
   component: ProjectsPage,
 });
 
-const pluginsRoute = createRoute({
+// Root of a plugin: /p/memory-cms
+const pluginPageRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/plugins',
-  component: PluginsPage,
+  path: '/p/$pluginId',
+  component: PluginPage,
+});
+
+// Sub-pages of a plugin: /p/memory-cms/foo/bar
+const pluginSubPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$pluginId/$',
+  component: PluginPage,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -175,7 +231,8 @@ const routeTree = rootRoute.addChildren([
   sessionsRoute,
   settingsRoute,
   projectsRoute,
-  pluginsRoute,
+  pluginPageRoute,
+  pluginSubPageRoute,
 ]);
 
 const router = createRouter({
