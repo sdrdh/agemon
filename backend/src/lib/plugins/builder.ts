@@ -12,9 +12,10 @@ interface BuiltModule {
   hash: string;
 }
 
-// key: messageType for renderers, "pluginId:component" for pages
+// key: messageType for renderers, "pluginId:component" for pages, pluginId for icons
 const builtRenderers = new Map<string, BuiltModule>();
 const builtPages = new Map<string, BuiltModule>();
+const builtIcons = new Map<string, BuiltModule>();
 
 // Plugins currently being rebuilt — prevents concurrent rebuilds for the same plugin
 const rebuildingPlugins = new Set<string>();
@@ -28,6 +29,10 @@ export function getBuiltRenderer(messageType: string): BuiltModule | undefined {
 
 export function getBuiltPage(pluginId: string, component: string): BuiltModule | undefined {
   return builtPages.get(`${pluginId}:${component}`);
+}
+
+export function getBuiltIcon(pluginId: string): BuiltModule | undefined {
+  return builtIcons.get(pluginId);
 }
 
 // ─── Plugin Build ────────────────────────────────────────────────────────────
@@ -147,6 +152,10 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
         if (mod) builtPages.set(`${manifest.id}:${page.component}`, mod);
       }
     }
+    if (manifest.navIcon) {
+      const mod = modules.get(manifest.navIcon);
+      if (mod) builtIcons.set(manifest.id, mod);
+    }
 
     console.info(`[plugin:${manifest.id}] hot reloaded`);
   } finally {
@@ -237,13 +246,15 @@ export function watchPlugins(plugins: LoadedPlugin[]): void {
 export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<void> {
   builtRenderers.clear();
   builtPages.clear();
+  builtIcons.clear();
 
   for (const plugin of plugins) {
     const { exports, dir, manifest } = plugin;
     const hasRenderers = exports.renderers && exports.renderers.length > 0;
     const hasPages = exports.pages && exports.pages.length > 0;
+    const hasIcon = !!manifest.navIcon;
 
-    if (!hasRenderers && !hasPages) continue;
+    if (!hasRenderers && !hasPages && !hasIcon) continue;
 
     // Run the plugin's build
     const built = await runPluginBuild(dir, manifest.id);
@@ -275,6 +286,17 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
         } else {
           console.warn(`[plugin:${manifest.id}] page ${page.component} not found in dist/`);
         }
+      }
+    }
+
+    // Map icon
+    if (manifest.navIcon) {
+      const mod = modules.get(manifest.navIcon);
+      if (mod) {
+        builtIcons.set(manifest.id, mod);
+        console.info(`[plugin:${manifest.id}] cached icon: ${manifest.navIcon}`);
+      } else {
+        console.warn(`[plugin:${manifest.id}] icon ${manifest.navIcon} not found in dist/`);
       }
     }
   }

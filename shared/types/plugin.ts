@@ -9,7 +9,7 @@ export interface PluginManifest {
   entryPoint?: string;      // relative path to TS/JS entry, e.g. "index.ts"
   hasPages?: boolean;       // true → plugin serves full-page HTML at /p/{id}/
   navLabel?: string;        // if set, appears in bottom nav at /p/{id}/
-  navIcon?: string;         // lucide icon name
+  navIcon?: string;         // component filename in dist/renderers/ (e.g. "icon" → icon.tsx compiled by plugin)
   /**
    * Whether this plugin appears in Settings → Plugins list. Defaults to true.
    * Set to false for headless/background plugins that shouldn't be user-visible.

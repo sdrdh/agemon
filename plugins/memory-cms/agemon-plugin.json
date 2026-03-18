@@ -6,6 +6,6 @@
   "entryPoint": "index.ts",
   "hasPages": true,
   "navLabel": "Memory",
-  "navIcon": "brain",
+  "navIcon": "icon",
   "skills": ["memory-recall"]
 }
