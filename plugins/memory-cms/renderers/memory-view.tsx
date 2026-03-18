@@ -43,7 +43,7 @@ function FileView({ taskId, type, onBack }: { taskId: string; type: string; onBa
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/memory/${taskId}/${type}`, { credentials: 'include', signal: controller.signal })
+    fetch(`/api/plugins/memory-cms/memory/${taskId}/${type}`, { credentials: 'include', signal: controller.signal })
       .then(res => { if (!res.ok) throw new Error('Not found'); return res.text(); })
       .then(setContent)
       .catch(err => { if (err.name !== 'AbortError') setError(err.message); })

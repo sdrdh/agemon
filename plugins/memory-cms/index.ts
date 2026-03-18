@@ -1,9 +1,7 @@
 import { Hono } from 'hono';
-import { trimTrailingSlash } from 'hono/trailing-slash';
 import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
-import { renderTaskList, renderTaskFiles, renderFile } from './views.ts';
 
 /** Reject path segments that could traverse directories. */
 function isSafeSegment(s: string): boolean {
@@ -72,56 +70,36 @@ export function onLoad(ctx: PluginContext): PluginExports {
 
   // API routes
   const api = new Hono();
+
   api.get('/files', async (c) => {
     const files = await discoverFiles(tasksDir);
     return c.json(files);
   });
 
-  const pages = new Hono();
-  pages.use(trimTrailingSlash());
-
-  // GET / — list all tasks with memory/summary files, grouped by type
-  pages.get('/', async (c) => {
-    const files = await discoverFiles(tasksDir);
-    return c.html(renderTaskList(files));
-  });
-
-  // GET /tasks/:taskId — list files for a specific task
-  pages.get('/tasks/:taskId', async (c) => {
+  api.get('/memory/:taskId/:type', async (c) => {
     const taskId = c.req.param('taskId');
-    if (!isSafeSegment(taskId)) return c.text('Invalid task ID', 400);
-    const files = await discoverTaskFiles(tasksDir, taskId);
+    const type = c.req.param('type');
 
-    if (files.length === 0) {
-      return c.text('No memory or summary files found for this task', 404);
+    if (type !== 'memory' && type !== 'summary') {
+      return c.text('Invalid type', 400);
     }
 
-    return c.html(renderTaskFiles(taskId, files));
-  });
+    if (!isSafeSegment(taskId)) {
+      return c.text('Invalid task ID', 400);
+    }
 
-  // GET /tasks/:taskId/:type — render memory or summary for a task (type = 'memory' | 'summary')
-  pages.get('/tasks/:taskId/:type', async (c) => {
-    const taskId = c.req.param('taskId');
-    const type = c.req.param('type') as MemoryFile['type'];
-    if (!isSafeSegment(taskId)) return c.text('Invalid task ID', 400);
-
-    const known = KNOWN_FILES.find(f => f.type === type);
-    if (!known) return c.text('Unknown type', 404);
-
-    const filePath = resolve(tasksDir, taskId, known.subpath);
+    const subpath = type === 'memory' ? 'memory/MEMORY.md' : 'TASK_SUMMARY.md';
+    const filePath = resolve(tasksDir, taskId, subpath);
     if (!filePath.startsWith(tasksDir)) return c.text('Invalid path', 400);
-    const file = Bun.file(filePath);
-    if (!await file.exists()) {
-      return c.text('File not found', 404);
-    }
 
-    const content = await file.text();
-    return c.html(renderFile(taskId, known.subpath, content));
+    const file = Bun.file(filePath);
+    if (!await file.exists()) return c.text('File not found', 404);
+
+    return c.text(await file.text());
   });
 
   return {
     apiRoutes: api,
-    pageRoutes: pages,
     pages: [
       { path: '/', component: 'memory-view' },
     ],

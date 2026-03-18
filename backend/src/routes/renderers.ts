@@ -1,13 +1,6 @@
 import { Hono } from 'hono';
-import { readFile } from 'fs/promises';
-import { join, resolve } from 'path';
-import { homedir } from 'os';
 import { getAllRenderers, getRendererByMessageType, getAllPages, getPluginPage } from '../lib/plugins/registry.ts';
 import { getBuiltRenderer, getBuiltPage, buildPluginRenderers } from '../lib/plugins/builder.ts';
-
-function agemonDir(): string {
-  return process.env.AGEMON_DIR ? resolve(process.env.AGEMON_DIR) : join(homedir(), '.agemon');
-}
 
 const renderers = new Hono();
 
@@ -87,33 +80,4 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
   });
 });
 
-// Memory API endpoint
-const memory = new Hono();
-
-memory.get('/:taskId/:type', async (c) => {
-  const taskId = c.req.param('taskId');
-  const type = c.req.param('type');
-
-  if (type !== 'memory' && type !== 'summary') {
-    return c.text('Invalid type', 400);
-  }
-
-  if (!/^[a-zA-Z0-9-_]+$/.test(taskId)) {
-    return c.text('Invalid task ID', 400);
-  }
-
-  const tasksDir = join(agemonDir(), 'tasks');
-  // memory lives at {taskDir}/memory/MEMORY.md (Claude Code's cwd/memory/ convention)
-  const subpath = type === 'memory' ? 'memory/MEMORY.md' : 'TASK_SUMMARY.md';
-  const filePath = join(tasksDir, taskId, subpath);
-
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    return c.text(content);
-  } catch {
-    return c.text('File not found', 404);
-  }
-});
-
 export const renderersRoutes = renderers;
-export const memoryRoutes = memory;
