@@ -20,7 +20,7 @@ async function wirePluginSkills(manifest: { id: string; skills?: string[] }, plu
     try {
       const s = await stat(skillSrc);
       if (!s.isDirectory()) {
-        console.warn(`[plugin:${manifest.id}] skill "${skillName}" is not a directory, skipping`);
+        console.warn(`[plugin:${manifest.id}] skill "${skillName}" is not a directory, skipping (expected directory at ${skillSrc})`);
         continue;
       }
     } catch {

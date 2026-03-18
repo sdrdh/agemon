@@ -37,7 +37,7 @@ export default function PluginPage() {
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        console.error('Failed to load plugin page:', err);
+        console.error(`Failed to load plugin page ${pluginId}/${pagePath}:`, err);
         setError('Failed to load page');
         setLoading(false);
       });

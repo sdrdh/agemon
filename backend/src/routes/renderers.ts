@@ -31,7 +31,7 @@ renderers.get('/:messageType.js', async (c) => {
 
   const built = getBuiltRenderer(messageType);
   if (!built) {
-    return c.text('Renderer not built — restart server', 404);
+    return c.text('Renderer not built or hot-reload in progress — check server logs for build errors', 503);
   }
 
   return c.body(built.code, {
@@ -75,7 +75,7 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
 
   const built = getBuiltPage(pluginId, page.componentName);
   if (!built) {
-    return c.text('Component not built — restart server', 404);
+    return c.text('Component not built or hot-reload in progress — check server logs for build errors', 503);
   }
 
   return c.body(built.code, {

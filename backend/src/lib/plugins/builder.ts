@@ -108,7 +108,7 @@ async function loadBuiltFiles(pluginDir: string, pluginId: string): Promise<Map<
       const filePath = join(distDir, file);
       const code = await readFile(filePath, 'utf-8');
       if (Buffer.byteLength(code, 'utf-8') > MAX_MODULE_SIZE) {
-        console.warn(`[plugin:${pluginId}] ${file} exceeds 2MB size limit, skipping`);
+        console.warn(`[plugin:${pluginId}] ${file} (${Buffer.byteLength(code, 'utf-8')} bytes) exceeds 2MB size limit, skipping`);
         continue;
       }
       const hash = createHash('sha256').update(code).digest('hex').slice(0, 12);

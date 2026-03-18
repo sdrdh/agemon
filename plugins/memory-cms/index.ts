@@ -85,11 +85,12 @@ export function onLoad(ctx: PluginContext): PluginExports {
     }
 
     if (!isSafeSegment(taskId)) {
-      return c.text('Invalid task ID', 400);
+      return c.text(`Invalid task ID: ${taskId}`, 400);
     }
 
     const subpath = type === 'memory' ? 'memory/MEMORY.md' : 'TASK_SUMMARY.md';
     const filePath = resolve(tasksDir, taskId, subpath);
+    // Security check: ensure the resolved path is still within the tasks directory
     if (!filePath.startsWith(tasksDir)) return c.text('Invalid path', 400);
 
     const file = Bun.file(filePath);
