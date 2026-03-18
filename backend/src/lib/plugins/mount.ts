@@ -1,6 +1,17 @@
 import type { Hono } from 'hono';
 import type { LoadedPlugin } from './types.ts';
 import { getPlugin, getPlugins } from './registry.ts';
+import { getSetting, setSetting } from '../../db/settings.ts';
+
+/** Setting key for per-plugin nav visibility. Default is enabled (true). */
+function navSettingKey(pluginId: string): string {
+  return `plugin_nav_${pluginId}`;
+}
+
+export function isNavEnabled(pluginId: string): boolean {
+  const val = getSetting(navSettingKey(pluginId));
+  return val !== 'false';
+}
 
 /**
  * Mount plugin routes onto the main Hono app using dynamic dispatch.
@@ -31,6 +42,19 @@ export function mountPluginRoutes(app: Hono, _plugins: LoadedPlugin[]): void {
       navLabel: p.manifest.navLabel ?? null,
       navIcon: p.manifest.navIcon ?? null,
       showInSettings: p.manifest.showInSettings ?? true,
+      navEnabled: p.manifest.navLabel ? isNavEnabled(p.manifest.id) : false,
     })));
+  });
+
+  // PATCH /api/plugins/:pluginId — update plugin config (nav visibility)
+  app.patch('/api/plugins/:pluginId', async (c) => {
+    const pluginId = c.req.param('pluginId');
+    if (!getPlugin(pluginId)) return c.notFound();
+
+    const body = await c.req.json<{ navEnabled?: boolean }>();
+    if (typeof body.navEnabled === 'boolean') {
+      setSetting(navSettingKey(pluginId), body.navEnabled ? 'true' : 'false');
+    }
+    return c.json({ ok: true });
   });
 }

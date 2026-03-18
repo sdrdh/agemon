@@ -3,6 +3,8 @@ import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
 import { McpServerList } from '@/components/custom/mcp-server-list';
@@ -169,6 +171,7 @@ interface PluginInfo {
   description?: string;
   hasPages: boolean;
   navLabel?: string | null;
+  navEnabled: boolean;
   showInSettings: boolean;
 }
 
@@ -183,6 +186,16 @@ function PluginsSection() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  function toggleNav(pluginId: string, enabled: boolean) {
+    setPlugins(prev => prev.map(p => p.id === pluginId ? { ...p, navEnabled: enabled } : p));
+    fetch(`/api/plugins/${pluginId}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ navEnabled: enabled }),
+    }).catch(console.error);
+  }
 
   return (
     <section className="space-y-4">
@@ -210,25 +223,37 @@ function PluginsSection() {
       {!loading && plugins.length > 0 && (
         <ul className="space-y-2">
           {plugins.map((p) => (
-            <li key={p.id} className="flex items-center justify-between px-4 py-3 bg-card rounded-lg border">
-              <div className="min-w-0">
-                <div className="font-medium text-sm">{p.name}</div>
-                {p.description && (
-                  <div className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</div>
-                )}
+            <li key={p.id} className="px-4 py-3 bg-card rounded-lg border space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm">{p.name}</div>
+                  {p.description && (
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground font-mono">{p.version}</span>
+                  {p.hasPages && (
+                    <Link
+                      to={`/p/${p.id}`}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Open ${p.name}`}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 ml-3 shrink-0">
-                <span className="text-xs text-muted-foreground font-mono">{p.version}</span>
-                {p.hasPages && (
-                  <Link
-                    to={`/p/${p.id}`}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={`Open ${p.name}`}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Link>
-                )}
-              </div>
+              {p.navLabel && (
+                <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                  <Label htmlFor={`nav-${p.id}`} className="text-xs text-muted-foreground">Show in nav</Label>
+                  <Switch
+                    id={`nav-${p.id}`}
+                    checked={p.navEnabled}
+                    onCheckedChange={(checked) => toggleNav(p.id, checked)}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

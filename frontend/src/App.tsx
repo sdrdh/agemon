@@ -77,10 +77,10 @@ function BottomNav() {
     if (!connected) return;
     fetch('/api/plugins', { credentials: 'include' })
       .then(res => res.json())
-      .then(async (plugins: { id: string; navLabel: string | null; navIcon: string | null }[]) => {
+      .then(async (plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
         const items: NavItem[] = [];
         for (const p of plugins) {
-          if (p.navLabel) {
+          if (p.navLabel && p.navEnabled) {
             items.push({
               to: `/p/${p.id}`,
               label: p.navLabel,
