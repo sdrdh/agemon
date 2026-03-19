@@ -127,18 +127,24 @@ app.route('/api', dashboardRoutes);
 const { systemRoutes } = await import('./routes/system.ts');
 app.route('/api', systemRoutes);
 
-// ─── MCP Server ──────────────────────────────────────────────────────────────
-const { getMcpServer, getMcpTransport } = await import('./lib/mcp/server.ts');
-const mcpTransport = getMcpTransport();
-const mcpServer = getMcpServer();
+const { renderersRoutes } = await import('./routes/renderers.ts');
+app.route('/api/renderers', renderersRoutes);
 
-// app.all is required: MCP Streamable HTTP uses POST for RPC, GET for SSE, DELETE for session teardown
-app.all('/mcp', async (c) => {
-  if (!mcpServer.isConnected()) {
-    await mcpServer.connect(mcpTransport);
-  }
-  return mcpTransport.handleRequest(c);
-});
+// ─── Plugins ─────────────────────────────────────────────────────────────────
+const { scanPlugins } = await import('./lib/plugins/loader.ts');
+const { setPlugins } = await import('./lib/plugins/registry.ts');
+const { mountPluginRoutes } = await import('./lib/plugins/mount.ts');
+
+const plugins = await scanPlugins(AGEMON_DIR);
+setPlugins(plugins);
+mountPluginRoutes(app, plugins);
+console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
+
+// Build plugin renderers and watch for changes
+const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
+await buildPluginRenderers(plugins);
+watchPlugins(plugins);
+watchPluginsDir(AGEMON_DIR, broadcast);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.
@@ -153,7 +159,7 @@ if (frontendExists) {
     const urlPath = new URL(c.req.url).pathname;
 
     // Let API, WS, and MCP routes pass through to their handlers
-    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/mcp')) {
+    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/p/')) {
       return next();
     }
 

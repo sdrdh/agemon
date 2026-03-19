@@ -1,4 +1,4 @@
-import { Suspense, Component, lazy, useState, type ReactNode } from 'react';
+import { Suspense, Component, lazy, useState, useEffect, type ReactNode } from 'react';
 import {
   createRouter,
   createRootRouteWithContext,
@@ -9,7 +9,7 @@ import {
   useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Home, KanbanSquare, TerminalSquare, Settings } from 'lucide-react';
+import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
@@ -26,6 +26,7 @@ const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
+const PluginPage = lazy(() => import('./routes/plugin'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
 
@@ -35,31 +36,82 @@ interface RouterContext {
 
 // ─── Bottom Nav ──────────────────────────────────────────────────────────────
 
-const NAV_ITEMS = [
-  { to: '/' as const, label: 'Home', icon: Home, exact: true },
-  { to: '/kanban' as const, label: 'Kanban', icon: KanbanSquare, exact: false },
-  { to: '/sessions' as const, label: 'Sessions', icon: TerminalSquare, exact: false },
-  { to: '/settings' as const, label: 'Settings', icon: Settings, exact: false },
-] as const;
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact: boolean;
+}
+
+const NAV_START: NavItem[] = [
+  { to: '/', label: 'Home', icon: Home, exact: true },
+  { to: '/kanban', label: 'Kanban', icon: KanbanSquare, exact: false },
+  { to: '/sessions', label: 'Sessions', icon: TerminalSquare, exact: false },
+];
+const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
+
+
+/** Fetch a plugin's compiled icon component from the backend. */
+async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ className?: string }>> {
+  try {
+    const res = await fetch(`/api/renderers/icons/${pluginId}.js`, { credentials: 'include' });
+    if (!res.ok) return Puzzle;
+    const code = await res.text();
+    const blob = new Blob([code], { type: 'application/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const mod = await import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+    return (mod.default as React.ComponentType<{ className?: string }>) ?? Puzzle;
+  } catch {
+    return Puzzle;
+  }
+}
 
 function BottomNav() {
   const matches = useMatches();
   const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
+  const pluginsRevision = useWsStore(s => s.pluginsRevision);
+  const [pluginNavItems, setPluginNavItems] = useState<NavItem[]>([]);
+
+  // Refetch when WS reconnects (server restart) or when server signals plugins changed
+  useEffect(() => {
+    if (!connected) return;
+    const controller = new AbortController();
+    fetch('/api/plugins', { credentials: 'include', signal: controller.signal })
+      .then(res => res.json())
+      .then((plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
+        const navPlugins = plugins.filter(p => p.navLabel && p.navEnabled);
+        return Promise.all(
+          navPlugins.map(async p => ({
+            to: `/p/${p.id}`,
+            label: p.navLabel!,
+            icon: p.navIcon ? await fetchPluginIcon(p.id) : Puzzle,
+            exact: true,
+          }))
+        );
+      })
+      .then(setPluginNavItems)
+      .catch(err => { if (err.name !== 'AbortError') console.error(err); });
+    return () => controller.abort();
+  }, [connected, pluginsRevision]);
+
   if (isTaskDetail) return null;
+
+  const navItems = [...NAV_START, ...pluginNavItems, NAV_END];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-center justify-around h-14 max-w-5xl mx-auto">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, exact }) => (
+      <div className="flex items-center justify-around h-14 max-w-5xl mx-auto overflow-x-auto">
+        {navItems.map(({ to, label, icon: Icon, exact }) => (
           <Link
             key={to}
             to={to}
             activeOptions={{ exact }}
-            className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors"
+            className="flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-muted-foreground transition-colors shrink-0"
             activeProps={{
               className:
-                'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors',
+                'flex flex-col items-center justify-center gap-0.5 min-h-[44px] min-w-[44px] px-3 text-primary transition-colors shrink-0',
             }}
           >
             <span className="relative">
@@ -159,6 +211,20 @@ const projectsRoute = createRoute({
   component: ProjectsPage,
 });
 
+// Root of a plugin: /p/memory-cms
+const pluginPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$pluginId',
+  component: PluginPage,
+});
+
+// Sub-pages of a plugin: /p/memory-cms/foo/bar
+const pluginSubPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/p/$pluginId/$',
+  component: PluginPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   taskNewRoute,
@@ -167,6 +233,8 @@ const routeTree = rootRoute.addChildren([
   sessionsRoute,
   settingsRoute,
   projectsRoute,
+  pluginPageRoute,
+  pluginSubPageRoute,
 ]);
 
 const router = createRouter({

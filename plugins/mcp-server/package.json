@@ -1,0 +1,13 @@
+{
+  "name": "@agemon/plugin-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "hono": "^4.6.0",
+    "@hono/mcp": "^0.2.4",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "pkce-challenge": "^4.1.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.24.0"
+  }
+}

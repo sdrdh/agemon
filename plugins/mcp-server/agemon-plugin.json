@@ -1,0 +1,7 @@
+{
+  "id": "mcp-server",
+  "name": "MCP Server",
+  "version": "0.1.0",
+  "description": "Exposes Agemon task and session management as MCP tools for external clients",
+  "entryPoint": "index.ts"
+}

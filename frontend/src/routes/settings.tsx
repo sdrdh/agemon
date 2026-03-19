@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap } from 'lucide-react';
+import { useNavigate, useRouter } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
 import { McpServerList } from '@/components/custom/mcp-server-list';
@@ -11,12 +14,13 @@ import { api } from '@/lib/api';
 import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
 import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers' | 'skills' | 'about';
+type Section = 'appearance' | 'mcp-servers' | 'skills' | 'plugins' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Zap },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'about', label: 'About', icon: Info },
 ];
 
@@ -158,12 +162,113 @@ function SkillsSection() {
   );
 }
 
+// ─── Plugins Section ────────────────────────────────────────────────────────
+
+interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  hasPages: boolean;
+  navLabel?: string | null;
+  navEnabled: boolean;
+  showInSettings: boolean;
+}
+
+function PluginsSection() {
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/plugins', { credentials: 'include' })
+      .then(res => res.json())
+      .then((all: PluginInfo[]) => setPlugins(all.filter(p => p.showInSettings !== false)))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  function toggleNav(pluginId: string, enabled: boolean) {
+    setPlugins(prev => prev.map(p => p.id === pluginId ? { ...p, navEnabled: enabled } : p));
+    fetch(`/api/plugins/${pluginId}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ navEnabled: enabled }),
+    }).catch(console.error);
+  }
+
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Plugins</h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Drop a plugin folder into <span className="font-mono">~/.agemon/plugins/</span> and restart the server to install.
+        </p>
+      </div>
+
+      {loading && (
+        <div className="space-y-2">
+          <div className="h-14 rounded-lg bg-muted animate-pulse" />
+          <div className="h-14 rounded-lg bg-muted animate-pulse" />
+        </div>
+      )}
+
+      {!loading && plugins.length === 0 && (
+        <div className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
+          <Puzzle className="h-6 w-6 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No plugins installed</p>
+        </div>
+      )}
+
+      {!loading && plugins.length > 0 && (
+        <ul className="space-y-2">
+          {plugins.map((p) => (
+            <li key={p.id} className="px-4 py-3 bg-card rounded-lg border space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm">{p.name}</div>
+                  {p.description && (
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground font-mono">{p.version}</span>
+                  {p.hasPages && (
+                    <Link
+                      to="/p/$pluginId"
+                      params={{ pluginId: p.id }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={`Open ${p.name}`}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+              {p.navLabel && (
+                <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                  <Label htmlFor={`nav-${p.id}`} className="text-xs text-muted-foreground">Show in nav</Label>
+                  <Switch
+                    id={`nav-${p.id}`}
+                    checked={p.navEnabled}
+                    onCheckedChange={(checked) => toggleNav(p.id, checked)}
+                  />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // ─── About Section ─────────────────────────────────────────────────────────
 
 const RESTART_POLL_INTERVAL_MS = 2000;
 const RESTART_POLL_MAX_ATTEMPTS = 30;
 
-function AboutSection() {
+function AboutSection({ onLogout }: { onLogout: () => void }) {
   const { versionInfo, loading: checkLoading, error: checkError, check } = useVersionChecker();
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [isSystemd, setIsSystemd] = useState(false);
@@ -442,6 +547,17 @@ function AboutSection() {
           </label>
         </div>
       )}
+
+      <div className="pt-4 border-t">
+        <Button
+          variant="outline"
+          className="min-h-[44px] text-destructive hover:text-destructive"
+          onClick={onLogout}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Log out
+        </Button>
+      </div>
     </section>
   );
 }
@@ -450,6 +566,7 @@ function AboutSection() {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { options: { context } } = useRouter();
   const [activeSection, setActiveSection] = useState<Section>('appearance');
 
   return (
@@ -507,7 +624,8 @@ export default function SettingsPage() {
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
           {activeSection === 'skills' && <SkillsSection />}
-          {activeSection === 'about' && <AboutSection />}
+          {activeSection === 'plugins' && <PluginsSection />}
+          {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
         </div>
       </div>
     </div>

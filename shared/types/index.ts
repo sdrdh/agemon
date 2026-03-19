@@ -245,6 +245,7 @@ export type ServerEvent =
   | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string })
   | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage })
   | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
+  | (ServerEventBase & { type: 'plugins_changed'; pluginIds: string[] })
   | (ServerEventBase & { type: 'server_restarting' })
   | (ServerEventBase & { type: 'full_sync_required' });
 
@@ -388,3 +389,7 @@ export interface SkillInstallResult {
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */
 export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
+
+// ─── Plugin Types ────────────────────────────────────────────────────────────
+
+export type { PluginManifest, CustomRendererManifest } from './plugin.ts';
