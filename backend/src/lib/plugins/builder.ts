@@ -232,7 +232,7 @@ export function watchPlugins(plugins: LoadedPlugin[]): void {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      watch(renderersDir, { recursive: false }, (_event, filename) => {
+      watch(renderersDir, { recursive: true }, (_event, filename) => {
         if (!filename?.endsWith('.tsx') && !filename?.endsWith('.ts')) return;
         // Debounce — wait for saves to settle before rebuilding
         if (debounceTimer) clearTimeout(debounceTimer);
