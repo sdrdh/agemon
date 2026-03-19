@@ -1,4 +1,4 @@
-import { readdir, symlink, lstat, stat } from 'fs/promises';
+import { readdir, symlink, lstat, stat, access } from 'fs/promises';
 import { join } from 'path';
 import { getDb } from '../../db/client.ts';
 import { getSetting } from '../../db/settings.ts';
@@ -48,6 +48,28 @@ async function wirePluginSkills(manifest: { id: string; skills?: string[] }, plu
 }
 
 /**
+ * Run `bun install` in a plugin directory if it has a package.json.
+ */
+async function ensureDepsInstalled(pluginDir: string, pluginId: string): Promise<void> {
+  try {
+    await access(join(pluginDir, 'package.json'));
+  } catch {
+    return; // no package.json, nothing to install
+  }
+
+  const proc = Bun.spawn(['bun', 'install'], {
+    cwd: pluginDir,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  });
+  const exit = await proc.exited;
+  if (exit !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    throw new Error(`bun install failed: ${stderr.trim()}`);
+  }
+}
+
+/**
  * Scan ~/.agemon/plugins/ for plugin directories containing agemon-plugin.json.
  * For each valid plugin, optionally import its entryPoint and call onLoad().
  * Returns all successfully loaded plugins. Errors are logged, not thrown.
@@ -82,6 +104,7 @@ export async function scanPlugins(agemonDir: string): Promise<LoadedPlugin[]> {
       let exports: PluginExports = {};
 
       if (manifest.entryPoint) {
+        await ensureDepsInstalled(dir, manifest.id);
         const entryPath = join(dir, manifest.entryPoint);
         const mod = await import(entryPath);
         const onLoad = mod.onLoad ?? mod.default?.onLoad;

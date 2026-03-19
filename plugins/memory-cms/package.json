@@ -9,7 +9,6 @@
     "hono": "^4.6.0",
     "marked": "^17.0.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "@agemon/shared": "workspace:*"
+    "remark-gfm": "^4.0.1"
   }
 }
