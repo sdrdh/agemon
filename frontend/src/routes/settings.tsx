@@ -235,7 +235,8 @@ function PluginsSection() {
                   <span className="text-xs text-muted-foreground font-mono">{p.version}</span>
                   {p.hasPages && (
                     <Link
-                      to={`/p/${p.id}`}
+                      to="/p/$pluginId"
+                      params={{ pluginId: p.id }}
                       className="text-muted-foreground hover:text-foreground transition-colors"
                       aria-label={`Open ${p.name}`}
                     >
