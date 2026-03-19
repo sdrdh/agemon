@@ -17,8 +17,10 @@ renderers.get('/registry', (c) => {
   });
 });
 
-renderers.get('/:messageType.js', async (c) => {
-  const messageType = c.req.param('messageType') ?? '';
+renderers.get('/:filename', async (c) => {
+  const filename = c.req.param('filename') ?? '';
+  if (!filename.endsWith('.js')) return c.text('Not found', 404);
+  const messageType = filename.slice(0, -3);
 
   if (!/^[a-zA-Z0-9-]+$/.test(messageType)) {
     return c.text('Invalid renderer name', 400);
@@ -84,8 +86,10 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
 });
 
 // Serve plugin nav icon component
-renderers.get('/icons/:pluginId.js', async (c) => {
-  const pluginId = c.req.param('pluginId') ?? '';
+renderers.get('/icons/:filename', async (c) => {
+  const filename = c.req.param('filename') ?? '';
+  if (!filename.endsWith('.js')) return c.text('Not found', 404);
+  const pluginId = filename.slice(0, -3);
 
   if (!/^[a-zA-Z0-9-]+$/.test(pluginId)) {
     return c.text('Invalid plugin ID', 400);
