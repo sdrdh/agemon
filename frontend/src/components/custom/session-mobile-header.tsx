@@ -19,7 +19,7 @@ export function SessionMobileHeader({
   onStop: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
+    <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0 sticky top-0 z-50">
       <Button size="icon" variant="ghost" aria-label="Back to sessions" onClick={onBack} className="min-h-[44px] min-w-[44px]">
         <ArrowLeft className="h-5 w-5" />
       </Button>

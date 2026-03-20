@@ -201,7 +201,7 @@ export function AddMcpServerForm({
           </Button>
 
           {testStatus === 'connected' && (
-            <div className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 p-2 rounded-md space-y-1">
+            <div className="text-xs text-success bg-success/10 p-2 rounded-md space-y-1">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{testMessage}</span>

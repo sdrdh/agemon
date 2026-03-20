@@ -46,6 +46,9 @@ interface WsState {
   /** Whether an update is available for the server */
   updateAvailable: boolean;
   setUpdateAvailable: (available: boolean) => void;
+  /** Incremented when the server signals plugins have changed */
+  pluginsRevision: number;
+  bumpPluginsRevision: () => void;
   /** Reset store state for full resync (epoch mismatch or buffer overflow) */
   resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
@@ -86,8 +89,10 @@ export const useWsStore = create<WsState>((set) => ({
   sessionUsage: {},
   toolCalls: {},
   updateAvailable: false,
+  pluginsRevision: 0,
 
   setUpdateAvailable: (available) => set({ updateAvailable: available }),
+  bumpPluginsRevision: () => set(s => ({ pluginsRevision: s.pluginsRevision + 1 })),
 
   setConnected: (connected) => set({ connected }),
 

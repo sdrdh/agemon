@@ -37,6 +37,12 @@ export function listPendingApprovalsBySession(sessionId: string): PendingApprova
   ).all(sessionId).map(mapApproval);
 }
 
+export function listAllPendingApprovals(): PendingApproval[] {
+  return getDb().query<RawApproval, []>(
+    `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE status = 'pending' ORDER BY created_at DESC`
+  ).all().map(mapApproval);
+}
+
 export function listAllApprovals(taskId: string): PendingApproval[] {
   return getDb().query<RawApproval, [string]>(
     `SELECT ${APPROVAL_COLUMNS} FROM pending_approvals WHERE task_id = ? ORDER BY created_at ASC`

@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -16,8 +16,11 @@ export function hasApiKey(): boolean {
   return !!localStorage.getItem(STORAGE_KEY);
 }
 
-export function clearApiKey() {
+export async function clearApiKey() {
   localStorage.removeItem(STORAGE_KEY);
+  try {
+    await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch { /* best effort */ }
 }
 
 function headers() {
@@ -54,6 +57,20 @@ export async function validateKey(key: string): Promise<boolean> {
   }
 }
 
+/** Set the auth cookie via POST /api/auth. Called after successful key validation. */
+export async function setAuthCookie(key: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/auth`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Authorization: `Bearer ${key}` },
+    });
+  } catch {
+    // Non-critical — Bearer header still works for SPA API calls
+    console.warn('Failed to set auth cookie');
+  }
+}
+
 export const api = {
   // Tasks
   listTasks: (includeArchived = false) => request<Task[]>(`/tasks${includeArchived ? '?archived=true' : ''}`),
@@ -70,7 +87,7 @@ export const api = {
     request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
     request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
-  getSessionChat: (sessionId: string, limit = 500, before?: string) =>
+  getSessionChat: (sessionId: string, limit = 50, before?: string) =>
     request<ChatHistoryResponse>(
       `/sessions/${sessionId}/chat?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`
     ),
@@ -123,6 +140,32 @@ export const api = {
   getSetting: (key: string) => request<{ value: string | null }>(`/settings/${key}`),
   setSetting: (key: string, value: string) =>
     request<{ ok: boolean }>('/settings', { method: 'POST', body: JSON.stringify({ key, value }) }),
+
+  // Dashboard
+  getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
+
+  // Skills
+  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/skills'),
+  previewSkills: (source: string) =>
+    request<SkillPreviewResult>('/skills/preview', {
+      method: 'POST',
+      body: JSON.stringify({ source }),
+    }),
+  installGlobalSkill: (source: string, skillNames?: string[]) =>
+    request<SkillInstallResult>('/skills', {
+      method: 'POST',
+      body: JSON.stringify({ source, skillNames }),
+    }),
+  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/skills/${name}`, { method: 'DELETE' }),
+  listTaskSkills: (taskId: string) =>
+    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/tasks/${taskId}/skills`),
+  installTaskSkill: (taskId: string, source: string, skillNames?: string[]) =>
+    request<SkillInstallResult>(`/tasks/${taskId}/skills`, {
+      method: 'POST',
+      body: JSON.stringify({ source, skillNames }),
+    }),
+  removeTaskSkill: (taskId: string, name: string) =>
+    request<{ ok: boolean }>(`/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

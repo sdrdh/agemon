@@ -7,10 +7,10 @@ import type { AgentCommand } from '@agemon/shared';
 /** Input border/bg color per mode */
 const MODE_INPUT_STYLES: Record<string, string> = {
   default: '',
-  plan: 'border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/20',
+  plan: 'border-warning/60 bg-warning/10',
   acceptEdits: 'border-blue-400/60 bg-blue-50/30 dark:bg-blue-950/20',
   dontAsk: 'border-orange-400/60 bg-orange-50/30 dark:bg-orange-950/20',
-  bypassPermissions: 'border-red-400/60 bg-red-50/30 dark:bg-red-950/20',
+  bypassPermissions: 'border-destructive/60 bg-destructive/10',
 };
 
 export function ChatInputArea({

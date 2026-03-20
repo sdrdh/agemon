@@ -245,6 +245,7 @@ export type ServerEvent =
   | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string })
   | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage })
   | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
+  | (ServerEventBase & { type: 'plugins_changed'; pluginIds: string[] })
   | (ServerEventBase & { type: 'server_restarting' })
   | (ServerEventBase & { type: 'full_sync_required' });
 
@@ -256,6 +257,26 @@ export type ClientEvent =
   | { type: 'set_config_option'; sessionId: string; configId: string; value: string }
   | { type: 'cancel_turn'; sessionId: string }
   | { type: 'resume'; lastSeq: number };
+
+// ─── Dashboard Types ────────────────────────────────────────────────────────
+
+export interface DashboardSessionBase {
+  session: AgentSession;
+  task: { id: string; title: string; description: string | null };
+  lastAgentMessage: string | null;
+}
+
+export interface DashboardBlockedSession extends DashboardSessionBase {
+  pendingInputs: AwaitingInput[];
+  pendingApprovals: PendingApproval[];
+}
+
+export interface DashboardIdleSession extends DashboardSessionBase {}
+
+export interface DashboardActiveResponse {
+  blocked: DashboardBlockedSession[];
+  idle: DashboardIdleSession[];
+}
 
 // ─── API Request/Response Shapes ─────────────────────────────────────────────
 
@@ -338,7 +359,37 @@ export interface TestMcpServerResult {
   tools?: McpToolInfo[];
 }
 
+// ─── Skills ──────────────────────────────────────────────────────────────────
+
+export interface InstalledSkill {
+  name: string;
+  description: string;
+  path: string;
+  scope: 'global' | 'task' | 'repo';
+}
+
+export interface SkillPreview {
+  name: string;
+  description: string;
+}
+
+export interface SkillPreviewResult {
+  ok: boolean;
+  skills: SkillPreview[];
+  error?: string;
+}
+
+export interface SkillInstallResult {
+  ok: boolean;
+  installed?: string[];
+  error?: string;
+}
+
 // ─── Shared Validation ──────────────────────────────────────────────────────
 
 /** Matches SSH repo URLs: git@host:org/repo(.git)? */
 export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
+
+// ─── Plugin Types ────────────────────────────────────────────────────────────
+
+export type { PluginManifest, CustomRendererManifest } from './plugin.ts';

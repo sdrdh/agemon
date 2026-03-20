@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import type { PendingApproval, ApprovalDecision, AgentSession, Task, ChatMessage } from '@agemon/shared';
 import type { PendingInput } from '@/lib/store';
 import { useWsStore } from '@/lib/store';
-import { SectionHeader } from './section-header';
 import { DashboardApprovalCard } from './dashboard-approval-card';
 import { QuestionInputCard } from './question-input-card';
 
@@ -15,6 +14,8 @@ interface NeedsInputSectionProps {
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   onInputSubmit: (inputId: string, taskId: string, response: string) => void;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
+  onStopSession?: (sessionId: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
 }
 
 /** Get the last meaningful message for a session — agent thought or user message. */
@@ -42,6 +43,8 @@ export function NeedsInputSection({
   onApprovalDecision,
   onInputSubmit,
   onNavigateToTask,
+  onStopSession,
+  onArchiveSession,
 }: NeedsInputSectionProps) {
   const chatMessages = useWsStore((s) => s.chatMessages);
   const sorted = useMemo(() => {
@@ -58,15 +61,13 @@ export function NeedsInputSection({
     return [...approvalItems, ...inputItems].sort((a, b) => b.timestamp - a.timestamp);
   }, [approvals, inputs]);
 
-  if (sorted.length === 0) return null;
-
-  const totalCount = approvals.length + inputs.length;
+  if (sorted.length === 0) {
+    return <p className="text-sm text-muted-foreground">Nothing blocked right now.</p>;
+  }
 
   return (
     <div className="space-y-2">
-      <SectionHeader title="Needs Your Input" colorClass="text-amber-500" count={totalCount} />
-      <div className="space-y-2">
-        {sorted.map((entry) => {
+      {sorted.map((entry) => {
           if (entry.type === 'approval') {
             const approval = entry.item as PendingApproval;
             const task = taskMap.get(approval.taskId);
@@ -85,6 +86,8 @@ export function NeedsInputSection({
                 connected={connected}
                 onDecision={onApprovalDecision}
                 onNavigate={() => onNavigateToTask(approval.taskId, approval.sessionId)}
+                onStop={onStopSession}
+                onArchive={onArchiveSession}
               />
             );
           } else {
@@ -105,11 +108,12 @@ export function NeedsInputSection({
                 connected={connected}
                 onSubmit={onInputSubmit}
                 onNavigate={() => onNavigateToTask(input.taskId, input.sessionId)}
+                onStop={onStopSession}
+                onArchive={onArchiveSession}
               />
             );
           }
         })}
-      </div>
     </div>
   );
 }

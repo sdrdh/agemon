@@ -125,7 +125,7 @@ function buildAgentGuidelines(): string[] {
     '- **Do not push** without explicit user approval',
     '- **Do not open PRs** without explicit user approval',
     '- Work within the repo subdirectory relevant to your task',
-    '- **Task Memory:** Maintain `MEMORY.md` in this task directory. As you work,',
+    '- **Task Memory:** Maintain `memory/MEMORY.md` in this task directory. As you work,',
     '  append important discoveries, decisions made, dead ends hit, and context',
     '  future sessions will need. Read it at session start if it exists.',
     '',

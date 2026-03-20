@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { PendingApproval, ApprovalDecision } from '@agemon/shared';
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Square, Archive } from 'lucide-react';
 import { ApprovalCard } from '@/components/custom/approval-card';
 import { agentDisplayName } from '@/components/custom/agent-icons';
 import { formatRelativeTime } from '@/lib/time-utils';
@@ -15,6 +15,8 @@ interface DashboardApprovalCardProps {
   connected: boolean;
   onDecision: (approvalId: string, decision: ApprovalDecision) => void;
   onNavigate: () => void;
+  onStop?: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
 }
 
 export function DashboardApprovalCard({
@@ -26,30 +28,58 @@ export function DashboardApprovalCard({
   connected,
   onDecision,
   onNavigate,
+  onStop,
+  onArchive,
 }: DashboardApprovalCardProps) {
   const [expanded, setExpanded] = useState(false);
   const hasContext = !!taskDescription || !!lastMessage;
 
   return (
     <div
-      className="rounded-lg bg-card border-l-4 border-amber-400 overflow-hidden cursor-pointer"
+      className="rounded-lg bg-card border-l-4 border-warning overflow-hidden cursor-pointer"
       onClick={onNavigate}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(); }}
     >
       <div className="px-3 pt-3 pb-1">
         {/* Top line: badge + timestamp */}
         <div className="flex items-center justify-between gap-2 mb-1">
           <Badge
             variant="outline"
-            className="text-xs border-amber-400/50 bg-amber-500/10 text-amber-500 font-semibold"
+            className="text-xs border-warning/50 bg-warning/10 text-warning font-semibold"
           >
             ⚡ APPROVAL
           </Badge>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {formatRelativeTime(approval.createdAt)}
-          </span>
+          <div className="flex items-center gap-1">
+            {onStop && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onStop(approval.sessionId); }}
+                disabled={!connected}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                aria-label="Stop session"
+                title="Stop"
+              >
+                <Square className="h-4 w-4" />
+              </button>
+            )}
+            {onArchive && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(approval.sessionId); }}
+                disabled={!connected}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                aria-label="Archive session"
+                title="Archive"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatRelativeTime(approval.createdAt)}
+            </span>
+          </div>
         </div>
         {/* Second line: task + agent */}
         <p className="text-xs text-muted-foreground truncate">

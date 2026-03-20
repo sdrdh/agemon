@@ -594,6 +594,65 @@ EOF
   info "Logs: ${log_dir}/"
 }
 
+# ---------------------------------------------------------------------------
+# Step 9.5: Wire bundled plugins
+# ---------------------------------------------------------------------------
+wire_bundled_plugins() {
+  step "Bundled plugins"
+
+  local plugins_src="${INSTALL_DIR}/plugins"
+  local plugins_dst="${AGEMON_DIR}/plugins"
+
+  if [ ! -d "$plugins_src" ] || [ -z "$(ls -A "$plugins_src" 2>/dev/null)" ]; then
+    info "No bundled plugins found — skipping."
+    return
+  fi
+
+  for plugin_dir in "$plugins_src"/*/; do
+    [ -d "$plugin_dir" ] || continue
+    local plugin_name plugin_display plugin_desc
+    plugin_name="$(basename "$plugin_dir")"
+    local link_path="${plugins_dst}/${plugin_name}"
+
+    # Read name/description from agemon-plugin.json if available
+    if [ -f "${plugin_dir}/agemon-plugin.json" ] && command -v python3 &>/dev/null; then
+      plugin_display="$(python3 -c "import json,sys; d=json.load(open('${plugin_dir}/agemon-plugin.json')); print(d.get('name','${plugin_name}'))" 2>/dev/null || echo "$plugin_name")"
+      plugin_desc="$(python3 -c "import json,sys; d=json.load(open('${plugin_dir}/agemon-plugin.json')); print(d.get('description',''))" 2>/dev/null || echo "")"
+    else
+      plugin_display="$plugin_name"
+      plugin_desc=""
+    fi
+
+    if [ -L "$link_path" ]; then
+      success "Plugin already linked: ${plugin_display}"
+      continue
+    fi
+
+    if [ -e "$link_path" ]; then
+      warn "Skipping ${plugin_display} — ${link_path} exists and is not a symlink."
+      continue
+    fi
+
+    if "$NON_INTERACTIVE"; then
+      ln -s "$plugin_dir" "$link_path"
+      success "Linked plugin: ${plugin_display}"
+    else
+      printf "\n"
+      printf "  ${BOLD}%s${RESET}" "$plugin_display"
+      [ -n "$plugin_desc" ] && printf " — %s" "$plugin_desc"
+      printf "\n"
+      read -r -p "  Install this plugin? [Y/n] " answer </dev/tty
+      answer="${answer:-Y}"
+      if [[ "$answer" =~ ^[Yy] ]]; then
+        ln -s "$plugin_dir" "$link_path"
+        success "Linked plugin: ${plugin_display}"
+      else
+        info "Skipped: ${plugin_display}"
+      fi
+    fi
+  done
+}
+
 install_service() {
   if "$NO_SERVICE"; then
     info "Skipping service installation (--no-service)."
@@ -783,6 +842,7 @@ main() {
   create_runtime_dirs
   generate_secrets
   run_initial_setup
+  wire_bundled_plugins
   install_service
   print_summary
 }

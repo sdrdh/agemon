@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, ChevronDown, ChevronUp, Square, Archive } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { agentDisplayName } from '@/components/custom/agent-icons';
 import { formatRelativeTime } from '@/lib/time-utils';
@@ -14,6 +14,8 @@ interface QuestionInputCardProps {
   connected: boolean;
   onSubmit: (inputId: string, taskId: string, response: string) => void;
   onNavigate: () => void;
+  onStop?: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
 }
 
 export function QuestionInputCard({
@@ -25,6 +27,8 @@ export function QuestionInputCard({
   connected,
   onSubmit,
   onNavigate,
+  onStop,
+  onArchive,
 }: QuestionInputCardProps) {
   const [text, setText] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -51,7 +55,7 @@ export function QuestionInputCard({
       onClick={onNavigate}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(); }}
     >
       <div className="px-3 pt-3 pb-1">
         {/* Top line: badge + timestamp */}
@@ -62,7 +66,33 @@ export function QuestionInputCard({
           >
             💬 QUESTION
           </Badge>
-          <span className="text-xs text-muted-foreground shrink-0">{timestamp}</span>
+          <div className="flex items-center gap-1">
+            {onStop && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onStop(input.sessionId); }}
+                disabled={!connected}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                aria-label="Stop session"
+                title="Stop"
+              >
+                <Square className="h-4 w-4" />
+              </button>
+            )}
+            {onArchive && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(input.sessionId); }}
+                disabled={!connected}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                aria-label="Archive session"
+                title="Archive"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground shrink-0">{timestamp}</span>
+          </div>
         </div>
         {/* Second line: task + agent */}
         <p className="text-xs text-muted-foreground truncate">

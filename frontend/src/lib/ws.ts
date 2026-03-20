@@ -1,6 +1,6 @@
 import type { ServerEvent, ClientEvent } from '@agemon/shared';
 import { showToast } from './toast';
-import { STORAGE_KEY } from '@/lib/api';
+
 
 type Listener = (event: ServerEvent) => void;
 type ConnectionListener = (connected: boolean) => void;
@@ -33,8 +33,9 @@ function setConnected(value: boolean) {
 
 function getWsUrl() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const token = localStorage.getItem(STORAGE_KEY) ?? '';
-  return `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  // Cookie auth is sent automatically by the browser on WS handshake.
+  // No token in URL needed — eliminates token leaking to logs/history.
+  return `${proto}://${location.host}/ws`;
 }
 
 export function connectWs() {

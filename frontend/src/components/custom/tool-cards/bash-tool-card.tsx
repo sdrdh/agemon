@@ -9,7 +9,7 @@ export function BashToolCard({ toolCall }: ToolCardContentProps) {
         </code>
       )}
       {toolCall.error && (
-        <div className="text-xs bg-red-500/10 text-red-400 px-2 py-1.5 rounded whitespace-pre-wrap break-all">
+        <div className="text-xs bg-destructive/10 text-destructive px-2 py-1.5 rounded whitespace-pre-wrap break-all">
           {toolCall.error}
         </div>
       )}

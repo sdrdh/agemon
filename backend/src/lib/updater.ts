@@ -34,7 +34,7 @@ async function installAndBuild(
   successMessage: string,
 ): Promise<UpdateResult> {
   // Install dependencies
-  const install = await run(['bun', 'install', '--frozen-lockfile'], PROJECT_ROOT);
+  const install = await run(['bun', 'install'], PROJECT_ROOT);
   if (!install.ok) {
     await run(['git', 'checkout', rollbackRef], PROJECT_ROOT);
     return { ...base, ok: false, message: `bun install failed: ${install.stderr}. Reverted to previous version.` };

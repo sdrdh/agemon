@@ -53,7 +53,7 @@ export function ToolCardShell({ toolCall, condensed }: { toolCall: ToolCall; con
 
   return (
     <div
-      className={`border rounded-lg ${condensed ? 'my-0.5' : 'my-1'} ${toolCall.error ? 'border-red-400/50' : 'border-muted'} bg-card`}
+      className={`border rounded-lg ${condensed ? 'my-0.5' : 'my-1'} ${toolCall.error ? 'border-destructive/50' : 'border-muted'} bg-card`}
     >
       <button
         type="button"
@@ -88,7 +88,7 @@ export function ToolCardShell({ toolCall, condensed }: { toolCall: ToolCall; con
 
       {/* Expandable detail panel */}
       <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        className="grid"
         style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
       >
         <div className="overflow-hidden">

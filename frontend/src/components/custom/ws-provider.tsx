@@ -1,28 +1,25 @@
 import { useEffect, type ReactNode } from 'react';
 import { onServerEvent, onConnectionChange, setLastSeq, getKnownEpoch, setKnownEpoch, resetSeqState } from '@/lib/ws';
 import { useWsStore } from '@/lib/store';
-import { queryClient, taskKeys, sessionKeys } from '@/lib/query';
+import { queryClient, taskKeys, sessionKeys, dashboardKeys } from '@/lib/query';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
 import { api } from '@/lib/api';
+import { invalidateRendererCache } from '@/components/custom/chat-bubble';
 import type { ServerEvent } from '@agemon/shared';
 
-/** Extract a short activity label from a tool-call content string. */
-function parseToolActivity(content: string): string {
-  // Handles both [tool] and [tool:toolCallId] formats
-  if (content.startsWith('[tool update]')) return ''; // skip updates
-  const match = content.match(/^\[tool(?::[^\]]+)?\]\s+(\S+)\s+(.*?)(?:\s*\((?:pending|in_progress)\))?$/);
-  if (!match) return 'Running tool...';
+/** Shorten a file path to just the filename. */
+function shortFile(path: string): string {
+  return path.includes('/') ? path.split('/').pop()?.replace(/\s*\(.*$/, '') ?? '' : path;
+}
 
-  const toolName = match[1];
-  const arg = match[2]?.trim() ?? '';
-
-  // Extract just the filename from long paths
-  const shortArg = arg.includes('/') ? arg.split('/').pop()?.replace(/\s*\(.*$/, '') ?? '' : arg;
-
-  switch (toolName) {
-    case 'Read': return shortArg ? `Reading ${shortArg}` : 'Reading file...';
-    case 'Edit': return shortArg ? `Editing ${shortArg}` : 'Editing file...';
-    case 'Write': return shortArg ? `Writing ${shortArg}` : 'Writing file...';
+/** Build an activity label from tool kind + args (structured JSON format). */
+function structuredToolActivity(kind: string, args?: Record<string, string>): string {
+  const file = args?.filePath || args?.file_path || args?.path || '';
+  const short = file ? shortFile(file) : '';
+  switch (kind) {
+    case 'Read': return short ? `Reading ${short}` : 'Reading file...';
+    case 'Edit': return short ? `Editing ${short}` : 'Editing file...';
+    case 'Write': return short ? `Writing ${short}` : 'Writing file...';
     case 'Glob':
     case 'Grep':
     case 'Search': return 'Searching...';
@@ -30,8 +27,21 @@ function parseToolActivity(content: string): string {
     case 'bash': return 'Running command...';
     case 'WebSearch':
     case 'web_search': return 'Searching the web...';
-    default: return shortArg ? `${toolName} ${shortArg}` : `Running ${toolName}...`;
+    case 'WebFetch':
+    case 'web_fetch': return 'Fetching page...';
+    case 'Agent': return 'Running agent...';
+    case 'Skill': return 'Running skill...';
+    default: return short ? `${kind} ${short}` : `Running ${kind}...`;
   }
+}
+
+/** Extract a short activity label from a legacy tool-call content string. */
+function parseToolActivity(content: string): string {
+  // Handles both [tool] and [tool:toolCallId] formats
+  if (content.startsWith('[tool update]')) return ''; // skip updates
+  const match = content.match(/^\[tool(?::[^\]]+)?\]\s+(\S+)\s+(.*?)(?:\s*\((?:pending|in_progress)\))?$/);
+  if (!match) return 'Running tool...';
+  return structuredToolActivity(match[1], { filePath: match[2]?.trim() ?? '' });
 }
 
 /**
@@ -108,7 +118,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
             } else if (event.content.startsWith('[tool update]')) {
               store().setAgentActivity(event.sessionId, null);
             } else if (parsed?.toolCallId && !parsed.isUpdate) {
-              const label = parseToolActivity(`[tool] ${parsed.kind} ${parsed.title}`);
+              const label = structuredToolActivity(parsed.kind as string, parsed.args as Record<string, string> | undefined);
               if (label) store().setAgentActivity(event.sessionId, label);
             } else if (!parsed?.toolCallId) {
               store().setAgentActivity(event.sessionId, null);
@@ -135,6 +145,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           store().setAgentActivity(event.sessionId, null);
           queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'session_started': {
@@ -172,6 +183,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'approval_requested': {
@@ -186,6 +198,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           store().setAgentActivity(event.approval.sessionId, `Waiting for approval: ${event.approval.toolName}`);
           store().markUnread(event.approval.sessionId);
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'approval_resolved': {
@@ -222,6 +235,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
         case 'turn_completed': {
           store().setTurnInFlight(event.sessionId, false);
           store().setAgentActivity(event.sessionId, null);
+          queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'session_usage_update': {
@@ -230,6 +244,11 @@ export function WsProvider({ children }: { children: ReactNode }) {
         }
         case 'update_available': {
           useWsStore.getState().setUpdateAvailable(true);
+          break;
+        }
+        case 'plugins_changed': {
+          invalidateRendererCache();
+          store().bumpPluginsRevision();
           break;
         }
         case 'server_restarting': {

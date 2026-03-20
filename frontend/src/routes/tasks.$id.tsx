@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
   const { session: urlSessionId } = useSearch({ from: '/tasks/$id' });
   const navigate = useNavigate();
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState('');
   const [infoOpen, setInfoOpen] = useState(false);
   const isDesktop = useIsDesktop();
@@ -34,6 +33,9 @@ export default function TaskDetailView() {
     hasSessions,
     hasActiveSessions,
     actionLoading,
+    showArchived,
+    setShowArchived,
+    archivedCount,
     createSessionMutation,
     stopMutation,
     resumeMutation,
@@ -149,6 +151,9 @@ export default function TaskDetailView() {
             onResume={(sid) => resumeMutation.mutate(sid)}
             onMarkDone={() => markDoneMutation.mutate()}
             onArchiveSession={(sid, archived) => archiveSessionMutation.mutate({ sessionId: sid, archived })}
+            showArchived={showArchived}
+            onToggleArchived={() => setShowArchived((v) => !v)}
+            archivedCount={archivedCount}
             newDisabled={isDone || actionLoading}
             isDone={isDone}
             hasActiveSessions={hasActiveSessions}
@@ -180,7 +185,6 @@ export default function TaskDetailView() {
             onResume={(sid) => resumeMutation.mutate(sid)}
             onBack={handleBackToList}
             isDesktop={isDesktop}
-            chatEndRef={chatEndRef}
             usage={activeSessionUsage}
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}

@@ -38,7 +38,7 @@ For any phase, read its file or `grep -r "keyword" docs/tasks/` to find relevant
 | Phase 3: Git Integration | 🔲 Active | 6 | [docs/tasks/phase-3-git.md](docs/tasks/phase-3-git.md) |
 | Phase 3.5: Agent Context Harness | 🔲 Active | 2 | [docs/tasks/phase-3-5-agent-context.md](docs/tasks/phase-3-5-agent-context.md) |
 | Phase 4: ACP Integration | ✅ Done | 3 | [docs/tasks/archive.md](docs/tasks/archive.md) |
-| Phase 4.5: Session-Centric UX | 🔲 Active | 72 | [docs/tasks/phase-4-5-session-ux.md](docs/tasks/phase-4-5-session-ux.md) |
+| Phase 4.5: Session-Centric UX | 🔲 Active | 69 | [docs/tasks/phase-4-5-session-ux.md](docs/tasks/phase-4-5-session-ux.md) |
 | Phase 5: Terminal PTY | 🔲 Pending | 17 | [docs/tasks/phase-5-terminal.md](docs/tasks/phase-5-terminal.md) |
 | Phase 6: Diff Viewer | 🔲 Pending | 5 | [docs/tasks/phase-6-diff.md](docs/tasks/phase-6-diff.md) |
 | Phase 7: Build & Distribution | 🔲 Pending | 34 | [docs/tasks/phase-7-build.md](docs/tasks/phase-7-build.md) |

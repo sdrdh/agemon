@@ -19,6 +19,13 @@ export function insertAwaitingInput(input: Omit<AwaitingInput, 'created_at' | 'r
   return row;
 }
 
+export function listAllPendingInputs(): AwaitingInput[] {
+  const db = getDb();
+  return db.query<AwaitingInput, []>(
+    "SELECT * FROM awaiting_input WHERE status = 'pending' ORDER BY created_at DESC"
+  ).all();
+}
+
 export function answerInput(id: string, response: string): AwaitingInput | null {
   const db = getDb();
   db.run("UPDATE awaiting_input SET status = 'answered', response = ? WHERE id = ?", [response, id]);

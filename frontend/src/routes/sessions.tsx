@@ -21,7 +21,7 @@ const STATE_STYLES: Record<AgentSessionState, { label: string; className: string
   },
   running: {
     label: 'Running',
-    className: 'border-transparent bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+    className: 'border-transparent bg-success/15 text-success',
   },
   stopped: {
     label: 'Stopped',
@@ -29,11 +29,11 @@ const STATE_STYLES: Record<AgentSessionState, { label: string; className: string
   },
   crashed: {
     label: 'Crashed',
-    className: 'border-transparent bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+    className: 'border-transparent bg-destructive/15 text-destructive',
   },
   interrupted: {
     label: 'Interrupted',
-    className: 'border-transparent bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+    className: 'border-transparent bg-warning/15 text-warning',
   },
 };
 

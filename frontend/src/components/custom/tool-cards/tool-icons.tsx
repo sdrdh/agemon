@@ -30,8 +30,8 @@ const TOOL_ICON_MAP: Record<string, LucideIcon> = {
 };
 
 const STATUS_COLOR: Record<ToolCallStatus, string> = {
-  completed: 'text-emerald-500',
-  failed: 'text-red-500',
+  completed: 'text-success',
+  failed: 'text-destructive',
   pending: 'text-muted-foreground animate-pulse',
   in_progress: 'text-muted-foreground animate-pulse',
 };

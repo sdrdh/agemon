@@ -10,8 +10,6 @@ import { api } from '@/lib/api';
 import type { ChatItem } from '@/lib/chat-utils';
 import type { AgentCommand, AgentSession, PendingApproval, ApprovalDecision, SessionUsage } from '@agemon/shared';
 
-const NEAR_BOTTOM_THRESHOLD = 150;
-
 export function SessionChatPanel({
   session,
   sessionLabel,
@@ -31,7 +29,6 @@ export function SessionChatPanel({
   onResume,
   onBack,
   isDesktop,
-  chatEndRef,
   usage,
   hasMore,
   isLoadingMore,
@@ -55,7 +52,6 @@ export function SessionChatPanel({
   onResume: (id: string) => void;
   onBack: () => void;
   isDesktop: boolean;
-  chatEndRef: React.RefObject<HTMLDivElement>;
   usage?: SessionUsage;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -143,70 +139,6 @@ export function SessionChatPanel({
     hasNavigatedRef.current = false;
   }, [setInputText]);
 
-  // ── Sticky scroll ─────────────────────────────────────────────────────
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isNearBottomRef = useRef(true);
-  const [showNewMessages, setShowNewMessages] = useState(false);
-
-  // Refs to avoid recreating handleScroll on every prop change (rerender-use-ref-transient-values)
-  const hasMoreRef = useRef(hasMore);
-  const isLoadingMoreRef = useRef(isLoadingMore);
-  const fetchRef = useRef(onFetchOlderMessages);
-  hasMoreRef.current = hasMore;
-  isLoadingMoreRef.current = isLoadingMore;
-  fetchRef.current = onFetchOlderMessages;
-
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD;
-    isNearBottomRef.current = nearBottom;
-    if (nearBottom) setShowNewMessages(false);
-
-    // Scroll-to-top: load older messages
-    if (el.scrollTop < 100 && hasMoreRef.current && !isLoadingMoreRef.current && fetchRef.current) {
-      const prevScrollHeight = el.scrollHeight;
-      fetchRef.current().then(() => {
-        // Wait for React to commit the prepended messages before restoring scroll
-        requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight - prevScrollHeight;
-        });
-      });
-    }
-  }, []);
-
-  // Auto-scroll only when near bottom.
-  // Uses 'instant' to avoid smooth-scroll animations racing with rapid streaming
-  // (each smooth scroll targets a position that becomes stale as new content arrives).
-  // We also track the previous groupedItems length to distinguish new content
-  // (should auto-scroll) from regrouping (should not).
-  const prevGroupedLenRef = useRef(groupedItems.length);
-  useEffect(() => {
-    const prevLen = prevGroupedLenRef.current;
-    prevGroupedLenRef.current = groupedItems.length;
-
-    // Skip if length decreased (regrouping collapse) — don't jump scroll
-    if (groupedItems.length < prevLen) return;
-
-    // Compute nearBottom fresh — the ref can be stale when content is added
-    // without a user scroll event (scrollHeight grows, scrollTop stays the same).
-    const el = scrollContainerRef.current;
-    const nearBottom = el
-      ? el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD
-      : isNearBottomRef.current;
-
-    if (nearBottom) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    } else if (groupedItems.length > prevLen) {
-      setShowNewMessages(true);
-    }
-  }, [groupedItems.length, agentActivity, chatEndRef]);
-
-  const scrollToBottom = useCallback(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    setShowNewMessages(false);
-  }, [chatEndRef]);
-
   const approvalLookup = useMemo(() => {
     const map = new Map<string, PendingApproval>();
     for (const a of pendingApprovals) map.set(a.id, a);
@@ -225,11 +157,11 @@ export function SessionChatPanel({
   const totalUsed = usage ? usage.inputTokens + usage.outputTokens + usage.cachedReadTokens + usage.cachedWriteTokens : 0;
   const contextPct = usage ? Math.min(100, Math.round((totalUsed / usage.contextWindow) * 100)) : null;
   const contextBarColor = contextPct !== null
-    ? contextPct >= 70 ? 'bg-red-500' : contextPct >= 50 ? 'bg-amber-400' : 'bg-emerald-500'
-    : 'bg-emerald-500';
+    ? contextPct >= 70 ? 'bg-destructive' : contextPct >= 50 ? 'bg-warning' : 'bg-success'
+    : 'bg-success';
 
   return (
-    <div className="flex flex-col flex-1 min-w-0">
+    <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
       {!isDesktop && (
         <SessionMobileHeader
           sessionLabel={sessionLabel}
@@ -248,24 +180,21 @@ export function SessionChatPanel({
         selectedSessionId={session.id}
         groupedItems={groupedItems}
         agentActivity={agentActivity}
-        showNewMessages={showNewMessages}
-        scrollContainerRef={scrollContainerRef}
-        chatEndRef={chatEndRef}
         approvalLookup={approvalLookup}
-        onScroll={handleScroll}
         onApprovalDecision={onApprovalDecision}
-        scrollToBottom={scrollToBottom}
         connected={connected}
         isLoadingMore={isLoadingMore}
+        hasMore={hasMore}
+        onFetchOlderMessages={onFetchOlderMessages}
       />
 
-      <div className="border-t bg-background">
+      <div className="border-t bg-background shrink-0">
         {contextPct !== null && (
           <div className="flex items-center gap-2 px-4 pt-2">
             <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className={`h-full rounded-full transition-all ${contextBarColor}`} style={{ width: `${contextPct}%` }} />
             </div>
-            <span className={`text-[11px] tabular-nums shrink-0 ${contextPct >= 70 ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+            <span className={`text-[11px] tabular-nums shrink-0 ${contextPct >= 70 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
               {contextPct}% ctx
             </span>
           </div>
