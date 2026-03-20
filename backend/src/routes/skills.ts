@@ -14,6 +14,12 @@ function agemonDir(): string {
   return process.env.AGEMON_DIR ? resolve(process.env.AGEMON_DIR) : join(homedir(), '.agemon');
 }
 
+const SAFE_PARAM = /^[a-zA-Z0-9_-]+$/;
+
+function assertSafeParam(value: string, label: string): void {
+  if (!SAFE_PARAM.test(value)) sendError(400, `Invalid ${label}`);
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 async function runSkillsCli(
@@ -245,6 +251,7 @@ skillsRoutes.post('/skills', async (c) => {
 
 skillsRoutes.delete('/skills/:name', async (c) => {
   const name = c.req.param('name');
+  assertSafeParam(name, 'skill name');
 
   // Remove from global ~/.claude/skills via CLI
   await runSkillsCli(['remove', name, '--global', '--yes']);
@@ -260,6 +267,7 @@ skillsRoutes.delete('/skills/:name', async (c) => {
 
 skillsRoutes.get('/tasks/:taskId/skills', async (c) => {
   const taskId = c.req.param('taskId');
+  assertSafeParam(taskId, 'task ID');
   const taskDir = join(agemonDir(), 'tasks', taskId);
 
   // Global skills from ~/.agemon/skills/
@@ -301,6 +309,7 @@ skillsRoutes.get('/tasks/:taskId/skills', async (c) => {
 
 skillsRoutes.post('/tasks/:taskId/skills', async (c) => {
   const taskId = c.req.param('taskId');
+  assertSafeParam(taskId, 'task ID');
   const taskDir = join(agemonDir(), 'tasks', taskId);
   const body = await c.req.json();
   const source = body?.source;
@@ -348,6 +357,8 @@ skillsRoutes.post('/tasks/:taskId/skills', async (c) => {
 skillsRoutes.delete('/tasks/:taskId/skills/:name', async (c) => {
   const taskId = c.req.param('taskId');
   const name = c.req.param('name');
+  assertSafeParam(taskId, 'task ID');
+  assertSafeParam(name, 'skill name');
   const taskDir = join(agemonDir(), 'tasks', taskId);
 
   // Remove the skill directory from {taskDir}/.claude/skills/<name>/
