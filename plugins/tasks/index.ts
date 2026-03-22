@@ -75,6 +75,7 @@ export const plugin: PluginModule = {
       }
 
       ctx.broadcast({ type: 'task_updated', task });
+      ctx.emit('task:created', task).catch(() => {});
       return c.json(task, 201);
     });
 
@@ -158,6 +159,7 @@ export const plugin: PluginModule = {
       }
 
       ctx.broadcast({ type: 'task_updated', task: updated });
+      ctx.emit('task:updated', updated).catch(() => {});
       return c.json(updated);
     });
 
@@ -174,6 +176,7 @@ export const plugin: PluginModule = {
 
       db.deleteTask(id);
       ctx.broadcast({ type: 'task_updated', task: { ...task!, status: 'done' } });
+      ctx.emit('task:deleted', { id, task }).catch(() => {});
       return new Response(null, { status: 204 });
     });
 

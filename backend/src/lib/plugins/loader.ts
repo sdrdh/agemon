@@ -5,9 +5,10 @@ import { getSessionDb } from '../session-store.ts';
 import { atomicWriteSync, atomicWriteJsonSync, ensureDir } from '../fs.ts';
 import type { AgentSession, AgentType } from '@agemon/shared';
 import type { PluginManifest } from '@agemon/shared';
-import type { LoadedPlugin, PluginContext, PluginExports, PluginStore } from './types.ts';
+import type { LoadedPlugin, PluginContext, PluginExports, PluginStore, WorkspaceProvider, WorkspaceRegistry } from './types.ts';
 import type { EventBridge } from './event-bridge.ts';
 import { agentRegistry } from './agent-registry.ts';
+import { getPlugin } from './registry.ts';
 
 // ─── Per-plugin settings helpers ─────────────────────────────────────────────
 
@@ -107,6 +108,15 @@ async function ensureDepsInstalled(pluginDir: string, pluginId: string): Promise
     const stderr = await new Response(proc.stderr).text();
     throw new Error(`bun install failed: ${stderr.trim()}`);
   }
+}
+
+function makeWorkspaceRegistry(): WorkspaceRegistry {
+  const providers = new Map<string, WorkspaceProvider>();
+  return {
+    register: (id, provider) => { providers.set(id, provider); },
+    get: (id) => providers.get(id),
+    list: () => [...providers.keys()],
+  };
 }
 
 export interface SessionApi {
@@ -224,6 +234,13 @@ export async function scanPlugins(
             spawnSession: opts?.sessionApi
               ? (sessionId) => opts.sessionApi!.spawnSession(sessionId)
               : (_id) => { throw new Error(`[plugin:${manifest.id}] spawnSession() called but no sessionApi`); },
+            query: (targetPluginId, name, ...args) => {
+              const target = getPlugin(targetPluginId);
+              const fn = target?.exports.queries?.[name];
+              if (!fn) throw new Error(`[plugin:${manifest.id}] query ${targetPluginId}.${name} not found`);
+              return fn(...args);
+            },
+            workspaces: makeWorkspaceRegistry(),
           };
 
           exports = await onLoad(ctx);

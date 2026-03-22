@@ -7,6 +7,8 @@ import type { AgentProvider } from './agent-registry.ts';
 
 export interface PluginModule {
   onLoad(ctx: PluginContext): PluginExports | Promise<PluginExports>;
+  /** Optional cleanup hook. Called before hot-reload and on server shutdown. */
+  onUnload?(): void | Promise<void>;
 }
 
 export interface CustomRenderer {
@@ -82,6 +84,27 @@ export interface PluginContext {
    * The session must have been created via createSession().
    */
   spawnSession(sessionId: string): AgentSession;
+  /**
+   * Call a named query exported by another plugin.
+   * The target plugin must export it via `PluginExports.queries`.
+   */
+  query(pluginId: string, name: string, ...args: unknown[]): unknown;
+  /**
+   * Workspace registry — register or look up named workspace providers.
+   * Plugins that provide workspace environments (e.g. git worktrees) expose them here.
+   */
+  workspaces: WorkspaceRegistry;
+}
+
+export interface WorkspaceRegistry {
+  register(id: string, provider: WorkspaceProvider): void;
+  get(id: string): WorkspaceProvider | undefined;
+  list(): string[];
+}
+
+export interface WorkspaceProvider {
+  /** Resolve the filesystem path for a given task. */
+  resolvePath(taskId: string): string | Promise<string>;
 }
 
 export interface PluginLogger {

@@ -59,6 +59,16 @@ export interface PluginManifest {
   settings?: PluginSettingSchema[];
   /** Component name in renderers/ for a custom settings UI (overrides auto-generated form). */
   settingsRenderer?: string;
+  /**
+   * Plugin IDs this plugin depends on. Loader will ensure dependencies are loaded first.
+   * If a dependency is missing, this plugin will be skipped with a warning.
+   */
+  depends?: string[];
+  /**
+   * Plugin API version this plugin targets. The loader emits a warning if the runtime
+   * API version (currently 1) does not match. Defaults to 1 if omitted.
+   */
+  apiVersion?: number;
 }
 
 // ─── Input Extensions ─────────────────────────────────────────────────

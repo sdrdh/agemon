@@ -1,5 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { PluginKitContext } from '@/lib/plugin-kit-context';
+import { SessionList } from '@/components/custom/session-list';
+import { ChatPanel } from '@/components/custom/chat-panel';
+import { StatusBadge } from '@/components/custom/status-badge';
+import type { PluginKit } from '../../../shared/types/plugin-kit';
+
+// Cast StatusBadge so its concrete TaskStatus prop satisfies the PluginKit's string-typed interface.
+const StatusBadgeForKit = StatusBadge as PluginKit['StatusBadge'];
+
+const pluginKit: PluginKit = {
+  SessionList,
+  ChatPanel,
+  StatusBadge: StatusBadgeForKit,
+};
 
 export default function PluginPage() {
   // Route is /p/$pluginId/* — TanStack Router gives { pluginId, _splat }
@@ -61,5 +75,9 @@ export default function PluginPage() {
     );
   }
 
-  return <Component />;
+  return (
+    <PluginKitContext.Provider value={pluginKit}>
+      <Component />
+    </PluginKitContext.Provider>
+  );
 }

@@ -4,14 +4,15 @@
  * React/lucide-react are externalized (see build.ts) and come from
  * window.__AGEMON__ globals provided by the host app.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CheckSquare,
   Plus,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
-  TerminalSquare,
+  Info,
+  CheckCircle2,
 } from 'lucide-react';
 
 // ─── Internal router ─────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ function navigate(path: string): void {
 
 // ─── API base ────────────────────────────────────────────────────────────────
 
-const API = '/api';
+const API = '/api/plugins/tasks';
 
 // ─── Inline types (no @agemon/shared import in browser bundle) ───────────────
 
@@ -312,97 +313,185 @@ function Kanban() {
 // ─── Task Detail ──────────────────────────────────────────────────────────────
 
 function TaskDetail({ id }: { id: string }) {
+  const { SessionList, ChatPanel, StatusBadge: HostStatusBadge } = (window as any).__AGEMON__?.host ?? {};
+  const api = (window as any).__AGEMON__?.api;
+
   const [task, setTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [taskLoading, setTaskLoading] = useState(true);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [markingDone, setMarkingDone] = useState(false);
 
+  // Read initial session from URL search params (passed by dashboard navigation)
+  const [selectedSession, setSelectedSession] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('session');
+  });
+
+  // Fetch task data
   useEffect(() => {
-    fetch(`${API}/tasks/${id}`, { credentials: 'include' })
-      .then(r => { if (!r.ok) throw new Error('Task not found'); return r.json() as Promise<Task>; })
-      .then(t => setTask(t))
-      .catch(e => setError(String(e.message)))
-      .finally(() => setLoading(false));
+    if (!api?.getTask) return;
+    setTaskLoading(true);
+    setTaskError(null);
+    api.getTask(id)
+      .then((t: Task) => setTask(t))
+      .catch((e: Error) => setTaskError(e.message ?? 'Failed to load task'))
+      .finally(() => setTaskLoading(false));
   }, [id]);
 
+  // Keep task in sync with WS updates
   useWsEvent((event) => {
-    if (event.type === 'task_updated' && (event.task as Task).id === id) {
-      setTask(event.task as Task);
-    }
+    if (event.type !== 'task_updated') return;
+    const updated = event.task as Task;
+    if (updated.id === id) setTask(updated);
   }, [id]);
 
-  const handleMarkDone = async () => {
-    const res = await fetch(`${API}/tasks/${id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'done' }),
-    });
-    if (res.ok) setTask(await res.json());
-  };
+  const handleMarkDone = useCallback(async () => {
+    if (!api?.updateTask || markingDone) return;
+    setMarkingDone(true);
+    try {
+      const updated = await api.updateTask(id, { status: 'done' });
+      setTask(updated);
+    } catch (e: unknown) {
+      console.error('Failed to mark done:', e);
+    } finally {
+      setMarkingDone(false);
+    }
+  }, [id, markingDone]);
 
-  if (loading) {
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setSelectedSession(sessionId);
+  }, []);
+
+  const handleBackToList = useCallback(() => {
+    setSelectedSession(null);
+  }, []);
+
+  // Determine layout: on mobile, session list and chat are exclusive; on desktop both show
+  // We approximate desktop as window width >= 768px
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+  const showSessionList = isDesktop || !selectedSession;
+  const showChat = !!selectedSession;
+
+  // Loading state
+  if (taskLoading) {
     return (
-      <div>
-        <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px]">
-            <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col h-dvh">
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px]"
+            aria-label="Back to tasks"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="h-5 w-1/3 rounded bg-muted animate-pulse" />
+          <div className="h-6 w-1/3 rounded-md bg-muted animate-pulse" />
         </div>
-        <SkeletonRows count={2} />
+        <div className="p-4 space-y-4">
+          <div className="h-8 w-2/3 rounded-md bg-muted animate-pulse" />
+          <div className="h-20 rounded-md bg-muted animate-pulse" />
+        </div>
       </div>
     );
   }
 
-  if (error || !task) {
+  // Error state
+  if (taskError || !task) {
     return (
-      <div>
-        <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px]">
-            <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col h-dvh">
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px]"
+            aria-label="Back to tasks"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </button>
         </div>
-        <div className="p-4 text-sm text-destructive">{error ?? 'Task not found'}</div>
+        <div className="p-4 text-center">
+          <p className="text-destructive">{taskError ?? 'Task not found'}</p>
+          <button
+            onClick={() => navigate('/')}
+            className="text-primary text-sm underline min-h-[44px] px-2"
+          >
+            Back to tasks
+          </button>
+        </div>
       </div>
     );
   }
+
+  const isDone = task.status === 'done';
 
   return (
-    <div>
-      <div className="sticky top-0 bg-background border-b px-4 py-3 flex items-center gap-3 z-10">
-        <button
-          onClick={() => navigate('/')}
-          className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px]"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h1 className="text-base font-semibold flex-1 truncate">{task.title}</h1>
-        <StatusBadge status={task.status} />
-      </div>
-
-      <div className="p-4 space-y-4 pb-8">
-        {task.description && (
-          <p className="text-sm text-muted-foreground">{task.description}</p>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          <a
-            href={`/sessions?taskId=${id}`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm min-h-[44px] hover:bg-muted"
+    <div className="flex flex-col h-dvh">
+      {/* Header — shown on mobile when no session selected, always on desktop */}
+      {(isDesktop || !selectedSession) && (
+        <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
+            aria-label="Back to tasks"
           >
-            <TerminalSquare className="h-4 w-4" />
-            Sessions
-          </a>
-          {task.status !== 'done' && (
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
+          {!isDone && (
             <button
               onClick={handleMarkDone}
-              className="px-4 py-2 rounded-lg border text-sm min-h-[44px] hover:bg-muted"
+              disabled={markingDone}
+              className="h-8 px-2 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 gap-1 shrink-0"
+              aria-label="Mark task done"
             >
-              Mark Done
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Done</span>
             </button>
           )}
+          {HostStatusBadge
+            ? <HostStatusBadge status={task.status} />
+            : <StatusBadge status={task.status} />}
         </div>
+      )}
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Session list */}
+        {showSessionList && SessionList && (
+          <SessionList
+            taskId={id}
+            selectedSessionId={selectedSession ?? undefined}
+            onSelect={handleSelectSession}
+          />
+        )}
+
+        {/* Fallback if SessionList not available */}
+        {showSessionList && !SessionList && (
+          <div className="flex-1 flex items-center justify-center p-4">
+            <p className="text-muted-foreground text-sm">Session list unavailable</p>
+          </div>
+        )}
+
+        {/* Chat panel */}
+        {showChat && ChatPanel && (
+          <ChatPanel
+            taskId={id}
+            sessionId={selectedSession!}
+            onBack={handleBackToList}
+            isDone={isDone}
+          />
+        )}
+
+        {/* Fallback if ChatPanel not available */}
+        {showChat && !ChatPanel && (
+          <div className="flex-1 flex items-center justify-center p-4">
+            <p className="text-muted-foreground text-sm">Chat panel unavailable</p>
+          </div>
+        )}
+
+        {/* Desktop placeholder when sessions exist but none selected */}
+        {isDesktop && !selectedSession && (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-muted-foreground text-sm">Select a session</p>
+          </div>
+        )}
       </div>
     </div>
   );

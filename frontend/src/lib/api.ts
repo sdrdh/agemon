@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult, PendingApproval } from '@agemon/shared';
+import type { Task, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult, PendingApproval } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -72,15 +72,13 @@ export async function setAuthCookie(key: string): Promise<void> {
 }
 
 export const api = {
-  // Tasks
-  listTasks: (includeArchived = false) => request<Task[]>(`/tasks${includeArchived ? '?archived=true' : ''}`),
-  listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
-  getTask: (id: string) => request<Task>(`/tasks/${id}`),
-  createTask: (body: CreateTaskBody) => request<Task>('/tasks', { method: 'POST', body: JSON.stringify(body) }),
-  updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteTask: (id: string) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
+  // Tasks (plugin: tasks → /api/plugins/tasks/*)
+  listTasks: (includeArchived = false) => request<Task[]>(`/plugins/tasks/tasks${includeArchived ? '?archived=true' : ''}`),
+  listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/plugins/tasks/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
+  getTask: (id: string) => request<Task>(`/plugins/tasks/tasks/${id}`),
+  updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/plugins/tasks/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   listRepos: () => request<Repo[]>('/repos'),
-  listEvents: (id: string, limit = 500) => request<ACPEvent[]>(`/tasks/${id}/events?limit=${limit}`),
+  listEvents: (id: string, limit = 500) => request<ACPEvent[]>(`/plugins/tasks/tasks/${id}/events?limit=${limit}`),
 
   // Sessions
   createSession: (taskId: string, body: CreateSessionBody = {}) =>
@@ -113,19 +111,19 @@ export const api = {
       body: JSON.stringify({ configId, value }),
     }),
 
-  // MCP Servers
-  listGlobalMcpServers: () => request<McpServerEntry[]>('/mcp-servers'),
+  // MCP Servers (plugin: mcp-config → /api/plugins/mcp-config/*)
+  listGlobalMcpServers: () => request<McpServerEntry[]>('/plugins/mcp-config/mcp-servers'),
   addGlobalMcpServer: (body: CreateMcpServerBody) =>
-    request<McpServerEntry>('/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
-  removeGlobalMcpServer: (id: string) => request<void>(`/mcp-servers/${id}`, { method: 'DELETE' }),
+    request<McpServerEntry>('/plugins/mcp-config/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+  removeGlobalMcpServer: (id: string) => request<void>(`/plugins/mcp-config/mcp-servers/${id}`, { method: 'DELETE' }),
   listTaskMcpServers: (taskId: string) =>
-    request<{ global: McpServerEntry[]; task: McpServerEntry[] }>(`/tasks/${taskId}/mcp-servers`),
+    request<{ global: McpServerEntry[]; task: McpServerEntry[] }>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers`),
   addTaskMcpServer: (taskId: string, body: CreateMcpServerBody) =>
-    request<McpServerEntry>(`/tasks/${taskId}/mcp-servers`, { method: 'POST', body: JSON.stringify(body) }),
+    request<McpServerEntry>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers`, { method: 'POST', body: JSON.stringify(body) }),
   removeTaskMcpServer: (taskId: string, serverId: string) =>
-    request<void>(`/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
+    request<void>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
   testMcpServer: (body: TestMcpServerBody) =>
-    request<TestMcpServerResult>('/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
+    request<TestMcpServerResult>('/plugins/mcp-config/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
 
   // System / Version
   getVersion: () =>
@@ -146,28 +144,28 @@ export const api = {
   // Dashboard
   getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
 
-  // Skills
-  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/skills'),
+  // Skills (plugin: skills-manager → /api/plugins/skills-manager/*)
+  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/plugins/skills-manager/skills'),
   previewSkills: (source: string) =>
-    request<SkillPreviewResult>('/skills/preview', {
+    request<SkillPreviewResult>('/plugins/skills-manager/skills/preview', {
       method: 'POST',
       body: JSON.stringify({ source }),
     }),
   installGlobalSkill: (source: string, skillNames?: string[]) =>
-    request<SkillInstallResult>('/skills', {
+    request<SkillInstallResult>('/plugins/skills-manager/skills', {
       method: 'POST',
       body: JSON.stringify({ source, skillNames }),
     }),
-  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/skills/${name}`, { method: 'DELETE' }),
+  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/plugins/skills-manager/skills/${name}`, { method: 'DELETE' }),
   listTaskSkills: (taskId: string) =>
-    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/tasks/${taskId}/skills`),
+    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/plugins/skills-manager/tasks/${taskId}/skills`),
   installTaskSkill: (taskId: string, source: string, skillNames?: string[]) =>
-    request<SkillInstallResult>(`/tasks/${taskId}/skills`, {
+    request<SkillInstallResult>(`/plugins/skills-manager/tasks/${taskId}/skills`, {
       method: 'POST',
       body: JSON.stringify({ source, skillNames }),
     }),
   removeTaskSkill: (taskId: string, name: string) =>
-    request<{ ok: boolean }>(`/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/plugins/skills-manager/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
 
   listApprovals: (taskId: string, all = true) =>
     request<PendingApproval[]>(`/tasks/${taskId}/approvals${all ? '?all=1' : ''}`),

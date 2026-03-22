@@ -9,11 +9,21 @@ import * as LucideReact from 'lucide-react';
 // Merge prod + dev runtimes so plugins can use either jsx/jsxs (prod) or jsxDEV (dev)
 const jsxRuntime = { ...jsxRuntimeProd, ...jsxRuntimeDev };
 import { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose } from './components/ui/toast';
+import { Button } from './components/ui/button';
+import { Badge } from './components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
+import { Input } from './components/ui/input';
+import { Label } from './components/ui/label';
 import { onToast, type ToastPayload } from './lib/toast';
 import { connectWs, subscribeWsEvent } from './lib/ws';
-import { hasApiKey } from './lib/api';
+import { hasApiKey, api } from './lib/api';
+import { formatDuration, formatMs } from './lib/time-utils';
+import { PluginKitContext } from './lib/plugin-kit-context';
+import { SessionList } from './components/custom/session-list';
+import { ChatPanel } from './components/custom/chat-panel';
+import { StatusBadge } from './components/custom/status-badge';
 import './index.css';
-import App from './App.tsx';
+import App, { router } from './App.tsx';
 
 // Expose shared modules for plugin renderers.
 // Plugin builds externalize react/lucide-react and reference window.__AGEMON__.
@@ -22,8 +32,20 @@ import App from './App.tsx';
   ReactDOM,
   jsxRuntime,
   LucideReact,
+  /** Navigate to a route using TanStack Router. */
+  navigate: (opts: Parameters<typeof router.navigate>[0]) => router.navigate(opts),
+  /** Curated shadcn/ui components — import via `window.__AGEMON__.ui` or declare as `@agemon/ui` external. */
+  ui: { Button, Badge, Card, CardContent, CardHeader, CardTitle, Input, Label },
+  /** Utility helpers. */
+  utils: { formatDuration, formatMs },
+  /** API client — same instance used by the host app. */
+  api,
   /** Subscribe to WebSocket server events. Returns an unsubscribe function. */
   onWsEvent: (handler: (event: unknown) => void) => subscribeWsEvent(handler),
+  /** The React context object — plugins call useContext(window.__AGEMON__.PluginKitContext). */
+  PluginKitContext,
+  /** Host component kit — plugins import from '@agemon/host' which resolves to window.__AGEMON__.host. */
+  host: { SessionList, ChatPanel, StatusBadge },
 };
 
 function GlobalToast() {

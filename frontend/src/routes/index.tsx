@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
-import { useNavigate, Link } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -108,7 +108,11 @@ export default function DashboardPage() {
   }, []);
 
   const handleNavigateToTask = useCallback((taskId: string, sessionId?: string) => {
-    navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: sessionId } });
+    navigate({
+      to: '/p/$pluginId/$',
+      params: { pluginId: 'tasks', _splat: taskId },
+      search: sessionId ? { session: sessionId } : {},
+    });
   }, [navigate]);
 
   const handleScrollTo = useCallback((section: 'blocked' | 'active' | 'completed') => {
@@ -191,7 +195,7 @@ export default function DashboardPage() {
         {activeTaskCount === 0 ? (
           <div className="text-center py-6 text-muted-foreground">
             <p>No tasks yet.</p>
-            <Button variant="link" onClick={() => navigate({ to: '/tasks/new' })}>
+            <Button variant="link" onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}>
               Create your first task
             </Button>
           </div>
@@ -258,13 +262,14 @@ export default function DashboardPage() {
         </Accordion>
       </div>
       {/* FAB */}
-      <Link
-        to="/tasks/new"
+      <button
+        type="button"
         aria-label="Create new task"
+        onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}
         className="fixed bottom-20 right-4 z-40 h-[52px] w-[52px] rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
       >
         <Plus className="h-6 w-6" />
-      </Link>
+      </button>
     </div>
   );
 }

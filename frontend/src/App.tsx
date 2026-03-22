@@ -19,9 +19,7 @@ import { ConnectionBanner } from './components/custom/connection-banner';
 import { ThemeProvider } from './lib/theme-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
-const TaskCreatePage = lazy(() => import('./routes/tasks.new'));
 const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
-const KanbanPage = lazy(() => import('./routes/kanban'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
@@ -188,12 +186,6 @@ const indexRoute = createRoute({
   component: IndexPage,
 });
 
-const taskNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/tasks/new',
-  component: TaskCreatePage,
-});
-
 const taskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks/$id',
@@ -201,12 +193,6 @@ const taskDetailRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({
     session: typeof search.session === 'string' ? search.session : undefined,
   }),
-});
-
-const kanbanRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/kanban',
-  component: KanbanPage,
 });
 
 const sessionsRoute = createRoute({
@@ -246,9 +232,7 @@ const pluginSubPageRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  taskNewRoute,
   taskDetailRoute,
-  kanbanRoute,
   sessionsRoute,
   settingsRoute,
   projectsRoute,
@@ -256,7 +240,7 @@ const routeTree = rootRoute.addChildren([
   pluginSubPageRoute,
 ]);
 
-const router = createRouter({
+export const router = createRouter({
   routeTree,
   context: { onLogout: () => {} },
 });

@@ -365,20 +365,29 @@ This ensures visual consistency, reduces plugin bundle sizes, and gives plugins 
 
 ## 5. Prioritized Recommendations
 
-| Priority | Item | Effort | Impact |
-|---|---|---|---|
-| **P0** | 4.2 — Expand PluginContext to reduce direct core imports | Medium | High — unblocks third-party plugins |
-| **P0** | 4.9 — Extract shared build utility | Low | Medium — reduces maintenance burden |
-| **P1** | 4.4 — Emit more bridge events from core | Low | High — makes hook system useful |
-| **P1** | 4.1 — Wire up cross-plugin queries | Low | Medium — enables plugin composition |
-| **P1** | 4.5 — Expose host router to plugin pages | Low | Medium — fixes navigation friction |
-| **P1** | 4.11 — Expose UI primitives to plugins | Medium | High — visual consistency + smaller bundles |
-| **P2** | 4.3 — Add onUnload lifecycle hook | Low | Medium — cleaner hot reload |
-| **P2** | 4.7 — Expose workspace registry to plugins | Low | Medium — enables execution env plugins |
-| **P2** | 4.6 — Plugin dependency declaration | Low | Low — prevents ordering bugs |
-| **P2** | 4.8 — Plugin API versioning | Low | Low — prevents silent breakage |
-| **P3** | 4.10 — Plugin sandboxing | High | Medium — only matters for untrusted plugins |
-| **P3** | 4.12 — Plugin marketplace | High | Medium — only matters at ecosystem scale |
+| Priority | Item | Effort | Impact | Status |
+|---|---|---|---|---|
+| **P0** | 4.2 — Expand PluginContext to reduce direct core imports | Medium | High — unblocks third-party plugins | 🔲 Partial — ctx expanded but tasks plugin still imports core directly |
+| **P0** | 4.9 — Extract shared build utility | Low | Medium — reduces maintenance burden | ✅ Done — `shared/plugin-build.ts`, all plugin build.ts files shrunk to 2 lines |
+| **P1** | 4.4 — Emit more bridge events from core | Low | High — makes hook system useful | ✅ Done — `task:created`, `task:updated`, `task:deleted` emitted from tasks plugin |
+| **P1** | 4.1 — Wire up cross-plugin queries | Low | Medium — enables plugin composition | ✅ Done — `ctx.query(pluginId, name, ...args)` implemented in loader.ts |
+| **P1** | 4.5 — Expose host router to plugin pages | Low | Medium — fixes navigation friction | ✅ Done — `window.__AGEMON__.navigate` exposed via TanStack Router |
+| **P1** | 4.11 — Expose UI primitives to plugins | Medium | High — visual consistency + smaller bundles | ✅ Done — `window.__AGEMON__.ui`, `host` (SessionList/ChatPanel/StatusBadge), PluginKitContext |
+| **P2** | 4.3 — Add onUnload lifecycle hook | Low | Medium — cleaner hot reload | ✅ Done — `onUnload?()` added to PluginModule interface |
+| **P2** | 4.7 — Expose workspace registry to plugins | Low | Medium — enables execution env plugins | ✅ Done — `ctx.workspaces` (WorkspaceRegistry) in PluginContext |
+| **P2** | 4.6 — Plugin dependency declaration | Low | Low — prevents ordering bugs | ✅ Done — `depends?: string[]` in PluginManifest (declaration only, topological sort not yet enforced) |
+| **P2** | 4.8 — Plugin API versioning | Low | Low — prevents silent breakage | ✅ Done — `apiVersion?: number` in PluginManifest (declaration only, mismatch warning not yet emitted) |
+| **P3** | 4.10 — Plugin sandboxing | High | Medium — only matters for untrusted plugins | 🔲 Deferred |
+| **P3** | 4.12 — Plugin marketplace | High | Medium — only matters at ecosystem scale | 🔲 Deferred |
+
+### Additional work completed (beyond audit scope)
+
+| Item | Description |
+|---|---|
+| **Plugin URL namespace** | Removed first-class `/api` mounting — all plugin routes now exclusively under `/api/plugins/:id/*`. Frontend `api.ts` updated. |
+| **PluginKit context bridge** | `PluginKitContext` React context exposes `SessionList`, `ChatPanel`, `StatusBadge` to plugin pages. `@agemon/host` external added to build pipeline. |
+| **Tasks plugin fully self-contained** | Deleted host routes `kanban.tsx`, `tasks.new.tsx`. `tasks.$id.tsx` is now a redirect. Tasks plugin owns all task UI including composed workspace (list + kanban + create + detail). |
+| **`/tasks/$id` → `/p/tasks/:id`** | Deep links redirect to plugin route. Dashboard navigation updated. |
 
 ---
 

@@ -18,7 +18,7 @@ export const ActiveSessionsSection = memo(function ActiveSessionsSection({
     return (
       <p className="text-sm text-muted-foreground">
         No agents running.{' '}
-        <Link to="/tasks/new" className="text-primary hover:underline">Start a new task</Link>
+        <Link to="/p/$pluginId/$" params={{ pluginId: 'tasks', _splat: 'new' }} className="text-primary hover:underline">Start a new task</Link>
       </p>
     );
   }

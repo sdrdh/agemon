@@ -37,13 +37,6 @@ function getPluginSettingValue(agemonDir: string, pluginId: string, key: string)
 }
 
 export function mountPluginRoutes(app: Hono, plugins: LoadedPlugin[], agemonDir: string): void {
-  // Mount each plugin's apiRoutes directly under /api for first-class URL access
-  for (const plugin of plugins) {
-    if (plugin.exports.apiRoutes) {
-      app.route('/api', plugin.exports.apiRoutes);
-    }
-  }
-
   // GET /api/plugins/:pluginId/settings — return schema + masked values
   app.get('/api/plugins/:pluginId/settings', (c) => {
     const pluginId = c.req.param('pluginId');
