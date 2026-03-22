@@ -208,12 +208,12 @@ if (frontendExists) {
     const urlPath = new URL(c.req.url).pathname;
 
     // Let API, WS, and MCP routes pass through to their handlers
-    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/p/')) {
+    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws')) {
       return next();
     }
 
-    // Only serve static files for GET requests
-    if (c.req.method !== 'GET') return next();
+    // Only serve static files for GET/HEAD requests
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
 
     // Try to serve a static file
     const filePath = join(FRONTEND_DIST, urlPath);
@@ -224,7 +224,10 @@ if (frontendExists) {
 
     // SPA fallback — serve index.html for all non-file routes
     return new Response(indexHtml, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
     });
   });
 
