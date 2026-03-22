@@ -141,24 +141,15 @@ try {
 // Create app
 const { app, broadcast } = createApp({ key: AGEMON_KEY });
 
-// Export broadcast for use in acp.ts, context.ts, routes/tasks.ts
+// Export broadcast for use in acp.ts and context.ts
 export { broadcast };
 
 // Mount routes
-const { tasksRoutes } = await import('./routes/tasks.ts');
-app.route('/api', tasksRoutes);
-
 const { sessionsRoutes } = await import('./routes/sessions.ts');
 app.route('/api', sessionsRoutes);
 
 const { approvalsRoutes } = await import('./routes/approvals.ts');
 app.route('/api', approvalsRoutes);
-
-const { mcpConfigRoutes } = await import('./routes/mcp-config.ts');
-app.route('/api', mcpConfigRoutes);
-
-const { skillsRoutes } = await import('./routes/skills.ts');
-app.route('/api', skillsRoutes);
 
 const { dashboardRoutes } = await import('./routes/dashboard.ts');
 app.route('/api', dashboardRoutes);
@@ -195,7 +186,7 @@ const { mountPluginRoutes } = await import('./lib/plugins/mount.ts');
 const repoPluginsDir = join(import.meta.dir, '../../plugins');
 const plugins = await scanPlugins(AGEMON_DIR, pluginBridge, { extraDirs: [repoPluginsDir], sessionApi });
 setPlugins(plugins);
-mountPluginRoutes(app, plugins);
+mountPluginRoutes(app, plugins, AGEMON_DIR);
 console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
 
 // Build plugin renderers and watch for changes

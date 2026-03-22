@@ -1,13 +1,49 @@
 import { readdir, symlink, lstat, stat, access } from 'fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'path';
 import { getSessionDb } from '../session-store.ts';
-import { getSetting } from '../../db/settings.ts';
-import { atomicWriteSync, ensureDir } from '../fs.ts';
+import { atomicWriteSync, atomicWriteJsonSync, ensureDir } from '../fs.ts';
 import type { AgentSession, AgentType } from '@agemon/shared';
 import type { PluginManifest } from '@agemon/shared';
-import type { LoadedPlugin, PluginContext, PluginExports } from './types.ts';
+import type { LoadedPlugin, PluginContext, PluginExports, PluginStore } from './types.ts';
 import type { EventBridge } from './event-bridge.ts';
 import { agentRegistry } from './agent-registry.ts';
+
+// ─── Per-plugin settings helpers ─────────────────────────────────────────────
+
+function readPluginSettings(settingsPath: string): Record<string, string> {
+  try {
+    return JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function writePluginSetting(settingsPath: string, key: string, value: string): void {
+  const settings = readPluginSettings(settingsPath);
+  settings[key] = value;
+  atomicWriteJsonSync(settingsPath, settings);
+}
+
+// ─── Per-plugin KV store helpers ─────────────────────────────────────────────
+
+function makePluginStore(storePath: string): PluginStore {
+  function readStore(): Record<string, string> {
+    try {
+      return JSON.parse(readFileSync(storePath, 'utf-8')) as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
+  return {
+    get: (key) => readStore()[key] ?? null,
+    set: (key, value) => { const s = readStore(); s[key] = value; atomicWriteJsonSync(storePath, s); },
+    getJson: <T>(key: string): T | null => { const v = readStore()[key]; return v != null ? JSON.parse(v) as T : null; },
+    setJson: (key, value) => { const s = readStore(); s[key] = JSON.stringify(value); atomicWriteJsonSync(storePath, s); },
+    delete: (key) => { const s = readStore(); delete s[key]; atomicWriteJsonSync(storePath, s); },
+  };
+}
 
 /**
  * Symlink a plugin's declared skills into ~/.agemon/skills/ so agents discover them.
@@ -133,6 +169,16 @@ export async function scanPlugins(
 
         let exports: PluginExports = {};
 
+        // These paths are needed for both ctx (inside entryPoint block) and configured (outside)
+        const pluginDataDir = join(agemonDir, 'plugins', manifest.id, 'data');
+        const pluginSettingsPath = join(pluginDataDir, 'settings.json');
+        const pluginStorePath = join(pluginDataDir, 'store.json');
+        const envPrefix = `AGEMON_PLUGIN_${manifest.id.toUpperCase().replace(/-/g, '_')}_`;
+        const getPluginSetting = (key: string): string | null => {
+          const envKey = `${envPrefix}${key.toUpperCase()}`;
+          return process.env[envKey] ?? readPluginSettings(pluginSettingsPath)[key] ?? null;
+        };
+
         if (manifest.entryPoint) {
           await ensureDepsInstalled(dir, manifest.id);
           const entryPath = join(dir, manifest.entryPoint);
@@ -144,7 +190,6 @@ export async function scanPlugins(
             continue;
           }
 
-          const pluginDataDir = join(agemonDir, 'plugins', manifest.id, 'data');
           ensureDir(pluginDataDir);
 
           const ctx: PluginContext = {
@@ -153,7 +198,9 @@ export async function scanPlugins(
             pluginDataDir,
             coreDb: getSessionDb(),
             atomicWrite: atomicWriteSync,
-            getSetting,
+            getSetting: getPluginSetting,
+            setSetting: (key, value) => writePluginSetting(pluginSettingsPath, key, value),
+            store: makePluginStore(pluginStorePath),
             logger: {
               info: (...args: unknown[]) => console.info(`[plugin:${manifest.id}]`, ...args),
               warn: (...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, ...args),
@@ -189,7 +236,13 @@ export async function scanPlugins(
         }
 
         await wirePluginSkills(manifest, dir, agemonDir);
-        loaded.push({ manifest, dir, exports });
+
+        // Compute configured: true unless a required setting is missing
+        const configured = !(manifest.settings ?? [])
+          .filter(s => s.required)
+          .some(s => getPluginSetting(s.key) === null);
+
+        loaded.push({ manifest, dir, exports, configured });
         console.info(`[plugin:${manifest.id}] loaded (v${manifest.version})`);
       } catch (err) {
         console.error(`[plugin:${entry}] failed to load:`, (err as Error).message);

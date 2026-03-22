@@ -151,7 +151,6 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
       if (key.startsWith(`${manifest.id}:`)) builtPages.delete(key);
     }
     builtIcons.delete(manifest.id);
-
     if (exports.renderers) {
       for (const renderer of exports.renderers) {
         const mod = modules.get(renderer.manifest.name);
@@ -170,11 +169,11 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
         if (mod) builtPages.set(`${manifest.id}:${ext.component}`, mod);
       }
     }
-    if (manifest.navIcon) {
-      const mod = modules.get(manifest.navIcon);
+    const iconComponent = manifest.navItems?.find(ni => ni.icon)?.icon;
+    if (iconComponent) {
+      const mod = modules.get(iconComponent);
       if (mod) builtIcons.set(manifest.id, mod);
     }
-
     console.info(`[plugin:${manifest.id}] hot reloaded`);
   } finally {
     rebuildingPlugins.delete(manifest.id);
@@ -275,7 +274,7 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
     const { exports, dir, manifest } = plugin;
     const hasRenderers = exports.renderers && exports.renderers.length > 0;
     const hasPages = exports.pages && exports.pages.length > 0;
-    const hasIcon = !!manifest.navIcon;
+    const hasIcon = manifest.navItems?.some(ni => ni.icon) ?? false;
     const hasInputExtensions = (manifest.inputExtensions?.length ?? 0) > 0;
 
     if (!hasRenderers && !hasPages && !hasIcon && !hasInputExtensions) continue;
@@ -326,14 +325,15 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
       }
     }
 
-    // Map icon
-    if (manifest.navIcon) {
-      const mod = modules.get(manifest.navIcon);
+    // Map icon (first navItem with icon: "component-name" wins)
+    const iconComponent = manifest.navItems?.find(ni => ni.icon)?.icon;
+    if (iconComponent) {
+      const mod = modules.get(iconComponent);
       if (mod) {
         builtIcons.set(manifest.id, mod);
-        console.info(`[plugin:${manifest.id}] cached icon: ${manifest.navIcon}`);
+        console.info(`[plugin:${manifest.id}] cached icon: ${iconComponent}`);
       } else {
-        console.warn(`[plugin:${manifest.id}] icon ${manifest.navIcon} not found in dist/`);
+        console.warn(`[plugin:${manifest.id}] icon ${iconComponent} not found in dist/`);
       }
     }
   }
