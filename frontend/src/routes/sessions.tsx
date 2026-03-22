@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useNavigate, useSearch, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, Plus, X } from 'lucide-react';
+import { Archive, Plus, X, ArrowLeft } from 'lucide-react';
 import { sessionsListQuery, taskSessionsQuery, tasksListQuery, sessionKeys } from '@/lib/query';
 import { api } from '@/lib/api';
 import { onServerEvent } from '@/lib/ws';
@@ -177,6 +177,7 @@ function NewSessionForm({ onClose, onCreated }: { onClose: () => void; onCreated
 
 export function SessionList({ taskId }: { taskId?: string }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -282,6 +283,16 @@ export function SessionList({ taskId }: { taskId?: string }) {
     <div className="pb-20">
       <div className="px-4 py-3 border-b">
         <div className="flex items-center gap-2">
+          {taskId && (
+            <button
+              type="button"
+              onClick={() => router.history.back()}
+              className="min-h-[44px] min-w-[44px] -ml-2 flex items-center justify-center rounded-md hover:bg-muted"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
           <h1 className="text-sm font-semibold">
             {taskId ? 'Task Sessions' : 'Agent Sessions'}
           </h1>

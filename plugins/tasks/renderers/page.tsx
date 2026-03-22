@@ -318,8 +318,8 @@ function TaskDetail({ id }: { id: string }) {
 
   useEffect(() => {
     fetch(`${API}/tasks/${id}`, { credentials: 'include' })
-      .then(r => { if (!r.ok) throw new Error('Task not found'); return r.json(); })
-      .then((t: Task) => setTask(t))
+      .then(r => { if (!r.ok) throw new Error('Task not found'); return r.json() as Promise<Task>; })
+      .then(t => setTask(t))
       .catch(e => setError(String(e.message)))
       .finally(() => setLoading(false));
   }, [id]);
@@ -387,13 +387,12 @@ function TaskDetail({ id }: { id: string }) {
         )}
 
         <div className="flex flex-wrap gap-2">
-          {/* Link to core sessions page filtered to this task */}
           <a
             href={`/sessions?taskId=${id}`}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm min-h-[44px] hover:bg-muted"
           >
             <TerminalSquare className="h-4 w-4" />
-            View Sessions
+            Sessions
           </a>
           {task.status !== 'done' && (
             <button
