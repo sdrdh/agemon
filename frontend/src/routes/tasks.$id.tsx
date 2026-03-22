@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate, useSearch } from '@tanstack/react-router';
+import { useParams, useNavigate, useSearch, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/custom/status-badge';
@@ -17,9 +17,18 @@ export default function TaskDetailView() {
   const { id } = useParams({ strict: false });
   const { session: urlSessionId } = useSearch({ from: '/tasks/$id' });
   const navigate = useNavigate();
+  const router = useRouter();
   const [inputText, setInputText] = useState('');
   const [infoOpen, setInfoOpen] = useState(false);
   const isDesktop = useIsDesktop();
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.history.back();
+    } else {
+      navigate({ to: '/' });
+    }
+  };
 
   const taskId = id ?? '';
 
@@ -93,7 +102,7 @@ export default function TaskDetailView() {
     return (
       <div className="flex flex-col h-dvh">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="h-6 w-1/3 rounded-md bg-muted animate-pulse" />
@@ -110,7 +119,7 @@ export default function TaskDetailView() {
     return (
       <div className="flex flex-col h-dvh">
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </div>
@@ -129,7 +138,7 @@ export default function TaskDetailView() {
     <div className="flex flex-col h-dvh">
       {(isDesktop || !selectedSessionId) && (
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
-          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={() => navigate({ to: '/' })}>
+          <Button size="icon" variant="ghost" aria-label="Back to tasks" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
