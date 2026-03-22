@@ -10,8 +10,6 @@ import type { AgentSessionState } from '@agemon/shared';
  * those routes directly.
  *
  * The plugin hooks into session state changes to keep task status derived.
- * TODO: replace direct deriveTaskStatus call with an emitted core event once
- * the ACP layer is refactored to use EventBridge throughout.
  */
 export const plugin: PluginModule = {
   onLoad(ctx: PluginContext): PluginExports {

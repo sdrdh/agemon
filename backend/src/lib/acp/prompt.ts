@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions } from './session-registry.ts';
-import { deriveTaskStatus } from './task-status.ts';
+import { getBridge } from './lifecycle.ts';
 import { flushCurrentMessage } from './notifications.ts';
 import { appendEvent } from './event-log.ts';
 import { AGENT_CONFIGS } from '../agents.ts';
@@ -32,7 +32,8 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     throw new Error(`Session ${sessionId} not found in database`);
   }
   const taskId = sessionRecord.task_id;
-  if (taskId) deriveTaskStatus(taskId);
+  getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
+    .catch((err) => console.error('[acp] bridge emit error:', err));
 
   // Store user message in JSONL event log
   void appendEvent(sessionId, {
@@ -56,7 +57,8 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       taskId,
       state: 'running',
     });
-    if (taskId) deriveTaskStatus(taskId);
+    getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
+      .catch((err) => console.error('[acp] bridge emit error:', err));
   }
 
   // Set session name from first prompt (if not already named)
@@ -151,7 +153,8 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     flushCurrentMessage(sessionId, taskId);
     entry.turnInFlight = false;
     broadcast({ type: 'turn_completed', sessionId, taskId });
-    if (taskId) deriveTaskStatus(taskId);
+    getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
+      .catch((err) => console.error('[acp] bridge emit error:', err));
   }
 }
 

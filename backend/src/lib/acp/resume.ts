@@ -2,7 +2,7 @@ import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions } from './session-registry.ts';
 import { spawnProcess } from './spawn.ts';
-import { deriveTaskStatus } from './task-status.ts';
+import { getBridge } from './lifecycle.ts';
 import { AGENT_CONFIGS } from '../agents.ts';
 import { getTaskDir, refreshTaskContext } from '../context.ts';
 import { mkdir } from 'fs/promises';
@@ -146,8 +146,9 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     const session = db.getSession(sessionId)!;
     broadcast({ type: 'session_ready', taskId, session });
 
-    // Re-derive task status now that session is ready (→ awaiting_input)
-    if (taskId) deriveTaskStatus(taskId);
+    // Emit via EventBridge so tasks plugin can derive task status
+    getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'ready' })
+      .catch((err) => console.error('[acp] bridge emit error:', err));
 
     return session;
   } catch (err) {

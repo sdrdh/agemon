@@ -1,7 +1,6 @@
 import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions, userStopped, KILL_TIMEOUT_MS, SHUTDOWN_REQUEST_TIMEOUT_MS } from './session-registry.ts';
-import { deriveTaskStatus } from './task-status.ts';
 import { resolveApproval, pendingApprovalResolvers } from './approvals.ts';
 import { writeCheckpoint } from './event-log.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
@@ -11,6 +10,7 @@ import type { EventBridge } from '../plugins/event-bridge.ts';
 // ─── EventBridge singleton (set once at startup from server.ts) ──────────────
 let _bridge: EventBridge | null = null;
 export function setBridge(bridge: EventBridge): void { _bridge = bridge; }
+export function getBridge(): EventBridge | null { return _bridge; }
 
 /**
  * Process exit handler. Cleans up session state and broadcasts to clients.
@@ -54,11 +54,6 @@ export async function handleExit(
   _bridge?.emit('session:state_changed', { sessionId, taskId, state }).catch((err) => {
     console.error('[acp] bridge emit error:', err);
   });
-
-  // Derive task status from remaining sessions (belt-and-suspenders — also done by tasks plugin)
-  if (taskId) {
-    deriveTaskStatus(taskId);
-  }
 
   console.info(`[acp] session ${sessionId} exited with code ${exitCode} (${state})`);
 }
@@ -223,7 +218,7 @@ export function cancelTurn(sessionId: string): void {
   // 2. Send ACP session/cancel notification (fire-and-forget, no response expected).
   //    Note: turnInFlight is NOT reset here — the in-flight sendPromptTurn() call
   //    will receive stopReason: "cancelled" and its finally block handles cleanup
-  //    (flushCurrentMessage, turnInFlight = false, deriveTaskStatus).
+  //    (flushCurrentMessage, turnInFlight = false, bridge emit for task status).
   entry.transport.notify('session/cancel', { sessionId: entry.acpSessionId });
   console.info(`[acp] session ${sessionId} turn cancel sent`);
 }
