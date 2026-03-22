@@ -57,8 +57,6 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       taskId,
       state: 'running',
     });
-    getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
-      .catch((err) => console.error('[acp] bridge emit error:', err));
   }
 
   // Set session name from first prompt (if not already named)
