@@ -366,9 +366,14 @@ function TaskDetail({ id }: { id: string }) {
     setSelectedSession(null);
   }, []);
 
-  // Determine layout: on mobile, session list and chat are exclusive; on desktop both show
-  // We approximate desktop as window width >= 768px
-  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+  // Reactive desktop detection
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
+  useEffect(() => {
+    const handler = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   const showSessionList = isDesktop || !selectedSession;
   const showChat = !!selectedSession;
 
@@ -667,6 +672,8 @@ function NewTask() {
 
 // ─── Root app — internal SPA router ──────────────────────────────────────────
 
+const setHostLayout = (window as any).__AGEMON__?.setHostLayout as ((layout: 'default' | 'fullscreen') => void) | undefined;
+
 export default function TasksApp() {
   const [path, setPath] = useState(getPath);
 
@@ -676,13 +683,17 @@ export default function TasksApp() {
     return () => window.removeEventListener('popstate', handler);
   }, []);
 
+  const isTaskDetail = path.length > 1 && /^\/[a-z0-9-]+$/i.test(path);
+
+  // Signal host to hide/show chrome based on current view
+  useEffect(() => {
+    setHostLayout?.(isTaskDetail ? 'fullscreen' : 'default');
+    return () => { setHostLayout?.('default'); };
+  }, [isTaskDetail]);
+
   if (path === '/kanban') return <Kanban />;
   if (path === '/new') return <NewTask />;
-
-  // Dynamic task ID route: /p/tasks/<id>
-  if (path.length > 1 && /^\/[a-z0-9-]+$/i.test(path)) {
-    return <TaskDetail id={path.slice(1)} />;
-  }
+  if (isTaskDetail) return <TaskDetail id={path.slice(1)} />;
 
   return <Dashboard />;
 }

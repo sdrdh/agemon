@@ -30,6 +30,8 @@ export interface PluginExports {
   agentProviders?: AgentProvider[];
   /** Typed query functions exposed to other plugins via ctx.query(pluginId, name, ...args) */
   queries?: Record<string, (...args: unknown[]) => unknown>;
+  /** Called before hot-reload replaces this plugin's code. Use to clean up timers, listeners, etc. */
+  onUnload?(): void | Promise<void>;
 }
 
 export interface PluginPage {

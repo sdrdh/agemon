@@ -71,9 +71,9 @@ async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ 
 
 function BottomNav() {
   const matches = useMatches();
-  // Hide chrome (header + nav) for full-screen plugin sub-pages (task detail, etc.)
-  const isPluginSubPage = matches.some((m) => m.routeId === '/p/$pluginId/$');
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || isPluginSubPage;
+  const hostLayout = useWsStore(s => s.hostLayout);
+  // Hide chrome when host route is a legacy task detail OR plugin requests fullscreen layout
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
   const pluginsRevision = useWsStore(s => s.pluginsRevision);
@@ -148,8 +148,8 @@ function BottomNav() {
 
 function RootLayout() {
   const matches = useMatches();
-  const isPluginSubPage = matches.some((m) => m.routeId === '/p/$pluginId/$');
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || isPluginSubPage;
+  const hostLayout = useWsStore(s => s.hostLayout);
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 

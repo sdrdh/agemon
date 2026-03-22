@@ -137,16 +137,50 @@ export interface ScanPluginsOptions {
  * entryPoint and call onLoad(). Returns all successfully loaded plugins.
  * Errors are logged, not thrown.
  */
+/** Current plugin API version. Plugins with a different apiVersion will log a warning. */
+const PLUGIN_API_VERSION = 1;
+
+/** Topologically sort plugins based on `depends` declarations. */
+function topoSort(candidates: Array<{ manifest: PluginManifest; dir: string }>): Array<{ manifest: PluginManifest; dir: string }> {
+  const byId = new Map(candidates.map(p => [p.manifest.id, p]));
+  const sorted: Array<{ manifest: PluginManifest; dir: string }> = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+
+  function visit(id: string) {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) {
+      console.warn(`[plugins] dependency cycle detected involving "${id}"`);
+      return;
+    }
+    visiting.add(id);
+    const plugin = byId.get(id);
+    if (!plugin) return;
+    for (const dep of plugin.manifest.depends ?? []) {
+      if (!byId.has(dep)) {
+        console.warn(`[plugin:${id}] declares dependency on "${dep}" which was not found`);
+      }
+      visit(dep);
+    }
+    visiting.delete(id);
+    visited.add(id);
+    sorted.push(plugin);
+  }
+
+  for (const p of candidates) visit(p.manifest.id);
+  return sorted;
+}
+
 export async function scanPlugins(
   agemonDir: string,
   bridge?: EventBridge,
   opts?: ScanPluginsOptions,
 ): Promise<LoadedPlugin[]> {
   const pluginsDir = join(agemonDir, 'plugins');
-  const loaded: LoadedPlugin[] = [];
   const seenIds = new Set<string>();
 
-  // Collect all directories to scan: ~/.agemon/plugins/ first, then extras
+  // ── Pass 1: Collect all valid manifests ──────────────────────────────────
+  const candidates: Array<{ manifest: PluginManifest; dir: string }> = [];
   const scanDirs = [pluginsDir, ...(opts?.extraDirs ?? [])];
 
   for (const scanDir of scanDirs) {
@@ -167,103 +201,118 @@ export async function scanPlugins(
 
         const manifest = await file.json() as PluginManifest;
 
-        // Basic validation
         if (!manifest.id || !manifest.name || !manifest.version) {
           console.warn(`[plugin:${entry}] invalid manifest — missing id, name, or version`);
           continue;
         }
 
-        // Skip duplicates (first occurrence wins — user plugins override bundled)
+        // First occurrence wins — user plugins override bundled
         if (seenIds.has(manifest.id)) continue;
         seenIds.add(manifest.id);
 
-        let exports: PluginExports = {};
+        candidates.push({ manifest, dir });
+      } catch (err) {
+        console.error(`[plugin:${entry}] failed to read manifest:`, (err as Error).message);
+      }
+    }
+  }
 
-        // These paths are needed for both ctx (inside entryPoint block) and configured (outside)
-        const pluginDataDir = join(agemonDir, 'plugins', manifest.id, 'data');
-        const pluginSettingsPath = join(pluginDataDir, 'settings.json');
-        const pluginStorePath = join(pluginDataDir, 'store.json');
-        const envPrefix = `AGEMON_PLUGIN_${manifest.id.toUpperCase().replace(/-/g, '_')}_`;
-        const getPluginSetting = (key: string): string | null => {
-          const envKey = `${envPrefix}${key.toUpperCase()}`;
-          return process.env[envKey] ?? readPluginSettings(pluginSettingsPath)[key] ?? null;
-        };
+  // ── Pass 2: Load in dependency order ─────────────────────────────────────
+  const ordered = topoSort(candidates);
+  const loaded: LoadedPlugin[] = [];
 
-        if (manifest.entryPoint) {
-          await ensureDepsInstalled(dir, manifest.id);
-          const entryPath = join(dir, manifest.entryPoint);
-          const mod = await import(entryPath);
-          const onLoad = mod.onLoad ?? mod.default?.onLoad;
+  for (const { manifest, dir } of ordered) {
+    try {
+      // API version check
+      if (manifest.apiVersion != null && manifest.apiVersion !== PLUGIN_API_VERSION) {
+        console.warn(`[plugin:${manifest.id}] apiVersion mismatch — plugin declares ${manifest.apiVersion}, host is ${PLUGIN_API_VERSION}`);
+      }
 
-          if (typeof onLoad !== 'function') {
-            console.warn(`[plugin:${manifest.id}] entryPoint does not export onLoad()`);
-            continue;
-          }
+      let exports: PluginExports = {};
 
-          ensureDir(pluginDataDir);
+      const pluginDataDir = join(agemonDir, 'plugins', manifest.id, 'data');
+      const pluginSettingsPath = join(pluginDataDir, 'settings.json');
+      const pluginStorePath = join(pluginDataDir, 'store.json');
+      const envPrefix = `AGEMON_PLUGIN_${manifest.id.toUpperCase().replace(/-/g, '_')}_`;
+      const getPluginSetting = (key: string): string | null => {
+        const envKey = `${envPrefix}${key.toUpperCase()}`;
+        return process.env[envKey] ?? readPluginSettings(pluginSettingsPath)[key] ?? null;
+      };
 
-          const ctx: PluginContext = {
-            agemonDir,
-            pluginDir: dir,
-            pluginDataDir,
-            coreDb: getSessionDb(),
-            atomicWrite: atomicWriteSync,
-            getSetting: getPluginSetting,
-            setSetting: (key, value) => writePluginSetting(pluginSettingsPath, key, value),
-            store: makePluginStore(pluginStorePath),
-            logger: {
-              info: (...args: unknown[]) => console.info(`[plugin:${manifest.id}]`, ...args),
-              warn: (...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, ...args),
-              error: (...args: unknown[]) => console.error(`[plugin:${manifest.id}]`, ...args),
-            },
-            hook: bridge
-              ? (event, handler, opts) => bridge.registerHook(manifest.id, event, handler, opts)
-              : (_e, _h, _o) => { console.warn(`[plugin:${manifest.id}] hook() called but no EventBridge`); },
-            on: bridge
-              ? (event, handler) => bridge.registerListener(manifest.id, event, handler)
-              : (_e, _h) => { console.warn(`[plugin:${manifest.id}] on() called but no EventBridge`); },
-            emit: bridge
-              ? (event, payload) => bridge.emit(event, payload)
-              : async (_e, _p) => { console.warn(`[plugin:${manifest.id}] emit() called but no EventBridge`); },
-            broadcast: bridge
-              ? (wsEvent) => bridge.broadcast(wsEvent)
-              : (_e) => { console.warn(`[plugin:${manifest.id}] broadcast() called but no EventBridge`); },
-            createSession: opts?.sessionApi
-              ? (args) => opts.sessionApi!.createSession(args)
-              : (_args) => { throw new Error(`[plugin:${manifest.id}] createSession() called but no sessionApi`); },
-            spawnSession: opts?.sessionApi
-              ? (sessionId) => opts.sessionApi!.spawnSession(sessionId)
-              : (_id) => { throw new Error(`[plugin:${manifest.id}] spawnSession() called but no sessionApi`); },
-            query: (targetPluginId, name, ...args) => {
-              const target = getPlugin(targetPluginId);
-              const fn = target?.exports.queries?.[name];
-              if (!fn) throw new Error(`[plugin:${manifest.id}] query ${targetPluginId}.${name} not found`);
-              return fn(...args);
-            },
-            workspaces: makeWorkspaceRegistry(),
-          };
+      if (manifest.entryPoint) {
+        await ensureDepsInstalled(dir, manifest.id);
+        const entryPath = join(dir, manifest.entryPoint);
+        const mod = await import(entryPath);
+        const onLoad = mod.onLoad ?? mod.default?.onLoad;
 
-          exports = await onLoad(ctx);
-
-          if (exports.agentProviders) {
-            for (const provider of exports.agentProviders) {
-              agentRegistry.register(provider);
-            }
-          }
+        if (typeof onLoad !== 'function') {
+          console.warn(`[plugin:${manifest.id}] entryPoint does not export onLoad()`);
+          continue;
         }
 
-        await wirePluginSkills(manifest, dir, agemonDir);
+        ensureDir(pluginDataDir);
 
-        // Compute configured: true unless a required setting is missing
-        const configured = !(manifest.settings ?? [])
-          .filter(s => s.required)
-          .some(s => getPluginSetting(s.key) === null);
+        const ctx: PluginContext = {
+          agemonDir,
+          pluginDir: dir,
+          pluginDataDir,
+          coreDb: getSessionDb(),
+          atomicWrite: atomicWriteSync,
+          getSetting: getPluginSetting,
+          setSetting: (key, value) => writePluginSetting(pluginSettingsPath, key, value),
+          store: makePluginStore(pluginStorePath),
+          logger: {
+            info: (...args: unknown[]) => console.info(`[plugin:${manifest.id}]`, ...args),
+            warn: (...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, ...args),
+            error: (...args: unknown[]) => console.error(`[plugin:${manifest.id}]`, ...args),
+          },
+          hook: bridge
+            ? (event, handler, opts) => bridge.registerHook(manifest.id, event, handler, opts)
+            : (_e, _h, _o) => { console.warn(`[plugin:${manifest.id}] hook() called but no EventBridge`); },
+          on: bridge
+            ? (event, handler) => bridge.registerListener(manifest.id, event, handler)
+            : (_e, _h) => { console.warn(`[plugin:${manifest.id}] on() called but no EventBridge`); },
+          emit: bridge
+            ? (event, payload) => bridge.emit(event, payload)
+            : async (_e, _p) => { console.warn(`[plugin:${manifest.id}] emit() called but no EventBridge`); },
+          broadcast: bridge
+            ? (wsEvent) => bridge.broadcast(wsEvent)
+            : (_e) => { console.warn(`[plugin:${manifest.id}] broadcast() called but no EventBridge`); },
+          createSession: opts?.sessionApi
+            ? (args) => opts.sessionApi!.createSession(args)
+            : (_args) => { throw new Error(`[plugin:${manifest.id}] createSession() called but no sessionApi`); },
+          spawnSession: opts?.sessionApi
+            ? (sessionId) => opts.sessionApi!.spawnSession(sessionId)
+            : (_id) => { throw new Error(`[plugin:${manifest.id}] spawnSession() called but no sessionApi`); },
+          // ctx.query safe: dependencies are loaded first (topological order)
+          query: (targetPluginId, name, ...args) => {
+            const target = getPlugin(targetPluginId);
+            const fn = target?.exports.queries?.[name];
+            if (!fn) throw new Error(`[plugin:${manifest.id}] query ${targetPluginId}.${name} not found`);
+            return fn(...args);
+          },
+          workspaces: makeWorkspaceRegistry(),
+        };
 
-        loaded.push({ manifest, dir, exports, configured });
-        console.info(`[plugin:${manifest.id}] loaded (v${manifest.version})`);
-      } catch (err) {
-        console.error(`[plugin:${entry}] failed to load:`, (err as Error).message);
+        exports = await onLoad(ctx);
+
+        if (exports.agentProviders) {
+          for (const provider of exports.agentProviders) {
+            agentRegistry.register(provider);
+          }
+        }
       }
+
+      await wirePluginSkills(manifest, dir, agemonDir);
+
+      const configured = !(manifest.settings ?? [])
+        .filter(s => s.required)
+        .some(s => getPluginSetting(s.key) === null);
+
+      loaded.push({ manifest, dir, exports, configured });
+      console.info(`[plugin:${manifest.id}] loaded (v${manifest.version})`);
+    } catch (err) {
+      console.error(`[plugin:${manifest.id}] failed to load:`, (err as Error).message);
     }
   }
 

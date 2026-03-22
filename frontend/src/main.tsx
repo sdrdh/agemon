@@ -17,6 +17,7 @@ import { Label } from './components/ui/label';
 import { onToast, type ToastPayload } from './lib/toast';
 import { connectWs, subscribeWsEvent } from './lib/ws';
 import { hasApiKey, api } from './lib/api';
+import { useWsStore } from './lib/store';
 import { formatDuration, formatMs } from './lib/time-utils';
 import { PluginKitContext } from './lib/plugin-kit-context';
 import { SessionList } from './components/custom/session-list';
@@ -42,6 +43,8 @@ import App, { router } from './App.tsx';
   api,
   /** Subscribe to WebSocket server events. Returns an unsubscribe function. */
   onWsEvent: (handler: (event: unknown) => void) => subscribeWsEvent(handler),
+  /** Control host chrome visibility. Call with 'fullscreen' to hide header+nav, 'default' to restore. */
+  setHostLayout: (layout: 'default' | 'fullscreen') => useWsStore.getState().setHostLayout(layout),
   /** The React context object — plugins call useContext(window.__AGEMON__.PluginKitContext). */
   PluginKitContext,
   /** Host component kit — plugins import from '@agemon/host' which resolves to window.__AGEMON__.host. */

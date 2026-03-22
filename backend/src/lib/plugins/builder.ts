@@ -136,6 +136,13 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
   rebuildingPlugins.add(manifest.id);
 
   try {
+    // Give plugin a chance to clean up before its code is replaced
+    if (typeof exports.onUnload === 'function') {
+      try { await exports.onUnload(); } catch (e) {
+        console.warn(`[plugin:${manifest.id}] onUnload error:`, (e as Error).message);
+      }
+    }
+
     const ok = await runPluginBuild(dir, manifest.id);
     if (!ok) return;
 
