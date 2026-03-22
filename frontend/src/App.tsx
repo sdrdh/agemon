@@ -71,7 +71,9 @@ async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ 
 
 function BottomNav() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  // Hide chrome (header + nav) for full-screen plugin sub-pages (task detail, etc.)
+  const isPluginSubPage = matches.some((m) => m.routeId === '/p/$pluginId/$');
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || isPluginSubPage;
   const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
   const pluginsRevision = useWsStore(s => s.pluginsRevision);
@@ -146,7 +148,8 @@ function BottomNav() {
 
 function RootLayout() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const isPluginSubPage = matches.some((m) => m.routeId === '/p/$pluginId/$');
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || isPluginSubPage;
   const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 
