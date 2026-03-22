@@ -3,6 +3,7 @@ import { join } from 'path';
 import type { Hono } from 'hono';
 import type { LoadedPlugin } from './types.ts';
 import { getPlugin, getPlugins } from './registry.ts';
+import { getBuildError } from './builder.ts';
 import { getSetting, setSetting } from '../../db/settings.ts';
 import { atomicWriteJsonSync } from '../fs.ts';
 
@@ -97,6 +98,7 @@ export function mountPluginRoutes(app: Hono, plugins: LoadedPlugin[], agemonDir:
         inputExtensions: p.manifest.inputExtensions ?? [],
         configured: p.configured,
         hasSettings: (p.manifest.settings?.length ?? 0) > 0,
+        buildError: getBuildError(p.manifest.id),
       };
     }));
   });

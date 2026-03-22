@@ -24,6 +24,9 @@ const rebuildingPlugins = new Set<string>();
 // Max allowed size for a built renderer/page JS file (2MB)
 const MAX_MODULE_SIZE = 2 * 1024 * 1024;
 
+// Last build error per plugin (null = build succeeded or not yet built)
+const buildErrors = new Map<string, string>();
+
 export function getBuiltRenderer(messageType: string): BuiltModule | undefined {
   return builtRenderers.get(messageType);
 }
@@ -34,6 +37,10 @@ export function getBuiltPage(pluginId: string, component: string): BuiltModule |
 
 export function getBuiltIcon(pluginId: string): BuiltModule | undefined {
   return builtIcons.get(pluginId);
+}
+
+export function getBuildError(pluginId: string): string | null {
+  return buildErrors.get(pluginId) ?? null;
 }
 
 // ─── Plugin Build ────────────────────────────────────────────────────────────
@@ -81,9 +88,11 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
   if (buildExit !== 0) {
     const stderr = await new Response(build.stderr).text();
     console.error(`[plugin:${pluginId}] build failed:`, stderr);
+    buildErrors.set(pluginId, stderr.trim() || 'Build failed');
     return false;
   }
 
+  buildErrors.delete(pluginId);
   console.info(`[plugin:${pluginId}] build complete`);
   return true;
 }
