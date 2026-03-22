@@ -19,9 +19,11 @@ export function useSessionSelection(
   const clearUnread = useWsStore((s) => s.clearUnread);
 
   // ── Async session loading: sessions arrive after mount with URL param ──
-  if (initialSessionId && !selectedSessionId && sessions.some(s => s.id === initialSessionId)) {
-    setSelectedSessionId(initialSessionId);
-  }
+  useEffect(() => {
+    if (initialSessionId && !selectedSessionId && sessions.some(s => s.id === initialSessionId)) {
+      setSelectedSessionId(initialSessionId);
+    }
+  }, [initialSessionId, selectedSessionId, sessions]);
 
   // ── Session labels ────────────────────────────────────────────────────
   const sessionLabels = useMemo(() => {

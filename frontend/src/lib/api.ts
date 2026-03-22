@@ -1,4 +1,4 @@
-import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult } from '@agemon/shared';
+import type { Task, CreateTaskBody, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, AgentSession, ACPEvent, ChatHistoryResponse, SessionConfigOption, McpServerEntry, CreateMcpServerBody, TestMcpServerBody, TestMcpServerResult, AgentCommand, VersionInfo, VersionCheckResult, UpdateResult, RestartResult, DashboardActiveResponse, InstalledSkill, SkillInstallResult, SkillPreviewResult, PendingApproval } from '@agemon/shared';
 
 const BASE = '/api';
 
@@ -85,6 +85,8 @@ export const api = {
   // Sessions
   createSession: (taskId: string, body: CreateSessionBody = {}) =>
     request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
+  createRawSession: (body: { cwd: string; agentType?: string }) =>
+    request<AgentSession>('/sessions', { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
     request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
   getSessionChat: (sessionId: string, limit = 50, before?: string) =>
@@ -166,6 +168,9 @@ export const api = {
     }),
   removeTaskSkill: (taskId: string, name: string) =>
     request<{ ok: boolean }>(`/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
+
+  listApprovals: (taskId: string, all = true) =>
+    request<PendingApproval[]>(`/tasks/${taskId}/approvals${all ? '?all=1' : ''}`),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

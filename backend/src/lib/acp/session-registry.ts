@@ -5,7 +5,7 @@ export interface RunningSession {
   proc: ReturnType<typeof Bun.spawn>;
   transport: JsonRpcTransport;
   sessionId: string;
-  taskId: string;
+  taskId: string | null;
   agentType: AgentType;
   acpSessionId: string | null;
   turnInFlight: boolean;

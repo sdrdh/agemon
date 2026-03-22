@@ -1,4 +1,5 @@
 import { getDb } from './client.ts';
+import { sessionDirs, readSessionEventsSync, type JsonlEvent } from '../lib/acp/event-log.ts';
 import type { ACPEvent, ChatMessage } from '@agemon/shared';
 
 export function listEvents(taskId: string, limit: number, before?: string): ACPEvent[] {
@@ -79,6 +80,97 @@ export function getLastAgentMessage(sessionId: string): string | null {
 }
 
 export function listChatHistoryBySession(sessionId: string, limit: number, before?: string): ChatMessage[] {
+  // Check if this session has a JSONL log (active sessions initialized via initSessionLog)
+  if (sessionDirs.has(sessionId)) {
+    return buildChatHistoryFromJsonl(sessionId, limit, before);
+  }
+  // Fallback: SQLite query for legacy sessions
+  return listChatHistoryBySessionFromSqlite(sessionId, limit, before);
+}
+
+/**
+ * Build chat history from JSONL events + SQLite awaiting_input/pending_approvals.
+ */
+function buildChatHistoryFromJsonl(sessionId: string, limit: number, before?: string): ChatMessage[] {
+  const events = readSessionEventsSync(sessionId);
+  const database = getDb();
+  const b = before ?? null;
+
+  const eventTypeMap: Record<string, ChatMessage['eventType']> = {
+    thought: 'thought',
+    action: 'action',
+    await_input: 'input_request',
+    result: 'action',
+    prompt: 'prompt',
+    input_response: 'input_response',
+    approval_request: 'approval_request',
+  };
+
+  // Convert JSONL events to ChatMessages
+  const messages: ChatMessage[] = events
+    .filter(e => !before || e.ts < before)
+    .map((e): ChatMessage => ({
+      id: e.id,
+      role: e.type === 'prompt' ? 'user' : 'agent',
+      content: e.content,
+      eventType: eventTypeMap[e.type] ?? 'thought',
+      timestamp: e.ts,
+    }));
+
+  // Also fetch user input responses from SQLite (these are still written there)
+  interface RawChatRow {
+    id: string;
+    role: string;
+    content: string;
+    event_type: string;
+    timestamp: string;
+  }
+
+  const inputRows = database.query<RawChatRow, [string, string | null, string | null, number]>(`
+    SELECT id, 'user' as role, response as content, 'input_response' as event_type, created_at as timestamp
+      FROM awaiting_input WHERE session_id = ? AND status = 'answered' AND (? IS NULL OR created_at < ?)
+      ORDER BY created_at DESC LIMIT ?
+  `).all(sessionId, b, b, limit);
+
+  for (const row of inputRows) {
+    messages.push({
+      id: row.id,
+      role: 'user',
+      content: row.content ?? '',
+      eventType: 'input_response',
+      timestamp: row.timestamp,
+    });
+  }
+
+  // Fetch approval requests from SQLite
+  const approvalRows = database.query<RawChatRow, [string, string | null, string | null, number]>(`
+    SELECT id, 'system' as role, id || ':' || status || ':' || tool_name as content, 'approval_request' as event_type, created_at as timestamp
+      FROM pending_approvals WHERE session_id = ? AND (? IS NULL OR created_at < ?)
+      ORDER BY created_at DESC LIMIT ?
+  `).all(sessionId, b, b, limit);
+
+  for (const row of approvalRows) {
+    messages.push({
+      id: `approval-${row.id}`,
+      role: 'system',
+      content: row.content ?? '',
+      eventType: 'approval_request',
+      timestamp: row.timestamp,
+    });
+  }
+
+  // Sort by timestamp, take last `limit` items
+  messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  if (messages.length > limit) {
+    return messages.slice(messages.length - limit);
+  }
+  return messages;
+}
+
+/**
+ * Legacy SQLite-based chat history reader (for sessions without JSONL logs).
+ */
+function listChatHistoryBySessionFromSqlite(sessionId: string, limit: number, before?: string): ChatMessage[] {
   const database = getDb();
 
   interface RawChatRow {

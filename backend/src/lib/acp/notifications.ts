@@ -3,7 +3,9 @@ import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions } from './session-registry.ts';
 import { extractToolName, extractToolContext } from './tool-helpers.ts';
+import { agentRegistry } from '../plugins/agent-registry.ts';
 import { AGENT_CONFIGS } from '../agents.ts';
+import { appendEvent } from './event-log.ts';
 import type { AgentType, AgentCommand, SessionUsage, ToolCallEvent, ToolCallStatus, ToolCallUpdateEvent, SessionConfigOption } from '@agemon/shared';
 
 /** Dispatch to the agent-specific config option parser. */
@@ -18,7 +20,7 @@ export function handleNotification(
   method: string,
   params: unknown,
   sessionId: string,
-  taskId: string
+  taskId: string | null
 ): void {
   // Handle session/update notifications from the agent
   if (method === 'session/update') {
@@ -33,44 +35,33 @@ export function handleNotification(
         ? String((params as Record<string, unknown>).line)
         : String(params);
 
-    db.insertEvent({
-      id: randomUUID(),
-      task_id: taskId,
-      session_id: sessionId,
-      type: 'thought',
-      content: line,
-    });
+    const eventId = randomUUID();
+    void appendEvent(sessionId, { id: eventId, type: 'thought', content: line, ts: new Date().toISOString() });
     broadcast({ type: 'agent_thought', taskId, sessionId, content: line, eventType: 'thought' });
     return;
   }
 
   // Unknown notification method — log as thought
   const content = JSON.stringify(params);
-  db.insertEvent({
-    id: randomUUID(),
-    task_id: taskId,
-    session_id: sessionId,
-    type: 'thought',
-    content: `[${method}] ${content}`,
-  });
+  const eventId = randomUUID();
+  void appendEvent(sessionId, { id: eventId, type: 'thought', content: `[${method}] ${content}`, ts: new Date().toISOString() });
   broadcast({ type: 'agent_thought', taskId, sessionId, content: `[${method}] ${content}`, eventType: 'thought' });
 }
 
 /**
- * Flush any accumulated streaming message to the database.
+ * Flush any accumulated streaming message to the JSONL event log.
  * Called when a non-chunk update arrives or when the prompt turn completes.
  */
-export function flushCurrentMessage(sessionId: string, taskId: string): void {
+export function flushCurrentMessage(sessionId: string, taskId: string | null): void {
   const rs = sessions.get(sessionId);
   if (!rs || !rs.currentMessageId || !rs.currentMessageText) return;
 
   try {
-    db.insertEvent({
+    void appendEvent(sessionId, {
       id: rs.currentMessageId,
-      task_id: taskId,
-      session_id: sessionId,
       type: rs.currentMessageType,
       content: rs.currentMessageText,
+      ts: new Date().toISOString(),
     });
   } catch (err) {
     console.error(`[acp] failed to persist message ${rs.currentMessageId} for session ${sessionId}:`, err);
@@ -102,7 +93,7 @@ export function flushCurrentMessage(sessionId: string, taskId: string): void {
 export function handleSessionUpdate(
   params: unknown,
   sessionId: string,
-  taskId: string
+  taskId: string | null
 ): void {
   const obj = params as Record<string, unknown> | undefined;
   const update = obj?.update as Record<string, unknown> | undefined;
@@ -131,7 +122,7 @@ export function handleSessionUpdate(
       // Broadcast the delta with a stable messageId so frontend can merge
       broadcast({
         type: 'agent_thought', taskId, sessionId, content: text,
-        eventType: 'action', messageId: rs.currentMessageId,
+        eventType: 'action', messageId: rs.currentMessageId ?? undefined,
       });
       break;
     }
@@ -151,7 +142,7 @@ export function handleSessionUpdate(
 
       broadcast({
         type: 'agent_thought', taskId, sessionId, content: text,
-        eventType: 'thought', messageId: rs.currentMessageId,
+        eventType: 'thought', messageId: rs.currentMessageId ?? undefined,
       });
       break;
     }
@@ -171,13 +162,7 @@ export function handleSessionUpdate(
       const event: ToolCallEvent = { toolCallId, kind, title, status, args, startedAt };
       const content = JSON.stringify(event);
 
-      db.insertEvent({
-        id: randomUUID(),
-        task_id: taskId,
-        session_id: sessionId,
-        type: 'action',
-        content,
-      });
+      void appendEvent(sessionId, { id: randomUUID(), type: 'action', content, ts: new Date().toISOString() });
       broadcast({ type: 'agent_thought', taskId, sessionId, content, eventType: 'action' });
       break;
     }
@@ -194,7 +179,11 @@ export function handleSessionUpdate(
 
       // Extract output/display using agent-specific parser
       const agentType = rs?.agentType ?? 'claude-code';
-      const { output, error, display } = AGENT_CONFIGS[agentType].parseToolDisplay(update as Record<string, unknown>);
+      const provider = agentRegistry.get(agentType);
+      const parseToolDisplay = provider?.config.parseToolDisplay ?? AGENT_CONFIGS[agentType as keyof typeof AGENT_CONFIGS]?.parseToolDisplay;
+      const { output, error, display } = parseToolDisplay
+        ? parseToolDisplay(update as Record<string, unknown>)
+        : { output: undefined, error: undefined, display: undefined };
       const hasDisplayData = !!(output || error || display);
 
       // Add completedAt when status is completed or failed
@@ -217,13 +206,7 @@ export function handleSessionUpdate(
       };
       const content = JSON.stringify(event);
 
-      db.insertEvent({
-        id: randomUUID(),
-        task_id: taskId,
-        session_id: sessionId,
-        type: 'action',
-        content,
-      });
+      void appendEvent(sessionId, { id: randomUUID(), type: 'action', content, ts: new Date().toISOString() });
       broadcast({ type: 'agent_thought', taskId, sessionId, content, eventType: 'action' });
       break;
     }

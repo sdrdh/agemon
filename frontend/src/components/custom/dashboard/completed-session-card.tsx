@@ -7,7 +7,7 @@ import { formatRelativeTime, formatMs } from '@/lib/time-utils';
 interface CompletedSessionCardProps {
   session: AgentSession;
   taskName: string;
-  onNavigate: () => void;
+  onNavigate?: () => void;
   onDismiss: () => void;
 }
 
@@ -78,7 +78,7 @@ export function CompletedSessionCard({ session, taskName, onNavigate, onDismiss 
         role="button"
         tabIndex={0}
         onClick={onNavigate}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate(); }}
+        onKeyDown={(e) => { if (onNavigate && (e.key === 'Enter' || e.key === ' ')) onNavigate(); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

@@ -12,7 +12,7 @@
  */
 
 // Re-export public API from domain modules
-export { spawnAndHandshake } from './spawn.ts';
+export { spawnAndHandshake, spawnSessionById, spawnLocalDirSession } from './spawn.ts';
 export { sendPromptTurn, sendInputToAgent } from './prompt.ts';
 export { resumeSession } from './resume.ts';
 export { resolveApproval } from './approvals.ts';

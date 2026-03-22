@@ -15,7 +15,7 @@ dashboardRoutes.get('/dashboard/active', (c) => {
   const allPendingApprovals = db.listAllPendingApprovals();
 
   // Batch-fetch all referenced tasks upfront (avoids N+1)
-  const taskIds = new Set(activeSessions.map(s => s.task_id));
+  const taskIds = new Set(activeSessions.map(s => s.task_id).filter((id): id is string => id !== null));
   const taskMap = new Map<string, { id: string; title: string; description: string | null }>();
   for (const id of taskIds) {
     const task = db.getTask(id);
@@ -42,8 +42,12 @@ dashboardRoutes.get('/dashboard/active', (c) => {
   const idle: DashboardIdleSession[] = [];
 
   for (const session of activeSessions) {
-    const taskSummary = taskMap.get(session.task_id);
-    if (!taskSummary) continue;
+    const taskSummary = session.task_id ? taskMap.get(session.task_id) : null;
+    // For task-free sessions, create a placeholder task summary
+    const effectiveTaskSummary = taskSummary ?? (session.task_id === null
+      ? { id: '', title: session.name ?? 'Local session', description: null }
+      : null);
+    if (!effectiveTaskSummary) continue;
 
     const sessionInputs = inputsBySession.get(session.id) ?? [];
     const sessionApprovals = approvalsBySession.get(session.id) ?? [];
@@ -58,7 +62,7 @@ dashboardRoutes.get('/dashboard/active', (c) => {
     if (isBlocked) {
       blocked.push({
         session,
-        task: taskSummary,
+        task: effectiveTaskSummary,
         lastAgentMessage,
         pendingInputs: sessionInputs,
         pendingApprovals: sessionApprovals,
@@ -66,7 +70,7 @@ dashboardRoutes.get('/dashboard/active', (c) => {
     } else {
       idle.push({
         session,
-        task: taskSummary,
+        task: effectiveTaskSummary,
         lastAgentMessage,
       });
     }

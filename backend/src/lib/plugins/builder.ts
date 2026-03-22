@@ -3,6 +3,7 @@ import { readdir, readFile } from 'fs/promises';
 import { watch } from 'fs';
 import { createHash } from 'crypto';
 import type { LoadedPlugin } from './types.ts';
+import type { EventBridge } from './event-bridge.ts';
 import type { ServerEventPayload } from '@agemon/shared';
 
 // ─── In-memory cache of built renderer/page modules ─────────────────────────
@@ -163,6 +164,12 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
         if (mod) builtPages.set(`${manifest.id}:${page.component}`, mod);
       }
     }
+    if (manifest.inputExtensions) {
+      for (const ext of manifest.inputExtensions) {
+        const mod = modules.get(ext.component);
+        if (mod) builtPages.set(`${manifest.id}:${ext.component}`, mod);
+      }
+    }
     if (manifest.navIcon) {
       const mod = modules.get(manifest.navIcon);
       if (mod) builtIcons.set(manifest.id, mod);
@@ -180,7 +187,7 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
  * watched — all without a server restart. Removed plugins are not unloaded
  * (Hono routes can't be unregistered; restart required for removal).
  */
-export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEventPayload) => void): void {
+export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEventPayload) => void, bridge?: EventBridge): void {
   const pluginsDir = join(agemonDir, 'plugins');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -195,7 +202,12 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
           const existing = getPlugins();
           const existingIds = new Set(existing.map(p => p.manifest.id));
 
-          const all = await scanPlugins(agemonDir);
+          if (!bridge) {
+            console.warn('[plugins] hot-load skipped: no EventBridge provided');
+            return;
+          }
+
+          const all = await scanPlugins(agemonDir, bridge);
           const newPlugins = all.filter(p => !existingIds.has(p.manifest.id));
 
           if (newPlugins.length === 0) return;
@@ -226,7 +238,7 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
 export function watchPlugins(plugins: LoadedPlugin[]): void {
   for (const plugin of plugins) {
     const { exports, dir, manifest } = plugin;
-    if (!exports.renderers?.length && !exports.pages?.length) continue;
+    if (!exports.renderers?.length && !exports.pages?.length && !manifest.inputExtensions?.length) continue;
 
     const renderersDir = join(dir, 'renderers');
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -264,8 +276,9 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
     const hasRenderers = exports.renderers && exports.renderers.length > 0;
     const hasPages = exports.pages && exports.pages.length > 0;
     const hasIcon = !!manifest.navIcon;
+    const hasInputExtensions = (manifest.inputExtensions?.length ?? 0) > 0;
 
-    if (!hasRenderers && !hasPages && !hasIcon) continue;
+    if (!hasRenderers && !hasPages && !hasIcon && !hasInputExtensions) continue;
 
     // Run the plugin's build
     const built = await runPluginBuild(dir, manifest.id);
@@ -296,6 +309,19 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
           console.info(`[plugin:${manifest.id}] cached page: ${page.component}`);
         } else {
           console.warn(`[plugin:${manifest.id}] page ${page.component} not found in dist/`);
+        }
+      }
+    }
+
+    // Map input extension components into builtPages
+    if (manifest.inputExtensions) {
+      for (const ext of manifest.inputExtensions) {
+        const mod = modules.get(ext.component);
+        if (mod) {
+          builtPages.set(`${manifest.id}:${ext.component}`, mod);
+          console.info(`[plugin:${manifest.id}] cached input extension: ${ext.component}`);
+        } else {
+          console.warn(`[plugin:${manifest.id}] input extension ${ext.component} not found in dist/`);
         }
       }
     }

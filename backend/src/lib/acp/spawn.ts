@@ -7,22 +7,15 @@ import { extractToolName, extractToolContext, buildOptionLabel } from './tool-he
 import { pendingApprovalResolvers } from './approvals.ts';
 import { handleExit } from './lifecycle.ts';
 import { JsonRpcTransport } from '../jsonrpc.ts';
-import { AGENT_CONFIGS, buildAgentEnv, resolveAgentBinary } from '../agents.ts';
+import { buildAgentEnv, resolveAgentBinary } from '../agents.ts';
+import { agentRegistry } from '../plugins/agent-registry.ts';
 import { runAcpHandshake } from './handshake.ts';
-import { refreshTaskContext, getTaskDir, buildFirstPromptContext } from '../context.ts';
-import { mkdir } from 'fs/promises';
-import type { AgentType, ApprovalOption, PendingApproval, Task } from '@agemon/shared';
-
-/**
- * Ensure the task directory exists and context artifacts are current.
- * Worktrees are created when repos are attached (in routes/tasks.ts),
- * not here — this just ensures the dir + CLAUDE.md/symlinks are ready.
- */
-async function prepareTaskDir(task: Task): Promise<void> {
-  const taskDir = getTaskDir(task.id);
-  await mkdir(taskDir, { recursive: true });
-  await refreshTaskContext(task);
-}
+import { initSessionLog } from './event-log.ts';
+import { resolveWorkspaceCwd, type SessionMeta } from '../plugins/workspace.ts';
+import { defaultTaskWorkspaceProvider } from '../plugins/workspace-default.ts';
+import { workspaceRegistry } from '../plugins/workspace-registry.ts';
+import { AGEMON_DIR } from '../git.ts';
+import type { AgentType, AgentSession, ApprovalOption, PendingApproval } from '@agemon/shared';
 
 /**
  * Create the process, transport, and session map entry.
@@ -30,12 +23,15 @@ async function prepareTaskDir(task: Task): Promise<void> {
  */
 export function spawnProcess(
   sessionId: string,
-  taskId: string,
+  taskId: string | null,
   agentType: AgentType
 ): RunningSession {
-  const binaryPath = resolveAgentBinary(agentType);
-  const config = AGENT_CONFIGS[agentType];
-  const env = buildAgentEnv(agentType);
+  const provider = agentRegistry.get(agentType);
+  if (!provider) throw new Error(`No agent provider registered for type: ${agentType}`);
+
+  const binaryPath = resolveAgentBinary(agentType);  // still uses AGENT_CONFIGS internally
+  const config = provider.config;
+  const env = buildAgentEnv(agentType);               // still uses AGENT_CONFIGS internally
   const command = [binaryPath, ...config.command.slice(1)];
 
   const proc = Bun.spawn(command, {
@@ -144,10 +140,12 @@ export function spawnProcess(
  */
 export function spawnAndHandshake(taskId: string, agentType: AgentType) {
   const sessionId = randomUUID();
+  const meta = { task_id: taskId };
+  const metaJson = JSON.stringify(meta);
 
   db.insertSession({
     id: sessionId,
-    task_id: taskId,
+    meta_json: metaJson,
     agent_type: agentType,
     pid: null,
   });
@@ -163,13 +161,117 @@ export function spawnAndHandshake(taskId: string, agentType: AgentType) {
   // Broadcast session_started so all WS clients refresh
   broadcast({ type: 'session_started', taskId, session: db.getSession(sessionId)! });
 
-  // Set up task directory: create worktrees for attached repos, then refresh context
-  const agentCwd = getTaskDir(taskId);
-  prepareTaskDir(task).then(() =>
-    runAcpHandshake(rs.transport, sessionId, taskId, agentCwd)
-  ).catch((err) => {
-    console.error(`[acp] handshake error for session ${sessionId}:`, err);
+  // Initialize JSONL log
+  initSessionLog(sessionId, agentType, meta, AGEMON_DIR).catch(err =>
+    console.error(`[acp] failed to init session log for ${sessionId}:`, err)
+  );
+
+  // Resolve workspace CWD, then run ACP handshake
+  const abortController = new AbortController();
+  const sessionMeta: SessionMeta = {
+    sessionId,
+    agentType,
+    meta: { task_id: taskId },
+  };
+
+  // Use registry; fall back to defaultTaskWorkspaceProvider for backwards compat
+  const workspaceProvider = workspaceRegistry.get('git-worktree') ?? defaultTaskWorkspaceProvider;
+  resolveWorkspaceCwd(sessionMeta, workspaceProvider, abortController.signal)
+    .then(cwd => runAcpHandshake(rs.transport, sessionId, taskId, cwd))
+    .catch((err) => {
+      console.error(`[acp] workspace/handshake error for session ${sessionId}:`, err);
+      db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
+      broadcast({ type: 'session_state_changed', sessionId, taskId, state: 'crashed' });
+    });
+
+  return db.getSession(sessionId)!;
+}
+
+/**
+ * Spawn an already-inserted session by its ID.
+ * Looks up the session in the in-memory DB, derives workspace from meta,
+ * then runs the same process-spawn + handshake path as spawnAndHandshake.
+ *
+ * Use ctx.spawnSession() from plugins — call this directly only from core ACP code.
+ */
+export function spawnSessionById(sessionId: string): AgentSession {
+  const session = db.getSession(sessionId);
+  if (!session) throw new Error(`[acp] session ${sessionId} not found`);
+
+  const meta: Record<string, unknown> = JSON.parse(session.meta_json ?? '{}');
+  const taskId = (meta.task_id as string | undefined) ?? null;
+  const agentType = session.agent_type;
+
+  const rs = spawnProcess(sessionId, taskId, agentType);
+
+  broadcast({ type: 'session_started', taskId, session: db.getSession(sessionId)! });
+
+  initSessionLog(sessionId, agentType, meta, AGEMON_DIR).catch(err =>
+    console.error(`[acp] failed to init session log for ${sessionId}:`, err)
+  );
+
+  const abortController = new AbortController();
+  const sessionMeta: SessionMeta = { sessionId, agentType, meta };
+
+  // Route to workspace provider via registry.
+  // meta.workspaceProvider is set by tasks plugin at session creation time.
+  // Fallback: git-worktree for task sessions, null for standalone sessions.
+  const providerId = meta.workspaceProvider as string | undefined;
+  const workspaceProvider = providerId
+    ? (workspaceRegistry.get(providerId) ?? null)
+    : taskId ? workspaceRegistry.get('git-worktree') ?? defaultTaskWorkspaceProvider : null;
+
+  resolveWorkspaceCwd(sessionMeta, workspaceProvider, abortController.signal)
+    .then(cwd => runAcpHandshake(rs.transport, sessionId, taskId, cwd))
+    .catch((err) => {
+      console.error(`[acp] workspace/handshake error for session ${sessionId}:`, err);
+      db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
+      broadcast({ type: 'session_state_changed', sessionId, taskId, state: 'crashed' });
+    });
+
+  return db.getSession(sessionId)!;
+}
+
+/**
+ * Spawn a session in a local directory without a task.
+ * The agent runs in the provided cwd with no git worktree.
+ */
+export function spawnLocalDirSession(cwd: string, agentType: AgentType) {
+  const sessionId = randomUUID();
+  const meta = { cwd };
+  const metaJson = JSON.stringify(meta);
+
+  db.insertSession({
+    id: sessionId,
+    meta_json: metaJson,
+    agent_type: agentType,
+    pid: null,
   });
+
+  const rs = spawnProcess(sessionId, null, agentType);
+
+  broadcast({ type: 'session_started', taskId: null, session: db.getSession(sessionId)! });
+
+  // Initialize JSONL log
+  initSessionLog(sessionId, agentType, meta, AGEMON_DIR).catch(err =>
+    console.error('[acp] failed to init session log:', err)
+  );
+
+  // No workspace provider needed — just run handshake with the provided cwd
+  const abortController = new AbortController();
+  const sessionMeta: SessionMeta = {
+    sessionId,
+    agentType,
+    meta,
+  };
+
+  resolveWorkspaceCwd(sessionMeta, null, abortController.signal)
+    .then(resolvedCwd => runAcpHandshake(rs.transport, sessionId, null, resolvedCwd))
+    .catch(err => {
+      console.error(`[acp] local-dir handshake error for ${sessionId}:`, err);
+      db.updateSessionState(sessionId, 'crashed', { pid: null, exit_code: -1 });
+      broadcast({ type: 'session_state_changed', sessionId, taskId: null, state: 'crashed' });
+    });
 
   return db.getSession(sessionId)!;
 }

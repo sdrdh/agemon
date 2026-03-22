@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { slugify } from '../lib/slugify.ts';
+import { queryTaskIds } from '../lib/task-store.ts';
 
 // ─── Database Connection ──────────────────────────────────────────────────────
 
@@ -28,11 +29,7 @@ export function resetDb(): void {
 
 export function generateTaskId(title: string): string {
   const base = slugify(title);
-  const database = getDb();
-
-  const existing = database.query<{ id: string }, [string, string]>(
-    "SELECT id FROM tasks WHERE id = ? OR id LIKE ? || '-%'"
-  ).all(base, base);
+  const existing = queryTaskIds(base);
 
   if (existing.length === 0) return base;
 

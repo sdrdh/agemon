@@ -1,9 +1,14 @@
 import { mkdir, symlink, lstat, stat } from 'fs/promises';
 import { join } from 'path';
+import { randomUUID } from 'crypto';
 import { runMigrations, db } from './db/client.ts';
+import { runFilesystemMigration } from './lib/migration.ts';
+import { buildSessionDb, insertSession } from './lib/session-store.ts';
+import type { AgentType } from '@agemon/shared';
 import { AGEMON_DIR } from './lib/git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import { createApp, websocket } from './app.ts';
+import { registerBuiltinAgents } from './lib/plugins/agent-registry.ts';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -19,7 +24,20 @@ await mkdir(join(AGEMON_DIR, 'repos'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'tasks'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'sessions'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
+
+// Filesystem migration: agent_sessions + settings → session.json + settings.json
+await runFilesystemMigration(AGEMON_DIR);
+
+// Build in-memory SQLite projection from session.json files (must run before recoverInterruptedSessions)
+buildSessionDb(AGEMON_DIR);
+
+// Build in-memory task DB from task JSON files (must run before migrations + plugins)
+const { buildTaskDb } = await import('./lib/task-store.ts');
+const taskPluginDataDir = join(AGEMON_DIR, 'plugins', 'tasks', 'data');
+await mkdir(taskPluginDataDir, { recursive: true });
+buildTaskDb(taskPluginDataDir);
 
 // Wire global agemon plugins into each agent's discovery path
 for (const pluginPath of getAllPluginPaths()) {
@@ -71,6 +89,27 @@ try {
   console.error('[db] migration failed — exiting', err);
   process.exit(1);
 }
+
+// Register built-in agents before plugins are scanned (plugins may extend the registry)
+registerBuiltinAgents();
+
+// Register built-in workspace providers
+const { workspaceRegistry } = await import('./lib/plugins/workspace-registry.ts');
+const { defaultTaskWorkspaceProvider } = await import('./lib/plugins/workspace-default.ts');
+
+// git-worktree: existing behaviour (git worktrees + CLAUDE.md generation)
+workspaceRegistry.register('git-worktree', defaultTaskWorkspaceProvider);
+
+// cwd: run in any local directory, no git setup required
+workspaceRegistry.register('cwd', {
+  async prepare(session) {
+    const cwd = session.meta.cwd as string | undefined;
+    if (!cwd) throw new Error('[workspace:cwd] session.meta.cwd is required');
+    if (!(await stat(cwd).then(() => true).catch(() => false)))
+      throw new Error(`[workspace:cwd] directory not found: ${cwd}`);
+    return { cwd };
+  },
+});
 
 // Auto-upgrade on startup (only when setting enabled AND under systemd)
 try {
@@ -131,11 +170,30 @@ const { renderersRoutes } = await import('./routes/renderers.ts');
 app.route('/api/renderers', renderersRoutes);
 
 // ─── Plugins ─────────────────────────────────────────────────────────────────
+const { EventBridge } = await import('./lib/plugins/event-bridge.ts');
+const pluginBridge = new EventBridge(broadcast);
+
+// Wire EventBridge into ACP lifecycle NOW — before plugins load so any session
+// events emitted during onLoad (or crash recovery) flow through the bridge.
+const { setBridge } = await import('./lib/acp/lifecycle.ts');
+setBridge(pluginBridge);
+
+// Build sessionApi for plugin context — dynamic import avoids circular dep
+// (spawn.ts imports broadcast from server.ts, which is now defined above).
+const { spawnSessionById } = await import('./lib/acp/spawn.ts');
+const sessionApi = {
+  createSession: ({ agentType, meta }: { agentType: AgentType; meta: Record<string, unknown> }) =>
+    insertSession({ id: randomUUID(), meta_json: JSON.stringify(meta), agent_type: agentType, pid: null }),
+  spawnSession: (sessionId: string) => spawnSessionById(sessionId),
+};
+
 const { scanPlugins } = await import('./lib/plugins/loader.ts');
 const { setPlugins } = await import('./lib/plugins/registry.ts');
 const { mountPluginRoutes } = await import('./lib/plugins/mount.ts');
 
-const plugins = await scanPlugins(AGEMON_DIR);
+// Scan ~/.agemon/plugins/ AND repo-bundled plugins/ directory
+const repoPluginsDir = join(import.meta.dir, '../../plugins');
+const plugins = await scanPlugins(AGEMON_DIR, pluginBridge, { extraDirs: [repoPluginsDir], sessionApi });
 setPlugins(plugins);
 mountPluginRoutes(app, plugins);
 console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
@@ -144,7 +202,7 @@ console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': '
 const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
 await buildPluginRenderers(plugins);
 watchPlugins(plugins);
-watchPluginsDir(AGEMON_DIR, broadcast);
+watchPluginsDir(AGEMON_DIR, broadcast, pluginBridge);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.

@@ -87,6 +87,18 @@
         "remark-gfm": "^4.0.1",
       },
     },
+    "plugins/tasks": {
+      "name": "@agemon/plugin-tasks",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agemon/shared": "workspace:*",
+        "hono": "^4.6.0",
+      },
+    },
+    "plugins/voice-input": {
+      "name": "@agemon/plugin-voice-input",
+      "version": "0.1.0",
+    },
     "shared": {
       "name": "@agemon/shared",
       "version": "1.0.0",
@@ -102,6 +114,10 @@
     "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:plugins/mcp-server"],
 
     "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:plugins/memory-cms"],
+
+    "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:plugins/tasks"],
+
+    "@agemon/plugin-voice-input": ["@agemon/plugin-voice-input@workspace:plugins/voice-input"],
 
     "@agemon/shared": ["@agemon/shared@workspace:shared"],
 

@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { Send, Ban, RotateCcw } from 'lucide-react';
+import { useRef, useEffect, useCallback, useState, type KeyboardEvent } from 'react';
+import { Send, Ban, RotateCcw, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SlashCommandMenu } from '@/components/custom/slash-command-menu';
 import type { AgentCommand } from '@agemon/shared';
+import type { LoadedExtension, InputExtensionProps } from '@/lib/use-input-extensions';
 
 /** Input border/bg color per mode */
 const MODE_INPUT_STYLES: Record<string, string> = {
@@ -27,6 +28,9 @@ export function ChatInputArea({
   filteredCommands,
   selectedCommandIdx,
   hasNavigatedRef,
+  extensions,
+  activeExtensionId,
+  sessionState,
   onSetInputText,
   onSend,
   onCancelTurn,
@@ -34,6 +38,8 @@ export function ChatInputArea({
   onSelectCommand,
   onSetSelectedCommandIdx,
   onAdjustTextareaHeight,
+  onActivateExtension,
+  onDeactivateExtension,
 }: {
   connected: boolean;
   sessionStopped: boolean;
@@ -48,16 +54,23 @@ export function ChatInputArea({
   filteredCommands: AgentCommand[];
   selectedCommandIdx: number;
   hasNavigatedRef: React.MutableRefObject<boolean>;
+  extensions: LoadedExtension[];
+  activeExtensionId: string | null;
+  sessionState: string;
   onSetInputText: (text: string) => void;
-  onSend: () => void;
+  onSend: (text?: string) => void;
   onCancelTurn: () => void;
   onResume: () => void;
   onSelectCommand: (cmd: AgentCommand) => void;
   onSetSelectedCommandIdx: (idx: number | ((prev: number) => number)) => void;
   onAdjustTextareaHeight: (el: HTMLTextAreaElement) => void;
+  onActivateExtension: (pluginId: string, extId: string) => void;
+  onDeactivateExtension: () => void;
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const showCommandMenu = filteredCommands.length > 0;
+  const [extensionMenuOpen, setExtensionMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Reset height when input is cleared (after send)
   useEffect(() => {
@@ -65,6 +78,18 @@ export function ChatInputArea({
       inputRef.current.style.height = '';
     }
   }, [inputText]);
+
+  // Close extension menu on outside click
+  useEffect(() => {
+    if (!extensionMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setExtensionMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [extensionMenuOpen]);
 
   const handleInputKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (showCommandMenu) {
@@ -103,6 +128,29 @@ export function ChatInputArea({
     }
   }, [showCommandMenu, filteredCommands, selectedCommandIdx, onSelectCommand, onSetInputText, canType, sessionReady, inputText, onSend, hasNavigatedRef, onSetSelectedCommandIdx]);
 
+  // Callbacks passed into extension components
+  const handleInsert = useCallback((text: string) => {
+    onSetInputText(inputText + text);
+  }, [onSetInputText, inputText]);
+
+  const handleSendFromExtension = useCallback((text: string) => {
+    onSend(text);
+  }, [onSend]);
+
+  // Find the active extension
+  const activeExt = activeExtensionId
+    ? extensions.find(e => `${e.pluginId}:${e.ext.id}` === activeExtensionId)
+    : null;
+
+  const ExtComponent = activeExt?.component ?? null;
+  const extProps: InputExtensionProps = {
+    onInsert: handleInsert,
+    onSend: handleSendFromExtension,
+    onClose: onDeactivateExtension,
+    connected,
+    sessionState,
+  };
+
   if (sessionStopped && !isDone) {
     return (
       <Button
@@ -125,7 +173,63 @@ export function ChatInputArea({
           onSelectCommand={onSelectCommand}
           onMouseEnter={onSetSelectedCommandIdx}
         />
+
+        {/* Extension panel — shown above the input row when an extension is active */}
+        {activeExt && (
+          <div className="mb-2 rounded-md border bg-muted/30 p-2">
+            {ExtComponent ? (
+              <ExtComponent {...extProps} />
+            ) : (
+              <div className="flex items-center justify-center py-3 text-sm text-muted-foreground">
+                Loading...
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2">
+          {/* Extension toolbar button — only shown when extensions exist */}
+          {extensions.length > 0 && (
+            <div className="relative" ref={menuRef}>
+              <Button
+                type="button"
+                size="icon"
+                variant={activeExtensionId ? 'secondary' : 'outline'}
+                onClick={() => activeExtensionId ? onDeactivateExtension() : setExtensionMenuOpen(o => !o)}
+                className="min-h-[44px] min-w-[44px]"
+                aria-label="Input extensions"
+              >
+                {activeExtensionId ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              </Button>
+
+              {extensionMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[160px] rounded-md border bg-popover shadow-md">
+                  {extensions.map((e) => (
+                    <button
+                      key={`${e.pluginId}:${e.ext.id}`}
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent first:rounded-t-md last:rounded-b-md"
+                      onClick={() => {
+                        setExtensionMenuOpen(false);
+                        const key = `${e.pluginId}:${e.ext.id}`;
+                        if (activeExtensionId === key) {
+                          onDeactivateExtension();
+                        } else {
+                          onActivateExtension(e.pluginId, e.ext.id);
+                        }
+                      }}
+                    >
+                      <span className="flex-1 text-left">{e.ext.label}</span>
+                      {activeExtensionId === `${e.pluginId}:${e.ext.id}` && (
+                        <span className="text-xs text-muted-foreground">active</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <textarea
             ref={inputRef}
             value={inputText}
@@ -155,7 +259,7 @@ export function ChatInputArea({
             <Button
               type="button"
               size="icon"
-              onClick={onSend}
+              onClick={() => onSend()}
               disabled={!connected || (!canType && !sessionReady) || !inputText.trim()}
               className="min-h-[44px] min-w-[44px]"
             >

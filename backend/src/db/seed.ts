@@ -42,7 +42,7 @@ db.createTask({
 const sessionId2 = randomUUID();
 db.insertSession({
   id: sessionId2,
-  task_id: taskId2,
+  meta_json: JSON.stringify({ task_id: taskId2 }),
   agent_type: 'claude-code',
   pid: null,
 });
@@ -54,7 +54,7 @@ db.insertEvent({ id: randomUUID(), task_id: taskId2, session_id: sessionId2, typ
 const sessionId3 = randomUUID();
 db.insertSession({
   id: sessionId3,
-  task_id: taskId3,
+  meta_json: JSON.stringify({ task_id: taskId3 }),
   agent_type: 'claude-code',
   pid: null,
 });

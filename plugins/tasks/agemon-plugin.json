@@ -1,0 +1,12 @@
+{
+  "id": "tasks",
+  "name": "Tasks",
+  "version": "0.1.0",
+  "description": "Task management — queue tasks, track status, assign to agent sessions",
+  "entryPoint": "index.ts",
+  "bundled": true,
+  "hasPages": true,
+  "navItems": [
+    { "label": "Tasks", "lucideIcon": "CheckSquare", "path": "/", "order": 0 }
+  ]
+}

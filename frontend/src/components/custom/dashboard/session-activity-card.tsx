@@ -8,7 +8,7 @@ import { formatMs } from '@/lib/time-utils';
 interface SessionActivityCardProps {
   session: AgentSession;
   taskName: string;
-  onNavigate: () => void;
+  onNavigate?: () => void;
 }
 
 export const SessionActivityCard = memo(function SessionActivityCard({
@@ -35,7 +35,7 @@ export const SessionActivityCard = memo(function SessionActivityCard({
       tabIndex={0}
       onClick={onNavigate}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (onNavigate && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onNavigate();
         }

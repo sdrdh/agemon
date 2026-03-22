@@ -33,17 +33,32 @@ export function mountPluginRoutes(app: Hono, _plugins: LoadedPlugin[]): void {
   // GET /api/plugins — list all loaded plugins
   app.get('/api/plugins', (c) => {
     const plugins = getPlugins();
-    return c.json(plugins.map(p => ({
-      id: p.manifest.id,
-      name: p.manifest.name,
-      version: p.manifest.version,
-      description: p.manifest.description,
-      hasPages: p.manifest.hasPages ?? false,
-      navLabel: p.manifest.navLabel ?? null,
-      navIcon: p.manifest.navIcon ?? null,
-      showInSettings: p.manifest.showInSettings ?? true,
-      navEnabled: p.manifest.navLabel ? isNavEnabled(p.manifest.id) : false,
-    })));
+    return c.json(plugins.map(p => {
+      // Synthesize navItems from legacy fields for backward compatibility
+      const navItems = p.manifest.navItems ?? (p.manifest.navLabel ? [{
+        label: p.manifest.navLabel,
+        lucideIcon: p.manifest.navLucideIcon ?? null,
+        icon: p.manifest.navIcon ?? null,
+        path: '/',
+        order: p.manifest.navOrder ?? 999,
+      }] : []);
+      const navEnabled = navItems.length > 0 ? isNavEnabled(p.manifest.id) : false;
+      return {
+        id: p.manifest.id,
+        name: p.manifest.name,
+        version: p.manifest.version,
+        description: p.manifest.description,
+        hasPages: p.manifest.hasPages ?? false,
+        navItems,
+        navEnabled,
+        showInSettings: p.manifest.showInSettings ?? true,
+        inputExtensions: p.manifest.inputExtensions ?? [],
+        // Legacy fields (kept for older clients)
+        navLabel: p.manifest.navLabel ?? null,
+        navIcon: p.manifest.navIcon ?? null,
+        navLucideIcon: p.manifest.navLucideIcon ?? null,
+      };
+    }));
   });
 
   // PATCH /api/plugins/:pluginId — update plugin config (nav visibility)

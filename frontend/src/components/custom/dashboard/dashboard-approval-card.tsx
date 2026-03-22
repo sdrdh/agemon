@@ -14,7 +14,7 @@ interface DashboardApprovalCardProps {
   agentType: string;
   connected: boolean;
   onDecision: (approvalId: string, decision: ApprovalDecision) => void;
-  onNavigate: () => void;
+  onNavigate?: () => void;
   onStop?: (sessionId: string) => void;
   onArchive?: (sessionId: string) => void;
 }
@@ -40,7 +40,7 @@ export function DashboardApprovalCard({
       onClick={onNavigate}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate?.(); }}
     >
       <div className="px-3 pt-3 pb-1">
         {/* Top line: badge + timestamp */}

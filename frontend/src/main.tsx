@@ -10,14 +10,21 @@ import * as LucideReact from 'lucide-react';
 const jsxRuntime = { ...jsxRuntimeProd, ...jsxRuntimeDev };
 import { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose } from './components/ui/toast';
 import { onToast, type ToastPayload } from './lib/toast';
-import { connectWs } from './lib/ws';
+import { connectWs, subscribeWsEvent } from './lib/ws';
 import { hasApiKey } from './lib/api';
 import './index.css';
 import App from './App.tsx';
 
 // Expose shared modules for plugin renderers.
 // Plugin builds externalize react/lucide-react and reference window.__AGEMON__.
-(window as any).__AGEMON__ = { React, ReactDOM, jsxRuntime, LucideReact };
+(window as any).__AGEMON__ = {
+  React,
+  ReactDOM,
+  jsxRuntime,
+  LucideReact,
+  /** Subscribe to WebSocket server events. Returns an unsubscribe function. */
+  onWsEvent: (handler: (event: unknown) => void) => subscribeWsEvent(handler),
+};
 
 function GlobalToast() {
   const [toasts, setToasts] = useState<(ToastPayload & { id: number })[]>([]);

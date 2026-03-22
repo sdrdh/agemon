@@ -1,23 +1,24 @@
 -- Agemon Database Schema
--- Version: 10
+-- Version: 19
 -- Note: schema_version table is created by client.ts before this file runs.
 
 -- Core task metadata
 CREATE TABLE IF NOT EXISTS tasks (
-  id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL CHECK (length(title) <= 500),
-  description TEXT CHECK (description IS NULL OR length(description) <= 10000),
-  status      TEXT NOT NULL DEFAULT 'todo'
-                CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
-  agent       TEXT NOT NULL DEFAULT 'claude-code',
-  archived    INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  id             TEXT PRIMARY KEY,
+  title          TEXT NOT NULL CHECK (length(title) <= 500),
+  description    TEXT CHECK (description IS NULL OR length(description) <= 10000),
+  status         TEXT NOT NULL DEFAULT 'todo'
+                   CHECK (status IN ('todo', 'working', 'awaiting_input', 'done')),
+  agent          TEXT NOT NULL DEFAULT 'claude-code',
+  archived       INTEGER NOT NULL DEFAULT 0,
+  workspace_json TEXT DEFAULT NULL,  -- JSON: TaskWorkspace { provider, config }
+  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
--- Agent session lifecycle (one task → many sessions)
+-- Agent session lifecycle (sessions can be task-scoped or standalone via meta_json)
 CREATE TABLE IF NOT EXISTS agent_sessions (
   id                  TEXT PRIMARY KEY,
-  task_id             TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  meta_json           TEXT NOT NULL DEFAULT '{}',  -- JSON: { task_id?, cwd?, ... }
   agent_type          TEXT NOT NULL,
   name                TEXT DEFAULT NULL,  -- Human-readable label derived from first prompt
   external_session_id TEXT,          -- Provider session ID for --resume (set after first output)
@@ -34,13 +35,15 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   last_message        TEXT DEFAULT NULL  -- Short preview of last user/agent message
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_id ON agent_sessions(task_id);
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_state ON agent_sessions(state);
+-- Note: idx_agent_sessions_meta_task is created by v17 migration after meta_json column exists
 
 -- Agent thought/action event stream
+-- Read-only fallback for sessions created before v17 (new sessions write to JSONL).
+-- task_id is nullable to support task-less local-dir sessions.
 CREATE TABLE IF NOT EXISTS acp_events (
   id         TEXT PRIMARY KEY,
-  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  task_id    TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
   type       TEXT NOT NULL CHECK (type IN ('thought', 'action', 'await_input', 'result', 'prompt')),
   content    TEXT NOT NULL,
@@ -54,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_acp_events_session_created ON acp_events(session_
 -- Blocking questions from the agent
 CREATE TABLE IF NOT EXISTS awaiting_input (
   id         TEXT PRIMARY KEY,
-  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  task_id    TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
   question   TEXT NOT NULL CHECK (length(question) <= 10000),
   status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'answered')),
@@ -97,7 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_task_repos_repo ON task_repos(repo_id);
 -- Pending tool call approvals
 CREATE TABLE IF NOT EXISTS pending_approvals (
   id          TEXT PRIMARY KEY,
-  task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  task_id     TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   session_id  TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
   tool_name   TEXT NOT NULL,
   tool_title  TEXT NOT NULL,

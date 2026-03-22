@@ -8,11 +8,11 @@ export function listPendingInputs(taskId: string): AwaitingInput[] {
   ).all(taskId);
 }
 
-export function insertAwaitingInput(input: Omit<AwaitingInput, 'created_at' | 'response' | 'status'>): AwaitingInput {
+export function insertAwaitingInput(input: Omit<AwaitingInput, 'created_at' | 'response' | 'status'> & { task_id?: string | null }): AwaitingInput {
   const db = getDb();
   db.run(
     'INSERT INTO awaiting_input (id, task_id, session_id, question) VALUES (?, ?, ?, ?)',
-    [input.id, input.task_id, input.session_id, input.question]
+    [input.id, input.task_id ?? null, input.session_id, input.question]
   );
   const row = db.query<AwaitingInput, [string]>('SELECT * FROM awaiting_input WHERE id = ?').get(input.id);
   if (!row) throw new Error(`[db] failed to retrieve newly inserted awaiting_input with id ${input.id}`);

@@ -86,10 +86,13 @@ export function getAllPages(): PluginPageExport[] {
 export function getPluginPage(pluginId: string, pagePath: string): (PluginPageExport) | undefined {
   const plugin = getPlugin(pluginId);
   if (!plugin?.exports.pages) return undefined;
-  
-  const page = plugin.exports.pages.find(p => p.path === pagePath);
+
+  // Exact match first, then fall back to root '/' for SPA-style plugins
+  const page =
+    plugin.exports.pages.find(p => p.path === pagePath) ??
+    plugin.exports.pages.find(p => p.path === '/');
   if (!page) return undefined;
-  
+
   return {
     pluginId: plugin.manifest.id,
     path: page.path,

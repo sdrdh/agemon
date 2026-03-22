@@ -36,8 +36,8 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
   }
 
   const taskId = sessionRecord.task_id;
-  const task = db.getTask(taskId);
-  if (!task) {
+  const task = taskId ? db.getTask(taskId) : null;
+  if (taskId && !task) {
     throw new Error(`Task ${taskId} not found`);
   }
 
@@ -49,8 +49,17 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
 
   const rs = spawnProcess(sessionId, taskId, agentType);
 
-  const agentCwd = getTaskDir(taskId);
-  await prepareTaskDir(task);
+  // Determine cwd — task-based or from session meta
+  let agentCwd: string;
+  if (taskId && task) {
+    agentCwd = getTaskDir(taskId);
+    await prepareTaskDir(task);
+  } else {
+    // Task-free session — derive cwd from meta_json
+    const meta = sessionRecord.meta_json ? JSON.parse(sessionRecord.meta_json) : {};
+    agentCwd = meta.cwd;
+    if (!agentCwd) throw new Error('Cannot resume session: no task_id or cwd in session meta');
+  }
 
   // Run handshake, then attempt session/load
   try {
@@ -75,7 +84,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     let sessionResultObj: Record<string, unknown> | null = null;
 
     // 2. Try session/load if supported and we have a stored external ID
-    const mcpServers = db.getMergedMcpServers(sessionRecord.task_id);
+    const mcpServers = taskId ? db.getMergedMcpServers(taskId) : db.listGlobalMcpServers();
     if (supportsLoadSession && storedExternalId) {
       try {
         const loadResult = await rs.transport.request('session/load', {
@@ -138,7 +147,7 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
     broadcast({ type: 'session_ready', taskId, session });
 
     // Re-derive task status now that session is ready (→ awaiting_input)
-    deriveTaskStatus(taskId);
+    if (taskId) deriveTaskStatus(taskId);
 
     return session;
   } catch (err) {

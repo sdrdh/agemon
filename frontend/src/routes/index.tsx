@@ -102,8 +102,8 @@ export default function DashboardPage() {
     sendClientEvent({ type: 'approval_response', approvalId, decision });
   }, []);
 
-  const handleInputSubmit = useCallback((inputId: string, taskId: string, response: string) => {
-    sendClientEvent({ type: 'send_input', taskId, inputId, response });
+  const handleInputSubmit = useCallback((inputId: string, sessionId: string, response: string) => {
+    sendClientEvent({ type: 'send_input', sessionId, inputId, response });
     useWsStore.getState().removePendingInput(inputId);
   }, []);
 
@@ -117,7 +117,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleNavigateToTasks = useCallback(() => {
-    navigate({ to: '/kanban' });
+    navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'kanban' } });
   }, [navigate]);
 
   const handleDismissSession = useCallback((sessionId: string) => {

@@ -10,11 +10,15 @@ import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
 import { friendlyError } from '@/lib/errors';
 
+type WorkspaceType = 'git-worktree' | 'cwd';
+
 export default function TaskCreateForm() {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [repos, setRepos] = useState<string[]>([]);
+  const [workspaceType, setWorkspaceType] = useState<WorkspaceType>('git-worktree');
+  const [cwdPath, setCwdPath] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -22,13 +26,30 @@ export default function TaskCreateForm() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
 
+    if (workspaceType === 'cwd' && !cwdPath.trim()) {
+      showToast({ title: 'Directory path required', description: 'Enter the local directory path for this task.', variant: 'destructive' });
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const task = await api.createTask({
-        title: trimmedTitle,
-        description: description.trim() || undefined,
-        repos: repos.length > 0 ? repos : undefined,
-      });
+      const body =
+        workspaceType === 'cwd'
+          ? {
+              title: trimmedTitle,
+              description: description.trim() || undefined,
+              workspace: { provider: 'cwd' as const, config: { cwd: cwdPath.trim() } },
+            }
+          : {
+              title: trimmedTitle,
+              description: description.trim() || undefined,
+              repos: repos.length > 0 ? repos : undefined,
+              workspace: repos.length > 0
+                ? { provider: 'git-worktree' as const, config: { repos } }
+                : undefined,
+            };
+
+      const task = await api.createTask(body);
       navigate({ to: '/tasks/$id', params: { id: task.id }, search: { session: undefined } });
     } catch (err) {
       showToast({ title: 'Failed to create task', description: friendlyError(err, 'An unexpected error occurred'), variant: 'destructive' });
@@ -78,7 +99,50 @@ export default function TaskCreateForm() {
           />
         </div>
 
-        <RepoSelector selected={repos} onChange={setRepos} />
+        <div className="space-y-3">
+          <Label>Workspace</Label>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-3 min-h-[44px] cursor-pointer">
+              <input
+                type="radio"
+                name="workspaceType"
+                value="git-worktree"
+                checked={workspaceType === 'git-worktree'}
+                onChange={() => setWorkspaceType('git-worktree')}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium">Git worktrees</span>
+            </label>
+            <label className="flex items-center gap-3 min-h-[44px] cursor-pointer">
+              <input
+                type="radio"
+                name="workspaceType"
+                value="cwd"
+                checked={workspaceType === 'cwd'}
+                onChange={() => setWorkspaceType('cwd')}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium">Local directory</span>
+            </label>
+          </div>
+
+          {workspaceType === 'git-worktree' && (
+            <RepoSelector selected={repos} onChange={setRepos} />
+          )}
+
+          {workspaceType === 'cwd' && (
+            <div className="space-y-2">
+              <Label htmlFor="cwdPath">Directory path</Label>
+              <Input
+                id="cwdPath"
+                value={cwdPath}
+                onChange={e => setCwdPath(e.target.value)}
+                placeholder="/home/user/my-project"
+                className="h-11 font-mono text-sm"
+              />
+            </div>
+          )}
+        </div>
 
         <Button type="submit" className="w-full" disabled={!title.trim() || submitting}>
           {submitting ? 'Creating...' : 'Create Task'}

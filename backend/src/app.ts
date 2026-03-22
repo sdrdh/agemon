@@ -279,13 +279,15 @@ export function createApp(opts: AppOptions): AppContext {
         }
       }
 
-      const pending = db.listPendingInputs(ev.taskId);
-      if (pending.length === 0) {
-        db.updateTask(ev.taskId, { status: 'working' });
-        const task = db.getTask(ev.taskId);
-        if (task) broadcast({ type: 'task_updated', task });
+      if (input.task_id) {
+        const pending = db.listPendingInputs(input.task_id);
+        if (pending.length === 0) {
+          db.updateTask(input.task_id, { status: 'working' });
+          const task = db.getTask(input.task_id);
+          if (task) broadcast({ type: 'task_updated', task });
+        }
       }
-      console.info(`[ws] send_input answered for task=${ev.taskId} input=${ev.inputId}`);
+      console.info(`[ws] send_input answered for task=${input.task_id ?? 'local'} input=${ev.inputId}`);
     }
 
     else if (ev.type === 'send_message') {

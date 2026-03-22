@@ -85,6 +85,28 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
   });
 });
 
+// Serve any built plugin component by name (used by input extensions and future generic slots)
+// e.g. GET /pages/voice-input/voice-input.js
+renderers.get('/pages/:pluginId/:filename', async (c) => {
+  const pluginId = c.req.param('pluginId') ?? '';
+  const filename = c.req.param('filename') ?? '';
+  if (!filename.endsWith('.js')) return c.text('Not found', 404);
+  const component = filename.slice(0, -3);
+
+  if (!/^[a-zA-Z0-9-]+$/.test(pluginId) || !/^[a-zA-Z0-9-]+$/.test(component)) {
+    return c.text('Invalid parameters', 400);
+  }
+
+  const built = getBuiltPage(pluginId, component);
+  if (!built) {
+    return c.text('Component not built — check server logs for build errors', 404);
+  }
+
+  return c.body(built.code, {
+    headers: { ...JS_HEADERS, 'ETag': `"${built.hash}"` },
+  });
+});
+
 // Serve plugin nav icon component
 renderers.get('/icons/:filename', async (c) => {
   const filename = c.req.param('filename') ?? '';

@@ -18,7 +18,7 @@ function parseConfigOptions(agentType: AgentType, result: Record<string, unknown
 export async function runAcpHandshake(
   transport: JsonRpcTransport,
   sessionId: string,
-  taskId: string,
+  taskId: string | null,
   cwd: string
 ): Promise<void> {
   try {
@@ -41,7 +41,7 @@ export async function runAcpHandshake(
     const supportsLoadSession = !!capabilities?.loadSession;
 
     // 2. Create ACP session via session/new
-    const mcpServers = db.getMergedMcpServers(taskId);
+    const mcpServers = taskId ? db.getMergedMcpServers(taskId) : db.listGlobalMcpServers();
     if (mcpServers.length > 0) {
       console.info(`[acp] session ${sessionId} passing ${mcpServers.length} MCP server(s): ${mcpServers.map(s => s.name).join(', ')}`);
     }
@@ -86,7 +86,7 @@ export async function runAcpHandshake(
     broadcast({ type: 'session_ready', taskId, session });
 
     // Re-derive task status now that session is ready (→ awaiting_input)
-    deriveTaskStatus(taskId);
+    if (taskId) deriveTaskStatus(taskId);
 
     console.info(`[acp] session ${sessionId} ready (ACP handshake done, supportsLoad=${supportsLoadSession})`);
   } catch (err) {

@@ -8,7 +8,7 @@ import type { ApprovalDecision, ApprovalOption } from '@agemon/shared';
 export const pendingApprovalResolvers = new Map<string, {
   resolve: (response: Record<string, unknown>) => void;
   sessionId: string;
-  taskId: string;
+  taskId: string | null;
 }>();
 
 /**

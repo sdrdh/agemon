@@ -12,7 +12,7 @@ interface NeedsInputSectionProps {
   sessionMap: Map<string, AgentSession>;
   connected: boolean;
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
-  onInputSubmit: (inputId: string, taskId: string, response: string) => void;
+  onInputSubmit: (inputId: string, sessionId: string, response: string) => void;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
   onStopSession?: (sessionId: string) => void;
   onArchiveSession?: (sessionId: string) => void;
@@ -70,7 +70,7 @@ export function NeedsInputSection({
       {sorted.map((entry) => {
           if (entry.type === 'approval') {
             const approval = entry.item as PendingApproval;
-            const task = taskMap.get(approval.taskId);
+            const task = approval.taskId ? taskMap.get(approval.taskId) : undefined;
             const taskName = task?.title ?? 'Unknown task';
             const taskDescription = task?.description ?? undefined;
             const agentType = sessionMap.get(approval.sessionId)?.agent_type ?? 'claude-code';
@@ -85,14 +85,14 @@ export function NeedsInputSection({
                 agentType={agentType}
                 connected={connected}
                 onDecision={onApprovalDecision}
-                onNavigate={() => onNavigateToTask(approval.taskId, approval.sessionId)}
+                onNavigate={approval.taskId ? () => onNavigateToTask(approval.taskId!, approval.sessionId) : undefined}
                 onStop={onStopSession}
                 onArchive={onArchiveSession}
               />
             );
           } else {
             const input = entry.item as PendingInput;
-            const task = taskMap.get(input.taskId);
+            const task = input.taskId ? taskMap.get(input.taskId) : undefined;
             const taskName = task?.title ?? 'Unknown task';
             const taskDescription = task?.description ?? undefined;
             const agentType = sessionMap.get(input.sessionId)?.agent_type ?? 'claude-code';
@@ -107,7 +107,7 @@ export function NeedsInputSection({
                 agentType={agentType}
                 connected={connected}
                 onSubmit={onInputSubmit}
-                onNavigate={() => onNavigateToTask(input.taskId, input.sessionId)}
+                onNavigate={input.taskId ? () => onNavigateToTask(input.taskId!, input.sessionId) : undefined}
                 onStop={onStopSession}
                 onArchive={onArchiveSession}
               />

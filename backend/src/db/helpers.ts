@@ -1,4 +1,4 @@
-import type { Task, AgentSession, AgentSessionState, AgentType, PendingApproval, ApprovalDecision, McpServerConfig, McpServerEntry } from '@agemon/shared';
+import type { Task, TaskWorkspace, AgentSession, AgentSessionState, AgentType, PendingApproval, ApprovalDecision, McpServerConfig, McpServerEntry } from '@agemon/shared';
 import { AGENT_TYPES as AGENT_TYPES_ARRAY } from '@agemon/shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ export interface RawTask {
   status: string;
   agent: string;
   archived: number;
+  workspace_json?: string | null;
   created_at: string;
 }
 
@@ -49,7 +50,13 @@ export function parseTask(row: RawTask): Omit<Task, 'repos'> {
   const agent = AGENT_TYPES_SET.has(row.agent as AgentType)
     ? (row.agent as AgentType)
     : (() => { throw new Error(`[db] unexpected agent type: ${row.agent}`); })();
-  return { id: row.id, title: row.title, description: row.description, status, agent, archived: !!row.archived, created_at: row.created_at };
+
+  let workspace: TaskWorkspace | undefined;
+  if (row.workspace_json) {
+    try { workspace = JSON.parse(row.workspace_json); } catch { /* ignore malformed */ }
+  }
+
+  return { id: row.id, title: row.title, description: row.description, status, agent, archived: !!row.archived, workspace, created_at: row.created_at };
 }
 
 export function parseSession(row: AgentSession): AgentSession {
@@ -61,6 +68,21 @@ export function parseSession(row: AgentSession): AgentSession {
   }
   // SQLite returns 0/1 for boolean columns
   const session: AgentSession = { ...row, archived: !!(row as any).archived };
+
+  // Derive task_id from meta_json for backward compatibility
+  const metaJson = (row as any).meta_json as string | undefined;
+  if (metaJson) {
+    session.meta_json = metaJson;
+    try {
+      const meta = JSON.parse(metaJson);
+      session.task_id = meta.task_id ?? null;
+    } catch {
+      session.task_id = null;
+    }
+  } else {
+    session.task_id = session.task_id ?? null;
+  }
+
   const usageJson = (row as any).usage_json;
   if (usageJson) {
     try { session.usage = JSON.parse(usageJson); } catch { /* ignore malformed */ }
@@ -100,7 +122,7 @@ export function mapMcpServer(row: RawMcpServer): McpServerEntry {
 
 export interface RawApproval {
   id: string;
-  task_id: string;
+  task_id: string | null;
   session_id: string;
   tool_name: string;
   tool_title: string;

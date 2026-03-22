@@ -21,13 +21,13 @@ export function RecentlyCompletedSection({
   return (
     <div className="space-y-2">
       {sessions.map((session) => {
-        const taskName = taskMap.get(session.task_id)?.title ?? 'Unknown task';
+        const taskName = session.task_id ? (taskMap.get(session.task_id)?.title ?? 'Unknown task') : 'Local session';
         return (
           <CompletedSessionCard
             key={session.id}
             session={session}
             taskName={taskName}
-            onNavigate={() => onNavigateToTask(session.task_id, session.id)}
+            onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : undefined}
             onDismiss={() => onDismiss(session.id)}
           />
         );

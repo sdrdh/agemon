@@ -83,8 +83,8 @@ export default function TaskDetailView() {
   };
 
   // ── Send wrapper ──────────────────────────────────────────────────────
-  const handleSendAndClear = () => {
-    handleSend(inputText);
+  const handleSendAndClear = (text?: string) => {
+    handleSend(text ?? inputText);
     setInputText('');
   };
 

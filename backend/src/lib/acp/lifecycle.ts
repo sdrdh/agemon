@@ -3,8 +3,14 @@ import { broadcast } from '../../server.ts';
 import { sessions, userStopped, KILL_TIMEOUT_MS, SHUTDOWN_REQUEST_TIMEOUT_MS } from './session-registry.ts';
 import { deriveTaskStatus } from './task-status.ts';
 import { resolveApproval, pendingApprovalResolvers } from './approvals.ts';
+import { writeCheckpoint } from './event-log.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
 import type { AgentSessionState, AgentSession } from '@agemon/shared';
+import type { EventBridge } from '../plugins/event-bridge.ts';
+
+// ─── EventBridge singleton (set once at startup from server.ts) ──────────────
+let _bridge: EventBridge | null = null;
+export function setBridge(bridge: EventBridge): void { _bridge = bridge; }
 
 /**
  * Process exit handler. Cleans up session state and broadcasts to clients.
@@ -13,7 +19,7 @@ export async function handleExit(
   proc: ReturnType<typeof Bun.spawn>,
   transport: JsonRpcTransport,
   sessionId: string,
-  taskId: string
+  taskId: string | null
 ): Promise<void> {
   const exitCode = await proc.exited;
   const state: AgentSessionState = exitCode === 0 ? 'stopped' : 'crashed';
@@ -39,10 +45,20 @@ export async function handleExit(
   sessions.delete(sessionId);
   userStopped.delete(sessionId);
 
+  // Write checkpoint to JSONL meta
+  writeCheckpoint(sessionId, state, null).catch(() => {});
+
   broadcast({ type: 'session_state_changed', sessionId, taskId, state });
 
-  // Derive task status from remaining sessions
-  deriveTaskStatus(taskId);
+  // Emit through EventBridge so plugins (e.g. tasks plugin) can react
+  _bridge?.emit('session:state_changed', { sessionId, taskId, state }).catch((err) => {
+    console.error('[acp] bridge emit error:', err);
+  });
+
+  // Derive task status from remaining sessions (belt-and-suspenders — also done by tasks plugin)
+  if (taskId) {
+    deriveTaskStatus(taskId);
+  }
 
   console.info(`[acp] session ${sessionId} exited with code ${exitCode} (${state})`);
 }

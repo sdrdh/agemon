@@ -57,7 +57,7 @@ export function insertApprovalRule(rule: ApprovalRule): void {
   );
 }
 
-export function findApprovalRule(toolName: string, taskId: string, sessionId: string | null): ApprovalRule | null {
+export function findApprovalRule(toolName: string, taskId: string | null, sessionId: string | null): ApprovalRule | null {
   const database = getDb();
   interface RawRule {
     id: string;
@@ -67,9 +67,14 @@ export function findApprovalRule(toolName: string, taskId: string, sessionId: st
     created_at: string;
   }
   // Match: exact task + any session, or global (null task)
-  const row = database.query<RawRule, [string, string]>(
-    "SELECT * FROM approval_rules WHERE tool_name = ? AND (task_id = ? OR task_id IS NULL) ORDER BY task_id DESC LIMIT 1"
-  ).get(toolName, taskId);
+  // When taskId is null, only match global rules (task_id IS NULL)
+  const row = taskId
+    ? database.query<RawRule, [string, string]>(
+        "SELECT * FROM approval_rules WHERE tool_name = ? AND (task_id = ? OR task_id IS NULL) ORDER BY task_id DESC LIMIT 1"
+      ).get(toolName, taskId)
+    : database.query<RawRule, [string]>(
+        "SELECT * FROM approval_rules WHERE tool_name = ? AND task_id IS NULL LIMIT 1"
+      ).get(toolName);
   if (!row) return null;
   return {
     id: row.id,
