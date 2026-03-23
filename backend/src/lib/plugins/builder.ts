@@ -250,7 +250,7 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
 /**
  * Watch each plugin's renderers/ directory for changes and rebuild on save.
  */
-export function watchPlugins(plugins: LoadedPlugin[]): void {
+export function watchPlugins(plugins: LoadedPlugin[], broadcast?: (event: ServerEventPayload) => void): void {
   for (const plugin of plugins) {
     const { exports, dir, manifest } = plugin;
     if (!exports.renderers?.length && !exports.pages?.length && !manifest.inputExtensions?.length) continue;
@@ -265,9 +265,11 @@ export function watchPlugins(plugins: LoadedPlugin[]): void {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           console.info(`[plugin:${manifest.id}] change detected in ${filename}, rebuilding...`);
-          rebuildPlugin(plugin).catch(err =>
-            console.error(`[plugin:${manifest.id}] rebuild failed:`, err.message)
-          );
+          rebuildPlugin(plugin)
+            .then(() => broadcast?.({ type: 'plugins_changed', pluginIds: [manifest.id] }))
+            .catch(err =>
+              console.error(`[plugin:${manifest.id}] rebuild failed:`, err.message)
+            );
         }, 300);
       });
       console.info(`[plugin:${manifest.id}] watching ${renderersDir}`);

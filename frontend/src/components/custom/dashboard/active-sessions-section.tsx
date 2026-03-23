@@ -8,6 +8,7 @@ interface ActiveSessionsSectionProps {
   taskMap: Map<string, Task>;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
   onNavigateToSession: (sessionId: string) => void;
+  onStop?: (sessionId: string) => void;
 }
 
 export const ActiveSessionsSection = memo(function ActiveSessionsSection({
@@ -15,6 +16,7 @@ export const ActiveSessionsSection = memo(function ActiveSessionsSection({
   taskMap,
   onNavigateToTask,
   onNavigateToSession,
+  onStop,
 }: ActiveSessionsSectionProps) {
   if (sessions.length === 0) {
     return (
@@ -35,6 +37,7 @@ export const ActiveSessionsSection = memo(function ActiveSessionsSection({
             session={session}
             taskName={taskName}
             onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : () => onNavigateToSession(session.id)}
+            onStop={onStop}
           />
         );
       })}

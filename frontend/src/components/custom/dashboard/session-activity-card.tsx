@@ -1,4 +1,5 @@
 import { memo, useState, useEffect } from 'react';
+import { Square } from 'lucide-react';
 import type { AgentSession } from '@agemon/shared';
 import { useWsStore } from '@/lib/store';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
@@ -9,12 +10,14 @@ interface SessionActivityCardProps {
   session: AgentSession;
   taskName: string;
   onNavigate?: () => void;
+  onStop?: (sessionId: string) => void;
 }
 
 export const SessionActivityCard = memo(function SessionActivityCard({
   session,
   taskName,
   onNavigate,
+  onStop,
 }: SessionActivityCardProps) {
   // Subscribe only to this session's activity — avoids re-rendering siblings
   const activity = useWsStore((s) => s.agentActivity[session.id] ?? null);
@@ -51,13 +54,24 @@ export const SessionActivityCard = memo(function SessionActivityCard({
         <span className="text-xs text-muted-foreground shrink-0">{formatMs(durationMs)}</span>
       </div>
 
-      {/* Session name + running indicator */}
+      {/* Session name + running indicator + stop */}
       <div className="flex items-center gap-2 mb-2">
         <span className="font-semibold text-sm truncate flex-1">{session.name ?? 'Unnamed session'}</span>
         <span className="flex items-center gap-1.5 shrink-0">
           <span className="h-2 w-2 rounded-full bg-success" />
           <span className="text-xs text-success font-medium">Running</span>
         </span>
+        {onStop && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onStop(session.id); }}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+            aria-label="Stop session"
+            title="Stop"
+          >
+            <Square className="h-4 w-4 fill-current" />
+          </button>
+        )}
       </div>
 
       {/* Activity line */}

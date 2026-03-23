@@ -231,6 +231,7 @@ export default function DashboardPage() {
                 taskMap={taskMap}
                 onNavigateToTask={handleNavigateToTask}
                 onNavigateToSession={handleNavigateToSession}
+                onStop={handleStopSession}
               />
             </AccordionContent>
           </AccordionItem>

@@ -195,7 +195,7 @@ console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': '
 // Build plugin renderers and watch for changes
 const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
 await buildPluginRenderers(plugins);
-watchPlugins(plugins);
+watchPlugins(plugins, broadcast);
 watchPluginsDir(AGEMON_DIR, broadcast, pluginBridge);
 
 // ─── Static File Serving (production) ────────────────────────────────────────

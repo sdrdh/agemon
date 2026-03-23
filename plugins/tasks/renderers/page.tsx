@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Info,
   CheckCircle2,
+  Archive,
 } from 'lucide-react';
 
 // ─── Internal router ─────────────────────────────────────────────────────────
@@ -312,6 +313,125 @@ function Kanban() {
 
 // ─── Task Detail ──────────────────────────────────────────────────────────────
 
+// ─── Task Info Drawer ──────────────────────────────────────────────────────────
+
+function TaskInfoDrawer({
+  task,
+  open,
+  onClose,
+  onMarkDone,
+  markingDone,
+  isDone,
+  onArchive,
+  archiving,
+}: {
+  task: Task;
+  open: boolean;
+  onClose: () => void;
+  onMarkDone: () => void;
+  markingDone: boolean;
+  isDone: boolean;
+  onArchive: () => void;
+  archiving: boolean;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [open]);
+
+  const formattedDate = new Date(task.created_at).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className={`fixed top-0 right-0 z-50 h-full w-[85vw] max-w-sm bg-background border-l shadow-xl transition-transform duration-200 ease-out ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        role="dialog"
+        aria-label="Task details"
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h2 className="text-sm font-semibold text-foreground">Task Details</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-accent/50"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="overflow-y-auto h-[calc(100%-49px)] px-4 py-4 space-y-5">
+          {task.description && (
+            <section>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{task.description}</p>
+            </section>
+          )}
+
+          <section>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Info</h3>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Agent</span>
+                <span className="ml-auto text-xs">{task.agent}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Created</span>
+                <span className="ml-auto text-xs">{formattedDate}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Task ID</span>
+                <span className="ml-auto font-mono text-xs truncate max-w-[140px]">{task.id}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="pt-2 border-t space-y-1">
+            {!isDone && (
+              <button
+                type="button"
+                onClick={onMarkDone}
+                disabled={markingDone}
+                className="flex items-center gap-2 w-full min-h-[44px] px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Mark as done
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onArchive}
+              disabled={archiving}
+              className="flex items-center gap-2 w-full min-h-[44px] px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              <Archive className="h-4 w-4" />
+              Archive task
+            </button>
+          </section>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Task Detail ──────────────────────────────────────────────────────────────
+
 function TaskDetail({ id }: { id: string }) {
   const { SessionList, ChatPanel, StatusBadge: HostStatusBadge } = (window as any).__AGEMON__?.host ?? {};
   const api = (window as any).__AGEMON__?.api;
@@ -320,6 +440,8 @@ function TaskDetail({ id }: { id: string }) {
   const [taskLoading, setTaskLoading] = useState(true);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [markingDone, setMarkingDone] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   // Read initial session from URL search params (passed by dashboard navigation)
   const [selectedSession, setSelectedSession] = useState<string | null>(() => {
@@ -357,6 +479,18 @@ function TaskDetail({ id }: { id: string }) {
       setMarkingDone(false);
     }
   }, [id, markingDone]);
+
+  const handleArchive = useCallback(async () => {
+    if (!api?.updateTask || archiving) return;
+    setArchiving(true);
+    try {
+      await api.updateTask(id, { archived: true });
+      navigate('/');
+    } catch (e: unknown) {
+      console.error('Failed to archive task:', e);
+      setArchiving(false);
+    }
+  }, [id, archiving]);
 
   const handleSelectSession = useCallback((sessionId: string) => {
     setSelectedSession(sessionId);
@@ -440,17 +574,13 @@ function TaskDetail({ id }: { id: string }) {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
-          {!isDone && (
-            <button
-              onClick={handleMarkDone}
-              disabled={markingDone}
-              className="h-8 px-2 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 gap-1 shrink-0"
-              aria-label="Mark task done"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Done</span>
-            </button>
-          )}
+          <button
+            onClick={() => setInfoOpen(true)}
+            className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
+            aria-label="Task info"
+          >
+            <Info className="h-4 w-4" />
+          </button>
           {HostStatusBadge
             ? <HostStatusBadge status={task.status} />
             : <StatusBadge status={task.status} />}
@@ -498,6 +628,17 @@ function TaskDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      <TaskInfoDrawer
+        task={task}
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        onMarkDone={handleMarkDone}
+        markingDone={markingDone}
+        isDone={isDone}
+        onArchive={handleArchive}
+        archiving={archiving}
+      />
     </div>
   );
 }
