@@ -342,7 +342,7 @@ export function getSessionAvailableCommands(id: string): AgentCommand[] | null {
 export function listActiveSessions(): AgentSession[] {
   const db = getSessionDb();
   return db.query<AgentSession, []>(
-    "SELECT * FROM sessions WHERE state IN ('running', 'ready') AND archived = 0 ORDER BY started_at DESC"
+    "SELECT * FROM sessions WHERE state IN ('running', 'ready', 'starting') AND archived = 0 ORDER BY started_at DESC"
   ).all().map(parseSession);
 }
 
