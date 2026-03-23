@@ -33,12 +33,9 @@ export async function runAcpHandshake(
     });
 
     // Store loadSession capability for resume support
-    const capabilities = initResult &&
-      typeof initResult === 'object' &&
-      'capabilities' in (initResult as Record<string, unknown>)
-        ? (initResult as Record<string, unknown>).capabilities as Record<string, unknown> | undefined
-        : undefined;
-    const supportsLoadSession = !!capabilities?.loadSession;
+    const initObj = initResult as Record<string, unknown> | null;
+    const agentCaps = initObj?.agentCapabilities as Record<string, unknown> | undefined;
+    const supportsLoadSession = !!agentCaps?.loadSession;
 
     // 2. Create ACP session via session/new
     const mcpServers = taskId ? db.getMergedMcpServers(taskId) : db.listGlobalMcpServers();

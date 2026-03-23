@@ -73,12 +73,11 @@ export async function resumeSession(sessionId: string): Promise<AgentSession> {
       },
     });
 
-    const capabilities = initResult &&
-      typeof initResult === 'object' &&
-      'capabilities' in (initResult as Record<string, unknown>)
-        ? (initResult as Record<string, unknown>).capabilities as Record<string, unknown> | undefined
-        : undefined;
-    const supportsLoadSession = !!capabilities?.loadSession;
+    const initObj = initResult as Record<string, unknown> | null;
+    const agentCaps = initObj?.agentCapabilities as Record<string, unknown> | undefined;
+    const supportsLoadSession = !!agentCaps?.loadSession;
+    console.info(`[acp] resume ${sessionId}: supportsLoad=${supportsLoadSession}, externalId=${storedExternalId ?? '(none)'}`);
+
 
     let acpSessionId: string | null = null;
     let sessionResultObj: Record<string, unknown> | null = null;
