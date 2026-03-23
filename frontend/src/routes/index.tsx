@@ -115,6 +115,10 @@ export default function DashboardPage() {
     });
   }, [navigate]);
 
+  const handleNavigateToSession = useCallback((sessionId: string) => {
+    navigate({ to: '/sessions/$id', params: { id: sessionId } });
+  }, [navigate]);
+
   const handleScrollTo = useCallback((section: 'blocked' | 'active' | 'completed') => {
     const ref = section === 'blocked' ? blockedRef : section === 'active' ? activeRef : completedRef;
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -213,6 +217,7 @@ export default function DashboardPage() {
                 onApprovalDecision={handleApprovalDecision}
                 onInputSubmit={handleInputSubmit}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
                 onStopSession={handleStopSession}
                 onArchiveSession={handleArchiveSession}
               />
@@ -225,6 +230,7 @@ export default function DashboardPage() {
                 sessions={runningSessions}
                 taskMap={taskMap}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
               />
             </AccordionContent>
           </AccordionItem>
@@ -255,6 +261,7 @@ export default function DashboardPage() {
                 sessions={recentlyCompleted}
                 taskMap={taskMap}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
                 onDismiss={handleDismissSession}
               />
             </AccordionContent>
