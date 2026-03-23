@@ -247,9 +247,6 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
   }
 }
 
-/** Tracks plugins with a rebuild currently in flight to prevent concurrent builds. */
-const rebuildingPlugins = new Set<string>();
-
 /**
  * Watch each plugin's renderers/ directory for changes and rebuild on save.
  */
