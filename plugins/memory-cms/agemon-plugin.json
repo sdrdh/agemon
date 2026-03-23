@@ -5,6 +5,6 @@
   "description": "Read-only viewer for task memory and summary files",
   "entryPoint": "index.ts",
   "hasPages": true,
-  "navItems": [{ "label": "Memory", "lucideIcon": "Brain", "path": "/", "order": 999 }],
+  "navItems": [],
   "skills": ["memory-recall"]
 }

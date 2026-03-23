@@ -1,0 +1,9 @@
+{
+  "id": "server-logs",
+  "name": "Server Logs",
+  "version": "0.1.0",
+  "description": "Live tail of agemon server logs (journalctl)",
+  "entryPoint": "index.ts",
+  "hasPages": true,
+  "navItems": []
+}

@@ -94,6 +94,13 @@
         "remark-gfm": "^4.0.1",
       },
     },
+    "plugins/server-logs": {
+      "name": "@agemon/plugin-server-logs",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
     "plugins/skills-manager": {
       "name": "agemon-plugin-skills-manager",
       "version": "0.1.0",
@@ -128,6 +135,8 @@
     "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:plugins/mcp-server"],
 
     "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:plugins/memory-cms"],
+
+    "@agemon/plugin-server-logs": ["@agemon/plugin-server-logs@workspace:plugins/server-logs"],
 
     "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:plugins/tasks"],
 
