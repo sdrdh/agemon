@@ -247,7 +247,7 @@ export default function DashboardPage() {
                       onSendMessage={handleSendToSession}
                       onStop={handleStopSession}
                       onArchive={handleArchiveSession}
-                      onNavigate={() => handleNavigateToTask(entry.task.id, entry.session.id)}
+                      onNavigate={() => entry.session.task_id ? handleNavigateToTask(entry.session.task_id, entry.session.id) : handleNavigateToSession(entry.session.id)}
                     />
                   ))}
                 </div>
