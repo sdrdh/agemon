@@ -59,7 +59,9 @@ export function mountPluginRoutes(app: Hono, plugins: LoadedPlugin[], agemonDir:
     const plugin = getPlugin(pluginId);
     if (!plugin) return c.notFound();
 
-    const body = await c.req.json<Record<string, string>>();
+    let body: Record<string, string>;
+    try { body = await c.req.json<Record<string, string>>(); }
+    catch { return c.json({ error: 'Invalid JSON' }, 400); }
     const settingsPath = join(agemonDir, 'plugins', pluginId, 'data', 'settings.json');
     const current = readSettingsFile(settingsPath);
     for (const [key, value] of Object.entries(body)) {
@@ -108,7 +110,9 @@ export function mountPluginRoutes(app: Hono, plugins: LoadedPlugin[], agemonDir:
     const pluginId = c.req.param('pluginId');
     if (!getPlugin(pluginId)) return c.notFound();
 
-    const body = await c.req.json<{ navEnabled?: boolean }>();
+    let body: { navEnabled?: boolean };
+    try { body = await c.req.json<{ navEnabled?: boolean }>(); }
+    catch { return c.json({ error: 'Invalid JSON' }, 400); }
     if (typeof body.navEnabled === 'boolean') {
       setSetting(navSettingKey(pluginId), body.navEnabled ? 'true' : 'false');
     }

@@ -140,6 +140,11 @@ export default function DashboardPage() {
     sendClientEvent({ type: 'send_message', sessionId, content });
   }, []);
 
+  const handleNavigateToIdleSession = useCallback((sessionId: string, taskId?: string | null) => {
+    if (taskId) handleNavigateToTask(taskId, sessionId);
+    else handleNavigateToSession(sessionId);
+  }, [handleNavigateToTask, handleNavigateToSession]);
+
   const handleStopSession = useCallback(async (sessionId: string) => {
     try {
       await api.stopSession(sessionId);
@@ -248,7 +253,7 @@ export default function DashboardPage() {
                       onSendMessage={handleSendToSession}
                       onStop={handleStopSession}
                       onArchive={handleArchiveSession}
-                      onNavigate={() => entry.session.task_id ? handleNavigateToTask(entry.session.task_id, entry.session.id) : handleNavigateToSession(entry.session.id)}
+                      onNavigate={handleNavigateToIdleSession}
                     />
                   ))}
                 </div>

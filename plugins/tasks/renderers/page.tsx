@@ -105,9 +105,8 @@ function SkeletonRows({ count = 3 }: { count?: number }) {
 
 function useWsEvent(handler: (event: Record<string, unknown>) => void, deps: unknown[]) {
   useEffect(() => {
-    const agemon = (window as any).__AGEMON__;
-    if (!agemon?.onWsEvent) return;
-    return agemon.onWsEvent(handler);
+    const unsub = (window as any).__AGEMON__?.onWsEvent?.(handler);
+    return () => unsub?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }

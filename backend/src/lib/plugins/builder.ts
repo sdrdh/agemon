@@ -247,6 +247,9 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
   }
 }
 
+/** Tracks plugins with a rebuild currently in flight to prevent concurrent builds. */
+const rebuildingPlugins = new Set<string>();
+
 /**
  * Watch each plugin's renderers/ directory for changes and rebuild on save.
  */
@@ -264,12 +267,15 @@ export function watchPlugins(plugins: LoadedPlugin[], broadcast?: (event: Server
         // Debounce — wait for saves to settle before rebuilding
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
+          if (rebuildingPlugins.has(manifest.id)) return;
           console.info(`[plugin:${manifest.id}] change detected in ${filename}, rebuilding...`);
+          rebuildingPlugins.add(manifest.id);
           rebuildPlugin(plugin)
             .then(() => broadcast?.({ type: 'plugins_changed', pluginIds: [manifest.id] }))
             .catch(err =>
               console.error(`[plugin:${manifest.id}] rebuild failed:`, err.message)
-            );
+            )
+            .finally(() => rebuildingPlugins.delete(manifest.id));
         }, 300);
       });
       console.info(`[plugin:${manifest.id}] watching ${renderersDir}`);
