@@ -438,10 +438,10 @@ class ACPAgentManager {
 **Deliverables:**
 - [x] On server boot: query `agent_sessions` where `state IN ('running', 'starting')`
 - [x] Mark all found sessions as `interrupted`
-- [ ] Re-spawn each with `--resume <external_session_id>` (if `external_session_id` is set)
-- [ ] Insert new `agent_sessions` row for each re-spawned process (linking same task)
+- [x] Re-spawn each with `--resume <external_session_id>` (if `external_session_id` is set)
+- [x] Insert new `agent_sessions` row for each re-spawned process (linking same task)
 - [x] Broadcast `session_state_changed` for interrupted sessions (via frontend WS reconnect + query invalidation)
-- [ ] Broadcast `session_started` for re-spawned sessions
+- [x] Broadcast `session_started` for re-spawned sessions
 
 **Acceptance Criteria:**
 - Server restart recovers in-progress sessions automatically
@@ -455,7 +455,7 @@ class ACPAgentManager {
 
 ### Task 4.3: ACP Event Stream Parser
 
-**Priority:** P0 — **HIGH PRIORITY: requires JSON-RPC 2.0 implementation**
+**Priority:** P0
 **Estimated Time:** 10 hours
 
 > **NOTE:** Current `readStdout()` in `acp.ts` reads JSONL lines and looks for `type` fields.

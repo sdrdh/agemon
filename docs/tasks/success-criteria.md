@@ -54,6 +54,7 @@
 - GitHub Integration via Octokit (Task 3.2) — PR creation, status tracking
 - One-Tap Multi-Repo PR Flow (Task 3.3) — coordinated commit/push/PR across repos
 - Diff Approve/Reject Flow (Task 6.3) — approve/reject diffs with agent notification
+- GitHub integration uses agent subprocess access to `gh` CLI; no server-side Octokit needed for v1
 
 **v2.0 - Platform Expansion**
 - Desktop app (Tauri)
