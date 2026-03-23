@@ -1,8 +1,7 @@
 import { mkdir, symlink, lstat, stat } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { runMigrations, db } from './db/client.ts';
-import { runFilesystemMigration } from './lib/migration.ts';
+import { db } from './db/client.ts';
 import { buildSessionDb, insertSession } from './lib/session-store.ts';
 import type { AgentType } from '@agemon/shared';
 import { AGEMON_DIR } from './lib/git.ts';
@@ -27,8 +26,8 @@ await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'sessions'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
 
-// Filesystem migration: agent_sessions + settings → session.json + settings.json
-await runFilesystemMigration(AGEMON_DIR);
+// NOTE: Filesystem migration (runFilesystemMigration) removed — all data is now file-based.
+// The old agemon.db on-disk SQLite is no longer used.
 
 // Build in-memory SQLite projection from session.json files (must run before recoverInterruptedSessions)
 buildSessionDb(AGEMON_DIR);
@@ -38,6 +37,16 @@ const { buildTaskDb } = await import('./lib/task-store.ts');
 const taskPluginDataDir = join(AGEMON_DIR, 'plugins', 'tasks', 'data');
 await mkdir(taskPluginDataDir, { recursive: true });
 buildTaskDb(taskPluginDataDir);
+
+// Load in-memory stores from filesystem
+import { loadApprovalsFromDisk } from './lib/approval-store.ts';
+import { loadInputsFromDisk } from './lib/input-store.ts';
+import { loadApprovalRules } from './lib/approval-rules-store.ts';
+import { loadMcpServers } from './lib/mcp-server-store.ts';
+loadApprovalsFromDisk();
+loadInputsFromDisk();
+loadApprovalRules();
+loadMcpServers();
 
 // Wire global agemon plugins into each agent's discovery path
 for (const pluginPath of getAllPluginPaths()) {
@@ -82,13 +91,7 @@ for (const skillPath of getAllSkillPaths()) {
   }
 }
 
-// Run migrations
-try {
-  runMigrations();
-} catch (err) {
-  console.error('[db] migration failed — exiting', err);
-  process.exit(1);
-}
+// NOTE: SQLite migrations removed — no on-disk DB. All stores load from JSON files above.
 
 // Register built-in agents before plugins are scanned (plugins may extend the registry)
 registerBuiltinAgents();

@@ -11,6 +11,8 @@ import { existsSync } from 'fs';
 import { AGEMON_DIR } from '../git.ts';
 import { sessionDirs as _sessionDirs } from './session-dirs.ts';
 import { writeSessionJson } from '../session-store.ts';
+import { flushPendingApprovals } from '../approval-store.ts';
+import { flushPendingInputs } from '../input-store.ts';
 
 export interface JsonlEvent {
   id: string;
@@ -79,6 +81,10 @@ export async function initSessionLog(
 
   // Flush pending session.json now that the dir exists
   writeSessionJson(sessionId, logDir);
+
+  // Flush any approvals/inputs that were buffered before the dir existed
+  flushPendingApprovals(sessionId);
+  flushPendingInputs(sessionId);
 }
 
 /**

@@ -208,6 +208,12 @@ export function setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
   return repos;
 }
 
+/** List all repos in the global registry (for autocomplete UI). */
+export function listRepos(): Repo[] {
+  const db = getTaskDb();
+  return db.query<Repo, []>('SELECT * FROM repos ORDER BY name').all();
+}
+
 export function buildRepoMap(taskIds: string[]): Map<string, Repo[]> {
   const map = new Map<string, Repo[]>();
   if (taskIds.length === 0) return map;

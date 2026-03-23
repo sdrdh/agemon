@@ -1,44 +1,23 @@
-import { getDb } from './client.ts';
-import { parseRepoName } from './helpers.ts';
-import type { Repo } from '@agemon/shared';
-import {
-  getTaskRepos as _storeGetTaskRepos,
-  setTaskRepos as _storeSetTaskRepos,
-  buildRepoMap as _storeBuildRepoMap,
+// Repos are backed by task-store's in-memory SQLite.
+// Global listRepos scans across all tasks.
+export {
+  listRepos,
+  getTaskRepos,
+  setTaskRepos,
+  buildRepoMap as _buildRepoMap,
 } from '../lib/task-store.ts';
 
-// ─── Global repo registry (persistent SQLite) ─────────────────────────────────
-// Used for the repo selector UI and autocompletion.
-
-export function listRepos(): Repo[] {
-  const database = getDb();
-  return database.query<Repo, []>('SELECT * FROM repos ORDER BY name').all();
-}
+// upsertRepo is a no-op pass-through — repos are auto-created by setTaskRepos.
+// Kept for API compatibility.
+import { getTaskDb } from '../lib/task-store.ts';
+import { parseRepoName } from './helpers.ts';
+import type { Repo } from '@agemon/shared';
 
 export function upsertRepo(url: string): Repo {
-  const database = getDb();
+  const db = getTaskDb();
   const name = parseRepoName(url);
-  database.run('INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)', [url, name]);
-  const row = database.query<Repo, [string]>('SELECT * FROM repos WHERE url = ?').get(url);
-  if (!row) throw new Error(`[db] failed to upsert repo with url ${url}`);
+  db.run('INSERT OR IGNORE INTO repos (url, name) VALUES (?, ?)', [url, name]);
+  const row = db.query<Repo, [string]>('SELECT * FROM repos WHERE url = ?').get(url);
+  if (!row) throw new Error(`[repos] failed to upsert repo with url ${url}`);
   return row;
-}
-
-// ─── Task-scoped repo operations (in-memory task DB) ─────────────────────────
-// Delegate to task-store; also sync to global registry so listRepos() is complete.
-
-export function getTaskRepos(taskId: string): Repo[] {
-  return _storeGetTaskRepos(taskId);
-}
-
-export function setTaskRepos(taskId: string, repoUrls: string[]): Repo[] {
-  // Sync each URL to the global persistent repo registry for the selector UI
-  for (const url of repoUrls) {
-    try { upsertRepo(url); } catch { /* non-fatal */ }
-  }
-  return _storeSetTaskRepos(taskId, repoUrls);
-}
-
-export function _buildRepoMap(taskIds: string[]): Map<string, Repo[]> {
-  return _storeBuildRepoMap(taskIds);
 }
