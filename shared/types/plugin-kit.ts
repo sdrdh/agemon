@@ -21,9 +21,9 @@ export interface PluginKit {
     onSelect: (sessionId: string) => void;
   }>;
 
-  /** Renders the full chat panel for a given task + session. */
+  /** Renders the full chat panel for a given task + session. taskId optional for standalone sessions. */
   ChatPanel: ReactComponent<{
-    taskId: string;
+    taskId?: string | null;
     sessionId: string;
   }>;
 

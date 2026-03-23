@@ -13,3 +13,12 @@ approvalsRoutes.get('/tasks/:id/approvals', (c) => {
     : db.listPendingApprovals(c.req.param('id'));
   return c.json(approvals);
 });
+
+/**
+ * GET /sessions/:id/approvals — list pending approvals for a session.
+ */
+approvalsRoutes.get('/sessions/:id/approvals', (c) => {
+  const sessionId = c.req.param('id');
+  const approvals = db.listPendingApprovalsBySession(sessionId);
+  return c.json(approvals);
+});

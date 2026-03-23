@@ -28,7 +28,7 @@ function rehydrateToolCalls(
   }
 }
 
-export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: AgentSessionState) {
+export function useSessionChat(taskId: string | null, selectedSessionId: string | null, sessionState?: AgentSessionState) {
   // ── Per-session chat history from server ──────────────────────────────
   const { data: sessionChatData } = useQuery(
     sessionChatQuery(selectedSessionId ?? '', 50),
@@ -87,11 +87,16 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
 
   // Fetch and merge pending approvals on mount
   useEffect(() => {
-    if (!taskId) return;
-    api.listApprovals(taskId)
-      .then((approvals) => mergePendingApprovals(taskId, approvals))
-      .catch(() => { /* ignore */ });
-  }, [taskId, mergePendingApprovals]);
+    if (taskId) {
+      api.listApprovals(taskId)
+        .then((approvals) => mergePendingApprovals(taskId, approvals))
+        .catch(() => { /* ignore */ });
+    } else if (selectedSessionId) {
+      api.listSessionApprovals(selectedSessionId)
+        .then((approvals) => mergePendingApprovals(selectedSessionId, approvals))
+        .catch(() => { /* ignore */ });
+    }
+  }, [taskId, selectedSessionId, mergePendingApprovals]);
 
   const pendingInputs = useMemo(
     () => selectedSessionId

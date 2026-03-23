@@ -87,6 +87,8 @@ export const api = {
     request<AgentSession>('/sessions', { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
     request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
+  getSession: (sessionId: string) =>
+    request<AgentSession>(`/sessions/${sessionId}`),
   getSessionChat: (sessionId: string, limit = 50, before?: string) =>
     request<ChatHistoryResponse>(
       `/sessions/${sessionId}/chat?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`
@@ -169,6 +171,8 @@ export const api = {
 
   listApprovals: (taskId: string, all = true) =>
     request<PendingApproval[]>(`/tasks/${taskId}/approvals${all ? '?all=1' : ''}`),
+  listSessionApprovals: (sessionId: string) =>
+    request<PendingApproval[]>(`/sessions/${sessionId}/approvals`),
 
   // Legacy (kept for backward compat during transition)
   stopTask: (id: string) => request<{ message: string; sessionId: string }>(`/tasks/${id}/stop`, { method: 'POST' }),

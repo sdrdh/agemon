@@ -254,8 +254,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
     if (session.task_id) {
       navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } });
     } else {
-      // Refresh list
-      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      navigate({ to: '/sessions/$id', params: { id: session.id } });
     }
   };
 
@@ -355,7 +354,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
                 task={session.task_id ? taskMap.get(session.task_id) : undefined}
                 onClick={session.task_id
                   ? () => navigate({ to: '/tasks/$id', params: { id: session.task_id! }, search: { session: session.id } })
-                  : undefined
+                  : () => navigate({ to: '/sessions/$id', params: { id: session.id } })
                 }
               />
             ))}

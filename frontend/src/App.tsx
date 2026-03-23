@@ -21,6 +21,7 @@ import { ThemeProvider } from './lib/theme-provider';
 const IndexPage = lazy(() => import('./routes/index'));
 const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
+const SessionDetailPage = lazy(() => import('./routes/sessions.$id'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
@@ -207,6 +208,12 @@ const sessionsRoute = createRoute({
   }),
 });
 
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$id',
+  component: SessionDetailPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -236,6 +243,7 @@ const pluginSubPageRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   taskDetailRoute,
+  sessionDetailRoute,
   sessionsRoute,
   settingsRoute,
   projectsRoute,
