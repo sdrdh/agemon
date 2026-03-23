@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Send, Square, Archive } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { agentDisplayName } from '@/components/custom/agent-icons';
@@ -11,10 +11,10 @@ interface IdleSessionCardProps {
   onSendMessage: (sessionId: string, content: string) => void;
   onStop: (sessionId: string) => void;
   onArchive: (sessionId: string) => void;
-  onNavigate: () => void;
+  onNavigate: (sessionId: string, taskId?: string | null) => void;
 }
 
-export function IdleSessionCard({
+export const IdleSessionCard = memo(function IdleSessionCard({
   entry,
   connected,
   onSendMessage,
@@ -45,10 +45,10 @@ export function IdleSessionCard({
   return (
     <div
       className="rounded-lg bg-card border-l-4 border-success overflow-hidden cursor-pointer"
-      onClick={onNavigate}
+      onClick={() => onNavigate(session.id, session.task_id)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(session.id, session.task_id); }}
     >
       <div className="px-3 pt-3 pb-1">
         {/* Top line: badge + actions + timestamp */}
@@ -64,11 +64,11 @@ export function IdleSessionCard({
               type="button"
               onClick={(e) => { e.stopPropagation(); onStop(session.id); }}
               disabled={!connected}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
               aria-label="Stop session"
               title="Stop"
             >
-              <Square className="h-4 w-4" />
+              <Square className="h-4 w-4 fill-current" />
             </button>
             <button
               type="button"
@@ -122,4 +122,4 @@ export function IdleSessionCard({
       </div>
     </div>
   );
-}
+});

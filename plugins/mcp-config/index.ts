@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { db } from '../db/client.ts';
+import { db } from '../../backend/src/db/client.ts';
+import type { PluginContext, PluginExports, PluginModule } from '../../backend/src/lib/plugins/types.ts';
 import type { CreateMcpServerBody, McpServerConfig, McpServerStdio, McpServerHttp, TestMcpServerResult, McpToolInfo } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
@@ -31,32 +32,6 @@ function validateMcpServerBody(body: unknown): asserts body is CreateMcpServerBo
 function normalizeBody(body: CreateMcpServerBody): CreateMcpServerBody {
   return { ...body, config: { ...body.config, name: body.name } };
 }
-
-export const mcpConfigRoutes = new Hono();
-
-// ── Global MCP Servers ────────────────────────────────────────────────────────
-
-mcpConfigRoutes.get('/mcp-servers', (c) => {
-  return c.json(db.listGlobalMcpServers());
-});
-
-mcpConfigRoutes.post('/mcp-servers', async (c) => {
-  const raw = await c.req.json();
-  validateMcpServerBody(raw);
-  const body = normalizeBody(raw);
-  const id = generateId();
-  try {
-    const entry = db.addMcpServer(id, body.name, null, body.config);
-    return c.json(entry, 201);
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('UNIQUE constraint')) {
-      sendError(409, `global MCP server with name "${body.name}" already exists`);
-    }
-    throw err;
-  }
-});
-
-// ── Test MCP Server Connectivity ──────────────────────────────────────────────
 
 /** POST a JSON-RPC message to an MCP Streamable HTTP endpoint and parse the response. */
 async function postJsonRpc(
@@ -282,65 +257,100 @@ async function testStdioServer(config: McpServerStdio): Promise<TestMcpServerRes
   }
 }
 
-mcpConfigRoutes.post('/mcp-servers/test', async (c) => {
-  const raw = await c.req.json();
-  if (!raw?.config || typeof raw.config !== 'object') {
-    sendError(400, 'config is required');
-  }
-  const config = raw.config as Record<string, unknown>;
-  if (config.type === 'http') {
-    if (typeof config.url !== 'string' || !config.url.trim()) sendError(400, 'config.url is required for http transport');
-    return c.json(await testHttpServer(raw.config as McpServerHttp));
-  }
-  if (typeof config.command !== 'string' || !config.command.trim()) sendError(400, 'config.command is required for stdio transport');
-  return c.json(await testStdioServer(raw.config as McpServerStdio));
-});
+export const plugin: PluginModule = {
+  onLoad(_ctx: PluginContext): PluginExports {
+    const apiRoutes = new Hono();
 
-mcpConfigRoutes.delete('/mcp-servers/:id', (c) => {
-  const id = c.req.param('id');
-  const existing = db.getMcpServer(id);
-  if (!existing) sendError(404, 'MCP server not found');
-  if (existing.taskId !== null) sendError(400, 'this is a task-level MCP server, use the task endpoint to delete it');
-  db.removeMcpServer(id);
-  return c.json({ ok: true });
-});
+    // ── Global MCP Servers ──────────────────────────────────────────────────
 
-// ── Task-level MCP Servers ────────────────────────────────────────────────────
+    apiRoutes.get('/mcp-servers', (c) => {
+      return c.json(db.listGlobalMcpServers());
+    });
 
-mcpConfigRoutes.get('/tasks/:taskId/mcp-servers', (c) => {
-  const taskId = c.req.param('taskId');
-  const task = db.getTask(taskId);
-  if (!task) sendError(404, 'Task not found');
-  const global = db.listGlobalMcpServers();
-  const taskLevel = db.listTaskMcpServers(taskId);
-  return c.json({ global, task: taskLevel });
-});
+    apiRoutes.post('/mcp-servers', async (c) => {
+      const raw = await c.req.json();
+      validateMcpServerBody(raw);
+      const body = normalizeBody(raw);
+      const id = generateId();
+      try {
+        const entry = db.addMcpServer(id, body.name, null, body.config);
+        return c.json(entry, 201);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('UNIQUE constraint')) {
+          sendError(409, `global MCP server with name "${body.name}" already exists`);
+        }
+        throw err;
+      }
+    });
 
-mcpConfigRoutes.post('/tasks/:taskId/mcp-servers', async (c) => {
-  const taskId = c.req.param('taskId');
-  const task = db.getTask(taskId);
-  if (!task) sendError(404, 'Task not found');
-  const raw = await c.req.json();
-  validateMcpServerBody(raw);
-  const body = normalizeBody(raw);
-  const id = generateId();
-  try {
-    const entry = db.addMcpServer(id, body.name, taskId, body.config);
-    return c.json(entry, 201);
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('UNIQUE constraint')) {
-      sendError(409, `MCP server with name "${body.name}" already exists for this task`);
-    }
-    throw err;
-  }
-});
+    // ── Test MCP Server Connectivity ────────────────────────────────────────
+    // IMPORTANT: /mcp-servers/test MUST be before /mcp-servers/:id
 
-mcpConfigRoutes.delete('/tasks/:taskId/mcp-servers/:serverId', (c) => {
-  const taskId = c.req.param('taskId');
-  const serverId = c.req.param('serverId');
-  const existing = db.getMcpServer(serverId);
-  if (!existing) sendError(404, 'MCP server not found');
-  if (existing.taskId !== taskId) sendError(400, 'MCP server does not belong to this task');
-  db.removeMcpServer(serverId);
-  return c.json({ ok: true });
-});
+    apiRoutes.post('/mcp-servers/test', async (c) => {
+      const raw = await c.req.json();
+      if (!raw?.config || typeof raw.config !== 'object') {
+        sendError(400, 'config is required');
+      }
+      const config = raw.config as Record<string, unknown>;
+      if (config.type === 'http') {
+        if (typeof config.url !== 'string' || !config.url.trim()) sendError(400, 'config.url is required for http transport');
+        return c.json(await testHttpServer(raw.config as McpServerHttp));
+      }
+      if (typeof config.command !== 'string' || !config.command.trim()) sendError(400, 'config.command is required for stdio transport');
+      return c.json(await testStdioServer(raw.config as McpServerStdio));
+    });
+
+    apiRoutes.delete('/mcp-servers/:id', (c) => {
+      const id = c.req.param('id');
+      const existing = db.getMcpServer(id);
+      if (!existing) sendError(404, 'MCP server not found');
+      if (existing.taskId !== null) sendError(400, 'this is a task-level MCP server, use the task endpoint to delete it');
+      db.removeMcpServer(id);
+      return c.json({ ok: true });
+    });
+
+    // ── Task-level MCP Servers ──────────────────────────────────────────────
+
+    apiRoutes.get('/tasks/:taskId/mcp-servers', (c) => {
+      const taskId = c.req.param('taskId');
+      const task = db.getTask(taskId);
+      if (!task) sendError(404, 'Task not found');
+      const global = db.listGlobalMcpServers();
+      const taskLevel = db.listTaskMcpServers(taskId);
+      return c.json({ global, task: taskLevel });
+    });
+
+    apiRoutes.post('/tasks/:taskId/mcp-servers', async (c) => {
+      const taskId = c.req.param('taskId');
+      const task = db.getTask(taskId);
+      if (!task) sendError(404, 'Task not found');
+      const raw = await c.req.json();
+      validateMcpServerBody(raw);
+      const body = normalizeBody(raw);
+      const id = generateId();
+      try {
+        const entry = db.addMcpServer(id, body.name, taskId, body.config);
+        return c.json(entry, 201);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('UNIQUE constraint')) {
+          sendError(409, `MCP server with name "${body.name}" already exists for this task`);
+        }
+        throw err;
+      }
+    });
+
+    apiRoutes.delete('/tasks/:taskId/mcp-servers/:serverId', (c) => {
+      const taskId = c.req.param('taskId');
+      const serverId = c.req.param('serverId');
+      const existing = db.getMcpServer(serverId);
+      if (!existing) sendError(404, 'MCP server not found');
+      if (existing.taskId !== taskId) sendError(400, 'MCP server does not belong to this task');
+      db.removeMcpServer(serverId);
+      return c.json({ ok: true });
+    });
+
+    return { apiRoutes };
+  },
+};
+
+export default plugin;

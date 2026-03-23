@@ -30,6 +30,7 @@ export function SessionChatPanel({
   onResume,
   onBack,
   isDesktop,
+  standalone = false,
   usage,
   hasMore,
   isLoadingMore,
@@ -53,6 +54,8 @@ export function SessionChatPanel({
   onResume: (id: string) => void;
   onBack: () => void;
   isDesktop: boolean;
+  /** When true, always show header (standalone session view). */
+  standalone?: boolean;
   usage?: SessionUsage;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -176,7 +179,7 @@ export function SessionChatPanel({
 
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-      {!isDesktop && (
+      {(!isDesktop || standalone) && (
         <SessionMobileHeader
           sessionLabel={sessionLabel}
           sessionState={session.state}

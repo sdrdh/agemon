@@ -7,137 +7,207 @@ Phone / Browser
       │
       │ HTTPS / WebSocket
       ▼
-┌─────────────────────────────┐
-│   Hono HTTP Server          │
-│   Port 3000                 │
-│                             │
-│  REST API   WebSocket /ws   │
-│  /api/*     (broadcast)     │
-└──────┬──────────────────────┘
+┌─────────────────────────────────────────┐
+│   Hono HTTP Server (port 3000)          │
+│                                         │
+│  REST API /api/*   WebSocket /ws        │
+│  Plugin routes /api/plugins/:id/*       │
+│  Plugin pages  /p/:pluginId/*           │
+│  Renderer endpoints /api/renderers/*    │
+└──────┬──────────────────────────────────┘
        │
-   bun:sqlite
+   Plugin System
+   (loader · registry · builder · mount)
        │
-┌──────▼───────────────────────┐
-│   SQLite Database            │
-│   tasks / agent_sessions /   │
-│   acp_events /               │
-│   awaiting_input / diffs     │
-└──────────────────────────────┘
+   In-Memory Stores           File System
+   (session-store.ts)    ~/.agemon/sessions/{id}/
+   (task-store.ts)       ~/.agemon/plugins/tasks/data/tasks/
+       │                 ~/.agemon/settings.json
+   ACP Agent Processes
+   (JSON-RPC 2.0 stdio)
        │
-  Agent Processes
-  (ACP protocol)
-       │
-  Git Worktrees
-  ~/.agemon/tasks/{id}/{repo}/
+   Git Worktrees
+   ~/.agemon/tasks/{id}/{repo}/
 ```
 
-## Components
+## Storage Model
 
-### Backend (`backend/`)
+All data lives in files under `~/.agemon/`. In-memory SQLite projections (via `bun:sqlite`) are rebuilt from files at startup — they are not persisted to disk.
+
+| Data type | On-disk location | In-memory |
+|-----------|-----------------|-----------|
+| Sessions | `~/.agemon/sessions/{id}/session.json` (active) or `session_archived.json` (archived) | `session-store.ts` — in-memory SQLite, rebuilt from files at startup |
+| ACP events | `~/.agemon/sessions/{id}/events.jsonl` | Read directly from JSONL on demand |
+| Pending approvals | `~/.agemon/sessions/{id}/approvals.json` | `approval-store.ts` — in-memory Map, flushed to disk |
+| Pending inputs | `~/.agemon/sessions/{id}/inputs.json` | `input-store.ts` — in-memory Map, flushed to disk |
+| Tasks | `~/.agemon/tasks/{id}.json` (active) or `{id}_archived.json` | `task-store.ts` — in-memory SQLite, rebuilt from files at startup |
+| Settings | `~/.agemon/settings.json` | `settings-store.ts` — in-memory Map, flushed to disk |
+| MCP servers | `~/.agemon/mcp-servers.json` | `mcp-server-store.ts` — in-memory Map, flushed to disk |
+| Approval rules | `~/.agemon/approval-rules.json` | `approval-rules-store.ts` — in-memory Map, flushed to disk |
+| Plugin settings | `~/.agemon/plugins/{id}/data/settings.json` | Read on demand |
+| Plugin KV store | `~/.agemon/plugins/{id}/data/store.json` | Read on demand |
+
+**Write path (session-store / task-store):**
+1. Update in-memory SQLite projection
+2. Atomically flush JSON to disk (`lib/fs.ts atomicWriteJsonSync`)
+
+**On startup:** Both stores scan their directories and load all JSON files into the in-memory projection. No migration steps needed.
+
+---
+
+## Backend Components
+
+### Core (`backend/src/`)
 
 | File | Purpose |
 |------|---------|
-| `src/server.ts` | Hono app, WebSocket via `upgradeWebSocket`, auth middleware, route registration |
-| `src/db/schema.sql` | SQLite DDL — all 5 tables |
-| `src/db/client.ts` | Typed query helpers using `bun:sqlite` |
-| `src/db/seed.ts` | Sample data for development |
-| `src/routes/tasks.ts` | CRUD endpoints for tasks and sessions |
-| `src/lib/git.ts` | Git worktree management (Task 3.1) |
-| `src/lib/acp.ts` | ACP agent manager (Task 4.1) |
-| `src/lib/pty.ts` | PTY session manager (Task 5.1) |
+| `server.ts` | Startup, directory init, plugin wiring, symlink setup |
+| `app.ts` | Hono app, auth middleware, WebSocket server, broadcast |
+| `routes/sessions.ts` | Session CRUD — create, list, stop, archive, resume |
+| `routes/dashboard.ts` | Dashboard aggregation — active/idle sessions, summary counts |
+| `routes/renderers.ts` | Serve compiled plugin renderer/page/icon JS to frontend |
+| `routes/approvals.ts` | Approval listing — proxies to approval-store |
+| `routes/system.ts` | Health check, version, server status, update/restart/rebuild |
+| `db/client.ts` | DB facade — thin wrapper over file-based stores, preserves old call-site API |
+| `db/helpers.ts` | Row mappers and column constants |
 
-### Frontend (`frontend/`)
+### Agent Communication (`backend/src/lib/acp/`)
 
 | File | Purpose |
 |------|---------|
-| `src/App.tsx` | TanStack Router setup + nav bar |
-| `src/routes/` | Page components (task list, task detail, kanban, sessions) |
-| `src/components/ui/` | shadcn/ui components (44px touch targets) |
-| `src/components/custom/` | WsProvider, StatusBadge, custom app components |
-| `src/lib/api.ts` | REST API client |
-| `src/lib/ws.ts` | WebSocket client with auto-reconnect |
-| `src/lib/store.ts` | Zustand store — chat messages, pending inputs, agent activity, unread sessions (all keyed by sessionId) |
-| `src/lib/query.ts` | TanStack Query keys and query options for tasks, sessions, chat |
+| `index.ts` | Public API — `spawnAndHandshake`, `sendPromptTurn`, `stopAgent`, `resumeSession` |
+| `lifecycle.ts` | Process spawning, EventBridge emit on state changes, crash recovery |
+| `handshake.ts` | JSON-RPC `initialize` → `session/new` handshake |
+| `prompt.ts` | `session/prompt` turns, tool call parsing, event streaming |
+| `resume.ts` | `session/load` resume for interrupted sessions |
+| `event-log.ts` | Per-session JSONL event log + session dir management |
+| `session-dirs.ts` | Shared map: `sessionId → directory path` |
 
-### Shared Types (`shared/types/index.ts`)
+### In-Memory Stores (`backend/src/lib/`)
 
-Single source of truth for:
-- `Task`, `AgentSession`, `ACPEvent`, `AwaitingInput`, `Diff`
-- `AgentSessionState`, `AgentType`
-- `ServerEvent` / `ClientEvent` (WebSocket)
-- `CreateTaskBody`, `UpdateTaskBody` (REST)
+| File | Purpose |
+|------|---------|
+| `session-store.ts` | In-memory SQLite projection of sessions + flush to `session.json` |
+| `task-store.ts` | In-memory SQLite projection of tasks + flush to `{id}.json` |
+| `approval-store.ts` | In-memory Map of pending approvals + flush to `approvals.json` |
+| `input-store.ts` | In-memory Map of pending inputs + flush to `inputs.json` |
+| `mcp-server-store.ts` | In-memory Map of MCP server configs + flush to `mcp-servers.json` |
+| `approval-rules-store.ts` | In-memory Map of auto-approval rules + flush to `approval-rules.json` |
+| `settings-store.ts` | In-memory Map of global settings + flush to `settings.json` |
+| `fs.ts` | Atomic file write utilities for JSON persistence |
 
-## Data Flow
+### Plugin System (`backend/src/lib/plugins/`)
 
-### Task Lifecycle
+### Plugin System (`backend/src/lib/plugins/`)
 
-```
-User creates task (POST /api/tasks)
-  → status: todo
-  → broadcast task_updated
+See [plugins.md](./plugins.md) for full reference.
 
-User starts agent (POST /api/tasks/:id/start)
-  → status: working
-  → spawn ACP agent process
-  → broadcast task_updated
+| File | Purpose |
+|------|---------|
+| `loader.ts` | Plugin discovery, dependency install, `onLoad()` invocation, skill wiring |
+| `registry.ts` | Global plugin registry — lookup by ID, message type, or page path |
+| `mount.ts` | Mount plugin API routes onto Hono; serve plugin list/settings endpoints |
+| `builder.ts` | Build plugin renderers at startup; in-memory cache; file watch + hot reload |
+| `types.ts` | `PluginModule`, `PluginContext`, `PluginExports`, `PluginStore`, `LoadedPlugin` |
+| `event-bridge.ts` | Hook/listener event bus for cross-plugin and core→plugin events |
+| `agent-registry.ts` | Registry for agent providers (built-in + plugin-contributed) |
+| `workspace.ts` | `WorkspaceProvider` interface |
+| `workspace-registry.ts` | Registry for workspace providers |
+| `workspace-default.ts` | Default workspace provider — task dir + git worktrees |
 
-Agent emits thought events
-  → INSERT into acp_events
-  → broadcast agent_thought
+---
 
-Agent requests input (await_input event)
-  → status: awaiting_input
-  → INSERT into awaiting_input
-  → broadcast awaiting_input
+## Frontend Components
 
-User answers (POST /api/tasks/:id/input/:inputId)
-  → status: working
-  → send response to agent
-  → broadcast task_updated
+### Routes (`frontend/src/routes/`)
 
-Agent completes
-  → status: done
-  → generate diff
-  → broadcast task_updated
-```
+| Route | File | Purpose |
+|-------|------|---------|
+| `/` | `index.tsx` | Dashboard — active/idle sessions, needs-input queue, recently completed |
+| `/sessions` | `sessions.tsx` | Session list with archive/resume/stop actions |
+| `/sessions/:id` | `sessions.$id.tsx` | Standalone session chat view |
+| `/p/:pluginId/*` | `plugin.tsx` | Generic plugin page host — fetches + mounts compiled plugin JS |
+| `/settings` | `settings.tsx` | App settings, plugin list, plugin configuration |
+| `/projects` | `projects.tsx` | Project/repo grouping view |
+| `/tasks/:id` | `tasks.$id.tsx` | Redirect → `/p/tasks/:id` |
+| `/login` | `login.tsx` | Auth gate |
 
-### WebSocket Events
+### Key Components (`frontend/src/components/custom/`)
+
+| File | Purpose |
+|------|---------|
+| `chat-panel.tsx` | Full chat panel (message history + input) for a session |
+| `session-list.tsx` | Reusable session list — used in plugin pages and dashboard |
+| `session-list-panel.tsx` | Sidebar session list panel with selection state |
+| `session-chat-panel.tsx` | Composed session list + chat panel for task detail views |
+| `dashboard/*.tsx` | Dashboard section components (active, idle, needs-input, completed) |
+
+### State (`frontend/src/lib/`)
+
+| File | Purpose |
+|------|---------|
+| `store.ts` | Zustand store — chat messages, pending inputs/approvals, unread indicators, WS connected state |
+| `query.ts` | TanStack Query keys and query factories for sessions, tasks, chat history |
+| `ws.ts` | WebSocket client — auto-reconnect, event routing to store |
+| `api.ts` | REST API client (authenticated fetch wrapper) |
+| `plugin-kit-context.ts` | React context exposing host components (`SessionList`, `ChatPanel`, `StatusBadge`) to plugin pages |
+
+### Shared Types (`shared/types/`)
+
+| File | Purpose |
+|------|---------|
+| `index.ts` | `Task`, `AgentSession`, `ACPEvent`, `AwaitingInput`, `ServerEvent`, `ClientEvent` + all enums |
+| `plugin.ts` | `PluginManifest`, `PluginNavItem`, `InputExtensionManifest`, `CustomRendererManifest` |
+| `plugin-kit.ts` | `PluginKit` — interface for host components exposed to plugin renderers |
+
+---
+
+## WebSocket Events
+
+### Server → All Clients
 
 ```typescript
-// Server → All clients
-{ type: 'task_updated', task: Task }
-{ type: 'agent_thought', taskId, sessionId, content, eventType, messageId? }
-{ type: 'awaiting_input', taskId, sessionId, question, inputId }
-{ type: 'terminal_output', sessionId, data }
-{ type: 'session_started', taskId, session: AgentSession }
-{ type: 'session_ready', taskId, session: AgentSession }
-{ type: 'session_state_changed', sessionId, taskId, state: AgentSessionState }
-
-// Client → Server
-{ type: 'send_input', taskId, inputId, response }
-{ type: 'terminal_input', sessionId, data }
-{ type: 'send_message', sessionId, content }
+{ type: 'task_updated';           task: Task }
+{ type: 'agent_thought';          taskId, sessionId, content, eventType: 'thought'|'action', messageId? }
+{ type: 'awaiting_input';         taskId, sessionId, question, inputId }
+{ type: 'terminal_output';        sessionId, data }
+{ type: 'session_started';        taskId, session: AgentSession }
+{ type: 'session_ready';          taskId, session: AgentSession }
+{ type: 'session_state_changed';  sessionId, taskId, state: AgentSessionState }
+{ type: 'approval_requested';     approval: PendingApproval }
+{ type: 'approval_resolved';      approvalId, decision: ApprovalDecision }
+{ type: 'config_options_updated'; sessionId, taskId, configOptions: SessionConfigOption[] }
+{ type: 'available_commands';     sessionId, taskId, commands: AgentCommand[] }
+{ type: 'turn_cancelled';         sessionId, taskId }
+{ type: 'turn_completed';         sessionId, taskId }
+{ type: 'session_usage_update';   sessionId, taskId, usage: SessionUsage }
+{ type: 'plugins_changed';        pluginIds: string[] }
+{ type: 'update_available';       version, should_notify }
+{ type: 'server_restarting' }
+{ type: 'full_sync_required' }
 ```
 
-All events carry `sessionId` so the frontend can route messages to per-session chat stores and track unread activity per session.
+### Client → Server
 
-## Database Schema
-
-```sql
-tasks           (id, title, description, status, repos, agent, created_at)
-agent_sessions  (id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code)
-acp_events      (id, task_id, session_id, type, content, created_at)
-awaiting_input  (id, task_id, session_id, question, status, response, created_at)
-diffs           (id, task_id, content, status, created_at)
+```typescript
+{ type: 'send_input';      sessionId, inputId, response }
+{ type: 'terminal_input';  sessionId, data }
+{ type: 'send_message';    sessionId, content }
+{ type: 'approval_response'; approvalId, decision }
+{ type: 'set_config_option'; sessionId, configId, value }
+{ type: 'cancel_turn';     sessionId }
+{ type: 'resume';          lastSeq }
 ```
+
+All server events carry `sessionId` so the frontend can route to per-session chat state.
+
+---
 
 ## Agent Session Lifecycle
 
-### State Machine
-
 ```
          ┌──────────┐
-         │ starting │  (session record created, process spawning)
+         │ starting │  (record created, process spawning)
          └────┬─────┘
               │ ACP handshake complete
          ┌────▼─────┐
@@ -152,74 +222,49 @@ diffs           (id, task_id, content, status, created_at)
      │        │            │
 ┌────▼───┐ ┌──▼────┐ ┌─────▼────────┐
 │ stopped│ │crashed│ │ interrupted  │
-│ (exit 0│ │(exit≠0│ │(server down) │
-│  clean)│ │ crash)│ │              │
+│(exit 0)│ │(exit≠0│ │(server down) │
 └────────┘ └───────┘ └──────────────┘
 ```
 
-- **`ready`** — ACP handshake done, process is running, waiting for user's first prompt. No auto-start.
-- **`interrupted`** — server process went down while the session was active. Distinct from `crashed` (the agent process itself died).
-- **`stopped`** — clean exit (exit code 0).
-- **`crashed`** — agent process exited with non-zero code.
-- Task status is **derived** from session states, never auto-set to `done`. User must explicitly mark done.
+- **`ready`** — ACP handshake done, process running, waiting for first prompt.
+- **`running`** — active turn in flight; `external_session_id` has been captured.
+- **`interrupted`** — server went down while session was active. Distinct from `crashed` (agent process died on its own).
+- **`stopped`** — clean exit (code 0). Can be resumed.
+- **`crashed`** — non-zero exit. May be resumable if `external_session_id` was captured.
 
-### Relationship to Tasks and Events
-
-```
-Task
- └── 1..N AgentSessions
-        └── N AcpEvents        (session_id FK + task_id for fast task queries)
-        └── N AwaitingInputs   (session_id FK + task_id for fast task queries)
-```
-
-Both `acp_events` and `awaiting_input` carry `task_id` directly so task-level queries (e.g. Kanban view fetching all events for a task) don't need a join through `agent_sessions`.
-
-### Capturing `external_session_id`
-
-When an agent CLI starts, it emits its own session/run identifier in early stdout output (e.g. Claude Code's `--resume` ID). The agent manager captures this and writes it to `agent_sessions.external_session_id`.
+Task status is **derived** from session states. It never auto-transitions to `done` — the user must mark explicitly.
 
 ### Auto-Resume on Server Startup
 
-On boot, the server queries for sessions in `running` or `starting` state:
-1. All such sessions are marked `interrupted`.
-2. Each is re-spawned using `--resume <external_session_id>` (if available).
-3. A new `agent_sessions` row is created for the re-spawned process, linked to the same task.
+On boot, sessions in `running` or `starting` state are marked `interrupted` and re-spawned using `session/load <external_session_id>` if available.
 
-## ACP Agent Integration
+### Relationship
 
-Agents communicate via the **Agent Client Protocol (ACP)** — JSON-RPC 2.0 over stdin/stdout.
+```
+Session
+ └── events.jsonl    (append-only ACP event stream)
+ └── approvals.json  (pending/resolved approvals for this session)
+ └── inputs.json     (pending/answered input requests)
+ └── session.json    (session state snapshot)
+```
 
-See [`docs/acp-agents.md`](./acp-agents.md) for:
-- Supported agents (claude-agent-acp, OpenCode, Gemini CLI)
-- Authentication requirements per agent
-- JSON-RPC message format and lifecycle
-- What needs to change in `acp.ts` for full protocol support
+Tasks have no direct FK to sessions — the link is `session.meta.taskId`. The task-store and session-store both keep in-memory projections for fast cross-querying.
 
-**Current status:** `acp.ts` handles the full ACP lifecycle — JSON-RPC handshake (`initialize` → `session/new`), prompt turns (`session/prompt`), session resume (`session/load`), crash recovery, and graceful shutdown. The lifecycle is split into `spawnAndHandshake` (→ ready state) and `sendPromptTurn` (ready → running) to support the session-centric UX where users see a `ready` session before sending their first message.
+---
 
-## Frontend State Management
+## Plugin System
 
-### Session-Centric Chat
+The plugin system is the primary extension mechanism. Almost all product features (tasks, MCP config, skills manager, voice input) are implemented as plugins.
 
-The task detail view uses per-session tabs. Each session has its own chat history, activity indicator, and pending inputs in the Zustand store, all keyed by `sessionId`.
+**Core = session engine + event bridge + plugin host.** Everything else is a plugin.
 
-### Unread Activity Indicators
+See [plugins.md](./plugins.md) for: plugin structure, manifest reference, `PluginContext` API, extension points, frontend globals, and roadmap items.
 
-When a user is viewing one session tab, background sessions may still receive events via WebSocket. The store tracks `unreadSessions: Record<string, boolean>`:
-
-- **`markUnread(sessionId)`** — called by `WsProvider` on `agent_thought` and `awaiting_input` events
-- **`clearUnread(sessionId)`** — called when the user switches to a tab or while viewing the active tab
-
-The `SessionTabs` component renders two priority levels of indicators on inactive tabs:
-- **Amber pulsing dot** — session has a pending input (agent is blocked, needs attention). Derived from the existing `pendingInputs` store state, no duplicate tracking.
-- **Primary pulsing dot** — session has general unread activity (thoughts, tool calls).
-
-The WebSocket connection is fully persistent — navigating away from a session never sends stop signals or disconnects.
+---
 
 ## Security
 
-- Static token auth: `Authorization: Bearer <AGEMON_KEY>`
-- All API routes require auth (except `/api/health` and `/ws`)
-- GitHub PAT loaded from env, never stored in DB
-- `AGEMON_KEY` and `GITHUB_PAT` are filtered from agent subprocess environments
-- Agents run in isolated git worktrees
+- **Auth:** Static token via `AGEMON_KEY` env var. All API routes require `Authorization: Bearer <token>` except `/api/health` and `/ws`.
+- **GitHub PAT:** Loaded from `GITHUB_PAT` env var, never stored in files.
+- **Agent isolation:** `AGEMON_KEY` and `GITHUB_PAT` are stripped from agent subprocess environments.
+- **Plugin trust:** All plugins run in the main process with full access to the filesystem and API. Installing a plugin grants it full trust. See [plugins.md § Trust Model](./plugins.md#trust-model).

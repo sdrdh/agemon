@@ -14,6 +14,7 @@ interface NeedsInputSectionProps {
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   onInputSubmit: (inputId: string, sessionId: string, response: string) => void;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
+  onNavigateToSession: (sessionId: string) => void;
   onStopSession?: (sessionId: string) => void;
   onArchiveSession?: (sessionId: string) => void;
 }
@@ -43,6 +44,7 @@ export function NeedsInputSection({
   onApprovalDecision,
   onInputSubmit,
   onNavigateToTask,
+  onNavigateToSession,
   onStopSession,
   onArchiveSession,
 }: NeedsInputSectionProps) {
@@ -85,7 +87,7 @@ export function NeedsInputSection({
                 agentType={agentType}
                 connected={connected}
                 onDecision={onApprovalDecision}
-                onNavigate={approval.taskId ? () => onNavigateToTask(approval.taskId!, approval.sessionId) : undefined}
+                onNavigate={approval.taskId ? () => onNavigateToTask(approval.taskId!, approval.sessionId) : () => onNavigateToSession(approval.sessionId)}
                 onStop={onStopSession}
                 onArchive={onArchiveSession}
               />
@@ -107,7 +109,7 @@ export function NeedsInputSection({
                 agentType={agentType}
                 connected={connected}
                 onSubmit={onInputSubmit}
-                onNavigate={input.taskId ? () => onNavigateToTask(input.taskId!, input.sessionId) : undefined}
+                onNavigate={input.taskId ? () => onNavigateToTask(input.taskId!, input.sessionId) : () => onNavigateToSession(input.sessionId)}
                 onStop={onStopSession}
                 onArchive={onArchiveSession}
               />

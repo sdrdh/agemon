@@ -16,15 +16,15 @@ Implementation notes:
 **Design Doc:** [`docs/plans/2026-03-10-memory-cms-design.md`](docs/plans/2026-03-10-memory-cms-design.md)
 
 **Summary of scope:**
-- "Summarize" and "Done" buttons on tasks trigger LLM distillation of all `acp_events` into a task summary `.md` file
+- "Summarize" and "Done" buttons on tasks trigger LLM distillation of all ACP events into a task summary `.md` file
 - "Done" also updates a living per-project memory file (`~/.agemon/memory/projects/{org}--{repo}.md`) by merging new learnings
 - Daily and weekly rollups via configurable cron jobs (auto-scheduled + manually triggerable from Settings)
 - Summarization model/agent configurable in Settings (default: `claude-sonnet-4-6`)
-- New `memory_files` and `cron_jobs` DB tables; new settings keys for model/agent
+- New memory file metadata stored in task plugin data dir; new settings keys for model/agent
 - `/memory` frontend route: sidebar + markdown reader
 - Project memory file injected into new agent sessions via existing CLAUDE.md context generation
 
 ---
 
 **Last Updated:** March 2026
-**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, and dynamic slash commands implemented. Slash command persistence fix (Task 4.30), DB cleanup for archived sessions (Task 4.31), agent context harness (Phase 3.5), token usage tracking (Task 4.19), context window monitoring (Task 4.20), speech-to-text input (Task 4.28), auto-resize chat textarea (Task 4.29) planned. Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.
+**Status:** Core infrastructure, ACP integration, session-centric chat UI with multi-session tabs, unread activity indicators, nav bar, kanban, sessions page, slash command menu, MCP server config, approval persistence, turn cancellation, archiving, copy message, back gesture nav, markdown rendering, interrupted session resume, dynamic slash commands, token usage tracking (Task 4.19), context window monitoring (Task 4.20), speech-to-text input (Task 4.28), auto-resize chat textarea (Task 4.29), slash command persistence (Task 4.30), agent context harness (Phase 3.5), offline behavior + WS event sequencing (Task 4.32), plugin system v2 implemented. DB cleanup for archived sessions (Task 4.31), speech-to-text (Task 4.28 — partial), Terminal PTY, diff viewer, GitHub PR flow, and notifications + OpenClaw integration (Phase 9) remaining.

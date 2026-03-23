@@ -1,6 +1,16 @@
 // ─── Plugin Manifest (agemon-plugin.json) ────────────────────────────────────
 // Shared between backend and frontend — no backend-only imports here.
 
+export interface PluginSettingSchema {
+  key: string;
+  label: string;
+  type: 'string' | 'secret' | 'boolean' | 'select';
+  /** Options list for type: 'select' */
+  options?: string[];
+  required?: boolean;
+  description?: string;
+}
+
 export interface PluginNavItem {
   label: string;
   /** Lucide icon name, e.g. "Home" — resolved from window.__AGEMON__.LucideReact at runtime. */
@@ -25,12 +35,6 @@ export interface PluginManifest {
    * When present, takes precedence over navLabel/navLucideIcon/navOrder.
    */
   navItems?: PluginNavItem[];
-  /** @deprecated Use navItems instead. */
-  navLabel?: string;
-  /** @deprecated Use navItems instead. */
-  navIcon?: string;
-  /** @deprecated Use navItems instead. */
-  navLucideIcon?: string;
   /**
    * Whether this plugin appears in Settings → Plugins list. Defaults to true.
    * Set to false for headless/background plugins that shouldn't be user-visible.
@@ -51,8 +55,20 @@ export interface PluginManifest {
   inputExtensions?: InputExtensionManifest[];
   /** If true, plugin ships in the repo and is loaded from the bundled plugins dir. */
   bundled?: boolean;
-  /** @deprecated Use navItems[].order instead. */
-  navOrder?: number;
+  /** Declarative settings schema — used to render settings UI and compute `configured` state. */
+  settings?: PluginSettingSchema[];
+  /** Component name in renderers/ for a custom settings UI (overrides auto-generated form). */
+  settingsRenderer?: string;
+  /**
+   * Plugin IDs this plugin depends on. Loader will ensure dependencies are loaded first.
+   * If a dependency is missing, this plugin will be skipped with a warning.
+   */
+  depends?: string[];
+  /**
+   * Plugin API version this plugin targets. The loader emits a warning if the runtime
+   * API version (currently 1) does not match. Defaults to 1 if omitted.
+   */
+  apiVersion?: number;
 }
 
 // ─── Input Extensions ─────────────────────────────────────────────────

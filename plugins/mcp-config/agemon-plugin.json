@@ -1,0 +1,9 @@
+{
+  "id": "mcp-config",
+  "name": "MCP Config",
+  "version": "0.1.0",
+  "description": "Global and per-task MCP server configuration",
+  "entryPoint": "index.ts",
+  "bundled": true,
+  "showInSettings": true
+}

@@ -7,18 +7,22 @@ interface ActiveSessionsSectionProps {
   sessions: AgentSession[];
   taskMap: Map<string, Task>;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
+  onNavigateToSession: (sessionId: string) => void;
+  onStop?: (sessionId: string) => void;
 }
 
 export const ActiveSessionsSection = memo(function ActiveSessionsSection({
   sessions,
   taskMap,
   onNavigateToTask,
+  onNavigateToSession,
+  onStop,
 }: ActiveSessionsSectionProps) {
   if (sessions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         No agents running.{' '}
-        <Link to="/tasks/new" className="text-primary hover:underline">Start a new task</Link>
+        <Link to="/p/$pluginId/$" params={{ pluginId: 'tasks', _splat: 'new' }} className="text-primary hover:underline">Start a new task</Link>
       </p>
     );
   }
@@ -32,7 +36,8 @@ export const ActiveSessionsSection = memo(function ActiveSessionsSection({
             key={session.id}
             session={session}
             taskName={taskName}
-            onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : undefined}
+            onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : () => onNavigateToSession(session.id)}
+            onStop={onStop}
           />
         );
       })}

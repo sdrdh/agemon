@@ -7,6 +7,8 @@ import type { AgentProvider } from './agent-registry.ts';
 
 export interface PluginModule {
   onLoad(ctx: PluginContext): PluginExports | Promise<PluginExports>;
+  /** Optional cleanup hook. Called before hot-reload and on server shutdown. */
+  onUnload?(): void | Promise<void>;
 }
 
 export interface CustomRenderer {
@@ -26,12 +28,26 @@ export interface PluginExports {
   pages?: PluginPage[];
   /** Agent providers this plugin registers */
   agentProviders?: AgentProvider[];
+  /** Typed query functions exposed to other plugins via ctx.query(pluginId, name, ...args) */
+  queries?: Record<string, (...args: unknown[]) => unknown>;
+  /** Called before hot-reload replaces this plugin's code. Use to clean up timers, listeners, etc. */
+  onUnload?(): void | Promise<void>;
 }
 
 export interface PluginPage {
   path: string;           // e.g. '/memory' → /p/{pluginId}/memory
   component: string;      // name of component in renderers/ directory
   label?: string;         // human-readable label (for nav if not using manifest.navLabel)
+}
+
+// ─── Plugin Store (simple KV store backed by flat JSON file) ─────────────────
+
+export interface PluginStore {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  getJson<T = unknown>(key: string): T | null;
+  setJson(key: string, value: unknown): void;
+  delete(key: string): void;
 }
 
 // ─── Plugin Context (passed to onLoad) ───────────────────────────────────────
@@ -45,7 +61,12 @@ export interface PluginContext {
   coreDb: Database;
   /** Write a file atomically (sync, POSIX-safe rename swap). */
   atomicWrite(path: string, data: string): void;
+  /** Read a per-plugin setting. Env var AGEMON_PLUGIN_{ID}_{KEY} takes precedence. */
   getSetting(key: string): string | null;
+  /** Persist a per-plugin setting to ~/.agemon/plugins/{id}/data/settings.json. */
+  setSetting(key: string, value: string): void;
+  /** Simple KV store backed by ~/.agemon/plugins/{id}/data/store.json. */
+  store: PluginStore;
   logger: PluginLogger;
   /** Register a blocking hook (awaited in priority order) */
   hook(event: string, handler: (payload: unknown) => Promise<void>, opts?: { priority?: number }): void;
@@ -65,6 +86,27 @@ export interface PluginContext {
    * The session must have been created via createSession().
    */
   spawnSession(sessionId: string): AgentSession;
+  /**
+   * Call a named query exported by another plugin.
+   * The target plugin must export it via `PluginExports.queries`.
+   */
+  query(pluginId: string, name: string, ...args: unknown[]): unknown;
+  /**
+   * Workspace registry — register or look up named workspace providers.
+   * Plugins that provide workspace environments (e.g. git worktrees) expose them here.
+   */
+  workspaces: WorkspaceRegistry;
+}
+
+export interface WorkspaceRegistry {
+  register(id: string, provider: WorkspaceProvider): void;
+  get(id: string): WorkspaceProvider | undefined;
+  list(): string[];
+}
+
+export interface WorkspaceProvider {
+  /** Resolve the filesystem path for a given task. */
+  resolvePath(taskId: string): string | Promise<string>;
 }
 
 export interface PluginLogger {
@@ -79,4 +121,6 @@ export interface LoadedPlugin {
   manifest: PluginManifest;
   dir: string;
   exports: PluginExports;
+  /** False if any required setting (per manifest.settings) is missing. */
+  configured: boolean;
 }

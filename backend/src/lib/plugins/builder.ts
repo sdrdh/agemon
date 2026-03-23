@@ -24,6 +24,9 @@ const rebuildingPlugins = new Set<string>();
 // Max allowed size for a built renderer/page JS file (2MB)
 const MAX_MODULE_SIZE = 2 * 1024 * 1024;
 
+// Last build error per plugin (null = build succeeded or not yet built)
+const buildErrors = new Map<string, string>();
+
 export function getBuiltRenderer(messageType: string): BuiltModule | undefined {
   return builtRenderers.get(messageType);
 }
@@ -34,6 +37,10 @@ export function getBuiltPage(pluginId: string, component: string): BuiltModule |
 
 export function getBuiltIcon(pluginId: string): BuiltModule | undefined {
   return builtIcons.get(pluginId);
+}
+
+export function getBuildError(pluginId: string): string | null {
+  return buildErrors.get(pluginId) ?? null;
 }
 
 // ─── Plugin Build ────────────────────────────────────────────────────────────
@@ -81,9 +88,11 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
   if (buildExit !== 0) {
     const stderr = await new Response(build.stderr).text();
     console.error(`[plugin:${pluginId}] build failed:`, stderr);
+    buildErrors.set(pluginId, stderr.trim() || 'Build failed');
     return false;
   }
 
+  buildErrors.delete(pluginId);
   console.info(`[plugin:${pluginId}] build complete`);
   return true;
 }
@@ -136,6 +145,13 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
   rebuildingPlugins.add(manifest.id);
 
   try {
+    // Give plugin a chance to clean up before its code is replaced
+    if (typeof exports.onUnload === 'function') {
+      try { await exports.onUnload(); } catch (e) {
+        console.warn(`[plugin:${manifest.id}] onUnload error:`, (e as Error).message);
+      }
+    }
+
     const ok = await runPluginBuild(dir, manifest.id);
     if (!ok) return;
 
@@ -151,7 +167,6 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
       if (key.startsWith(`${manifest.id}:`)) builtPages.delete(key);
     }
     builtIcons.delete(manifest.id);
-
     if (exports.renderers) {
       for (const renderer of exports.renderers) {
         const mod = modules.get(renderer.manifest.name);
@@ -170,11 +185,11 @@ async function rebuildPlugin(plugin: LoadedPlugin): Promise<void> {
         if (mod) builtPages.set(`${manifest.id}:${ext.component}`, mod);
       }
     }
-    if (manifest.navIcon) {
-      const mod = modules.get(manifest.navIcon);
+    const iconComponent = manifest.navItems?.find(ni => ni.icon)?.icon;
+    if (iconComponent) {
+      const mod = modules.get(iconComponent);
       if (mod) builtIcons.set(manifest.id, mod);
     }
-
     console.info(`[plugin:${manifest.id}] hot reloaded`);
   } finally {
     rebuildingPlugins.delete(manifest.id);
@@ -232,10 +247,13 @@ export function watchPluginsDir(agemonDir: string, broadcast?: (event: ServerEve
   }
 }
 
+/** Tracks plugins with a rebuild currently in flight to prevent concurrent builds. */
+const rebuildingPlugins = new Set<string>();
+
 /**
  * Watch each plugin's renderers/ directory for changes and rebuild on save.
  */
-export function watchPlugins(plugins: LoadedPlugin[]): void {
+export function watchPlugins(plugins: LoadedPlugin[], broadcast?: (event: ServerEventPayload) => void): void {
   for (const plugin of plugins) {
     const { exports, dir, manifest } = plugin;
     if (!exports.renderers?.length && !exports.pages?.length && !manifest.inputExtensions?.length) continue;
@@ -249,10 +267,15 @@ export function watchPlugins(plugins: LoadedPlugin[]): void {
         // Debounce — wait for saves to settle before rebuilding
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
+          if (rebuildingPlugins.has(manifest.id)) return;
           console.info(`[plugin:${manifest.id}] change detected in ${filename}, rebuilding...`);
-          rebuildPlugin(plugin).catch(err =>
-            console.error(`[plugin:${manifest.id}] rebuild failed:`, err.message)
-          );
+          rebuildingPlugins.add(manifest.id);
+          rebuildPlugin(plugin)
+            .then(() => broadcast?.({ type: 'plugins_changed', pluginIds: [manifest.id] }))
+            .catch(err =>
+              console.error(`[plugin:${manifest.id}] rebuild failed:`, err.message)
+            )
+            .finally(() => rebuildingPlugins.delete(manifest.id));
         }, 300);
       });
       console.info(`[plugin:${manifest.id}] watching ${renderersDir}`);
@@ -275,7 +298,7 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
     const { exports, dir, manifest } = plugin;
     const hasRenderers = exports.renderers && exports.renderers.length > 0;
     const hasPages = exports.pages && exports.pages.length > 0;
-    const hasIcon = !!manifest.navIcon;
+    const hasIcon = manifest.navItems?.some(ni => ni.icon) ?? false;
     const hasInputExtensions = (manifest.inputExtensions?.length ?? 0) > 0;
 
     if (!hasRenderers && !hasPages && !hasIcon && !hasInputExtensions) continue;
@@ -326,14 +349,15 @@ export async function buildPluginRenderers(plugins: LoadedPlugin[]): Promise<voi
       }
     }
 
-    // Map icon
-    if (manifest.navIcon) {
-      const mod = modules.get(manifest.navIcon);
+    // Map icon (first navItem with icon: "component-name" wins)
+    const iconComponent = manifest.navItems?.find(ni => ni.icon)?.icon;
+    if (iconComponent) {
+      const mod = modules.get(iconComponent);
       if (mod) {
         builtIcons.set(manifest.id, mod);
-        console.info(`[plugin:${manifest.id}] cached icon: ${manifest.navIcon}`);
+        console.info(`[plugin:${manifest.id}] cached icon: ${iconComponent}`);
       } else {
-        console.warn(`[plugin:${manifest.id}] icon ${manifest.navIcon} not found in dist/`);
+        console.warn(`[plugin:${manifest.id}] icon ${iconComponent} not found in dist/`);
       }
     }
   }

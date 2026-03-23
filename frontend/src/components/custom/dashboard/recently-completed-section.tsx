@@ -5,6 +5,7 @@ interface RecentlyCompletedSectionProps {
   sessions: AgentSession[];
   taskMap: Map<string, Task>;
   onNavigateToTask: (taskId: string, sessionId?: string) => void;
+  onNavigateToSession: (sessionId: string) => void;
   onDismiss: (sessionId: string) => void;
 }
 
@@ -12,6 +13,7 @@ export function RecentlyCompletedSection({
   sessions,
   taskMap,
   onNavigateToTask,
+  onNavigateToSession,
   onDismiss,
 }: RecentlyCompletedSectionProps) {
   if (sessions.length === 0) {
@@ -27,7 +29,7 @@ export function RecentlyCompletedSection({
             key={session.id}
             session={session}
             taskName={taskName}
-            onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : undefined}
+            onNavigate={session.task_id ? () => onNavigateToTask(session.task_id!, session.id) : () => onNavigateToSession(session.id)}
             onDismiss={() => onDismiss(session.id)}
           />
         );

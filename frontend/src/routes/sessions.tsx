@@ -1,15 +1,17 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, Plus, X } from 'lucide-react';
+import { useNavigate, useSearch, useRouter } from '@tanstack/react-router';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { Archive, Plus, X, ArrowLeft, ArchiveX, RotateCcw, Square } from 'lucide-react';
 import { sessionsListQuery, taskSessionsQuery, tasksListQuery, sessionKeys } from '@/lib/query';
 import { api } from '@/lib/api';
+import { showToast } from '@/lib/toast';
 import { onServerEvent } from '@/lib/ws';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
 import { friendlyError } from '@/lib/errors';
 import { formatDuration } from '@/lib/time-utils';
+import { isSessionTerminal, isSessionActive } from '@/lib/chat-utils';
 import type { AgentSession, AgentSessionState, Task, ServerEvent } from '@agemon/shared';
 
 const STATE_STYLES: Record<AgentSessionState, { label: string; className: string }> = {
@@ -63,44 +65,87 @@ function SessionRow({
   session,
   task,
   onClick,
+  onArchive,
+  onResume,
+  onStop,
 }: {
   session: AgentSession;
   task: Task | undefined;
   onClick?: () => void;
+  onArchive?: (archived: boolean) => void;
+  onResume?: () => void;
+  onStop?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full text-left px-4 py-3 min-h-[52px] border-b last:border-b-0 hover:bg-accent/50 active:bg-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${session.archived ? 'opacity-50' : ''}`}
+    <div
+      className={`flex items-center border-b last:border-b-0 ${session.archived ? 'opacity-50' : ''}`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          {/* Task title + task status */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium truncate">
-              {task?.title ?? (session.task_id ? `Task ${session.task_id.slice(0, 8)}` : 'Local session')}
-            </span>
-            {task && <StatusBadge status={task.status} />}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex-1 text-left px-4 py-3 min-h-[52px] hover:bg-accent/50 active:bg-accent/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            {/* Task title + task status */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium truncate">
+                {task?.title ?? (session.task_id ? `Task ${session.task_id.slice(0, 8)}` : 'Local session')}
+              </span>
+              {task && <StatusBadge status={task.status} />}
+            </div>
+            {/* Session name + agent type + session badge + timestamp */}
+            <div className="flex items-center gap-2 mt-1">
+              {session.name && (
+                <span className="text-xs font-medium text-foreground/70 truncate max-w-[120px]">{session.name}</span>
+              )}
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <AgentIcon agentType={session.agent_type} className={`h-3.5 w-3.5 ${AGENT_COLORS[session.agent_type] ?? ''}`} />
+                {agentDisplayName(session.agent_type)}
+              </span>
+              <SessionStateBadge state={session.state} />
+              <span className="text-xs text-muted-foreground">{formatTime(session.started_at)}</span>
+            </div>
           </div>
-          {/* Session name + agent type + session badge + timestamp */}
-          <div className="flex items-center gap-2 mt-1">
-            {session.name && (
-              <span className="text-xs font-medium text-foreground/70 truncate max-w-[120px]">{session.name}</span>
-            )}
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <AgentIcon agentType={session.agent_type} className={`h-3.5 w-3.5 ${AGENT_COLORS[session.agent_type] ?? ''}`} />
-              {agentDisplayName(session.agent_type)}
-            </span>
-            <SessionStateBadge state={session.state} />
-            <span className="text-xs text-muted-foreground">{formatTime(session.started_at)}</span>
+          <div className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatDuration(session.started_at, session.ended_at)}
           </div>
         </div>
-        <div className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDuration(session.started_at, session.ended_at)}
-        </div>
-      </div>
-    </button>
+      </button>
+      {onStop && isSessionActive(session.state) && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onStop(); }}
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10 transition-colors mr-1"
+          aria-label="Stop session"
+          title="Stop"
+        >
+          <Square className="h-4 w-4 fill-current" />
+        </button>
+      )}
+      {onResume && isSessionTerminal(session.state) && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onResume(); }}
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-primary hover:bg-primary/10 transition-colors"
+          aria-label="Resume session"
+          title="Resume"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      )}
+      {onArchive && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onArchive(!session.archived); }}
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors mr-1"
+          aria-label={session.archived ? 'Unarchive session' : 'Archive session'}
+          title={session.archived ? 'Unarchive' : 'Archive'}
+        >
+          {session.archived ? <ArchiveX className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -177,6 +222,7 @@ function NewSessionForm({ onClose, onCreated }: { onClose: () => void; onCreated
 
 export function SessionList({ taskId }: { taskId?: string }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -248,13 +294,63 @@ export function SessionList({ taskId }: { taskId?: string }) {
     }
   };
 
+  const stopMutation = useMutation({
+    mutationFn: (sessionId: string) => api.stopSession(sessionId),
+    onSuccess: () => {
+      if (taskId) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      }
+      showToast({ title: 'Session stopped' });
+    },
+    onError: (err: Error) => {
+      showToast({ title: 'Failed to stop session', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: (sessionId: string) => api.resumeSession(sessionId),
+    onSuccess: (session) => {
+      if (taskId) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      }
+      showToast({ title: 'Session resumed' });
+      if (session.task_id) {
+        navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } });
+      } else {
+        navigate({ to: '/sessions/$id', params: { id: session.id } });
+      }
+    },
+    onError: (err: Error) => {
+      showToast({ title: 'Failed to resume session', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: ({ sessionId, archived }: { sessionId: string; archived: boolean }) =>
+      api.archiveSession(sessionId, archived),
+    onSuccess: (_, { archived }) => {
+      if (taskId) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(taskId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      }
+      showToast({ title: archived ? 'Session archived' : 'Session unarchived' });
+    },
+    onError: (err: Error) => {
+      showToast({ title: 'Failed to update session', description: err.message, variant: 'destructive' });
+    },
+  });
+
   const handleRawSessionCreated = (session: AgentSession) => {
     setShowNewForm(false);
     if (session.task_id) {
       navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } });
     } else {
-      // Refresh list
-      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+      navigate({ to: '/sessions/$id', params: { id: session.id } });
     }
   };
 
@@ -282,6 +378,16 @@ export function SessionList({ taskId }: { taskId?: string }) {
     <div className="pb-20">
       <div className="px-4 py-3 border-b">
         <div className="flex items-center gap-2">
+          {taskId && (
+            <button
+              type="button"
+              onClick={() => router.history.back()}
+              className="min-h-[44px] min-w-[44px] -ml-2 flex items-center justify-center rounded-md hover:bg-muted"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
           <h1 className="text-sm font-semibold">
             {taskId ? 'Task Sessions' : 'Agent Sessions'}
           </h1>
@@ -344,8 +450,11 @@ export function SessionList({ taskId }: { taskId?: string }) {
                 task={session.task_id ? taskMap.get(session.task_id) : undefined}
                 onClick={session.task_id
                   ? () => navigate({ to: '/tasks/$id', params: { id: session.task_id! }, search: { session: session.id } })
-                  : undefined
+                  : () => navigate({ to: '/sessions/$id', params: { id: session.id } })
                 }
+                onStop={() => stopMutation.mutate(session.id)}
+                onResume={() => resumeMutation.mutate(session.id)}
+                onArchive={(archived) => archiveMutation.mutate({ sessionId: session.id, archived })}
               />
             ))}
           </div>

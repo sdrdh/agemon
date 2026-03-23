@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useRef } from 'react';
-import { useNavigate, Link } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -108,7 +108,15 @@ export default function DashboardPage() {
   }, []);
 
   const handleNavigateToTask = useCallback((taskId: string, sessionId?: string) => {
-    navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: sessionId } });
+    navigate({
+      to: '/p/$pluginId/$',
+      params: { pluginId: 'tasks', _splat: taskId },
+      search: sessionId ? { session: sessionId } : {},
+    });
+  }, [navigate]);
+
+  const handleNavigateToSession = useCallback((sessionId: string) => {
+    navigate({ to: '/sessions/$id', params: { id: sessionId } });
   }, [navigate]);
 
   const handleScrollTo = useCallback((section: 'blocked' | 'active' | 'completed') => {
@@ -131,6 +139,11 @@ export default function DashboardPage() {
   const handleSendToSession = useCallback((sessionId: string, content: string) => {
     sendClientEvent({ type: 'send_message', sessionId, content });
   }, []);
+
+  const handleNavigateToIdleSession = useCallback((sessionId: string, taskId?: string | null) => {
+    if (taskId) handleNavigateToTask(taskId, sessionId);
+    else handleNavigateToSession(sessionId);
+  }, [handleNavigateToTask, handleNavigateToSession]);
 
   const handleStopSession = useCallback(async (sessionId: string) => {
     try {
@@ -191,7 +204,7 @@ export default function DashboardPage() {
         {activeTaskCount === 0 ? (
           <div className="text-center py-6 text-muted-foreground">
             <p>No tasks yet.</p>
-            <Button variant="link" onClick={() => navigate({ to: '/tasks/new' })}>
+            <Button variant="link" onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}>
               Create your first task
             </Button>
           </div>
@@ -209,6 +222,7 @@ export default function DashboardPage() {
                 onApprovalDecision={handleApprovalDecision}
                 onInputSubmit={handleInputSubmit}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
                 onStopSession={handleStopSession}
                 onArchiveSession={handleArchiveSession}
               />
@@ -221,6 +235,8 @@ export default function DashboardPage() {
                 sessions={runningSessions}
                 taskMap={taskMap}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
+                onStop={handleStopSession}
               />
             </AccordionContent>
           </AccordionItem>
@@ -237,7 +253,7 @@ export default function DashboardPage() {
                       onSendMessage={handleSendToSession}
                       onStop={handleStopSession}
                       onArchive={handleArchiveSession}
-                      onNavigate={() => handleNavigateToTask(entry.task.id, entry.session.id)}
+                      onNavigate={handleNavigateToIdleSession}
                     />
                   ))}
                 </div>
@@ -251,6 +267,7 @@ export default function DashboardPage() {
                 sessions={recentlyCompleted}
                 taskMap={taskMap}
                 onNavigateToTask={handleNavigateToTask}
+                onNavigateToSession={handleNavigateToSession}
                 onDismiss={handleDismissSession}
               />
             </AccordionContent>
@@ -258,13 +275,14 @@ export default function DashboardPage() {
         </Accordion>
       </div>
       {/* FAB */}
-      <Link
-        to="/tasks/new"
+      <button
+        type="button"
         aria-label="Create new task"
+        onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}
         className="fixed bottom-20 right-4 z-40 h-[52px] w-[52px] rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
       >
         <Plus className="h-6 w-6" />
-      </Link>
+      </button>
     </div>
   );
 }

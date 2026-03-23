@@ -49,6 +49,9 @@ interface WsState {
   /** Incremented when the server signals plugins have changed */
   pluginsRevision: number;
   bumpPluginsRevision: () => void;
+  /** Plugin-controlled layout mode: 'fullscreen' hides host chrome (header + nav) */
+  hostLayout: 'default' | 'fullscreen';
+  setHostLayout: (layout: 'default' | 'fullscreen') => void;
   /** Reset store state for full resync (epoch mismatch or buffer overflow) */
   resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
@@ -90,9 +93,11 @@ export const useWsStore = create<WsState>((set) => ({
   toolCalls: {},
   updateAvailable: false,
   pluginsRevision: 0,
+  hostLayout: 'default',
 
   setUpdateAvailable: (available) => set({ updateAvailable: available }),
   bumpPluginsRevision: () => set(s => ({ pluginsRevision: s.pluginsRevision + 1 })),
+  setHostLayout: (layout) => set({ hostLayout: layout }),
 
   setConnected: (connected) => set({ connected }),
 

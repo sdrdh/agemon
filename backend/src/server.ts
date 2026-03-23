@@ -1,8 +1,7 @@
 import { mkdir, symlink, lstat, stat } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import { runMigrations, db } from './db/client.ts';
-import { runFilesystemMigration } from './lib/migration.ts';
+import { db } from './db/client.ts';
 import { buildSessionDb, insertSession } from './lib/session-store.ts';
 import type { AgentType } from '@agemon/shared';
 import { AGEMON_DIR } from './lib/git.ts';
@@ -27,8 +26,8 @@ await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'sessions'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
 
-// Filesystem migration: agent_sessions + settings → session.json + settings.json
-await runFilesystemMigration(AGEMON_DIR);
+// NOTE: Filesystem migration (runFilesystemMigration) removed — all data is now file-based.
+// The old agemon.db on-disk SQLite is no longer used.
 
 // Build in-memory SQLite projection from session.json files (must run before recoverInterruptedSessions)
 buildSessionDb(AGEMON_DIR);
@@ -38,6 +37,16 @@ const { buildTaskDb } = await import('./lib/task-store.ts');
 const taskPluginDataDir = join(AGEMON_DIR, 'plugins', 'tasks', 'data');
 await mkdir(taskPluginDataDir, { recursive: true });
 buildTaskDb(taskPluginDataDir);
+
+// Load in-memory stores from filesystem
+import { loadApprovalsFromDisk } from './lib/approval-store.ts';
+import { loadInputsFromDisk } from './lib/input-store.ts';
+import { loadApprovalRules } from './lib/approval-rules-store.ts';
+import { loadMcpServers } from './lib/mcp-server-store.ts';
+loadApprovalsFromDisk();
+loadInputsFromDisk();
+loadApprovalRules();
+loadMcpServers();
 
 // Wire global agemon plugins into each agent's discovery path
 for (const pluginPath of getAllPluginPaths()) {
@@ -82,13 +91,7 @@ for (const skillPath of getAllSkillPaths()) {
   }
 }
 
-// Run migrations
-try {
-  runMigrations();
-} catch (err) {
-  console.error('[db] migration failed — exiting', err);
-  process.exit(1);
-}
+// NOTE: SQLite migrations removed — no on-disk DB. All stores load from JSON files above.
 
 // Register built-in agents before plugins are scanned (plugins may extend the registry)
 registerBuiltinAgents();
@@ -141,24 +144,15 @@ try {
 // Create app
 const { app, broadcast } = createApp({ key: AGEMON_KEY });
 
-// Export broadcast for use in acp.ts, context.ts, routes/tasks.ts
+// Export broadcast for use in acp.ts and context.ts
 export { broadcast };
 
 // Mount routes
-const { tasksRoutes } = await import('./routes/tasks.ts');
-app.route('/api', tasksRoutes);
-
 const { sessionsRoutes } = await import('./routes/sessions.ts');
 app.route('/api', sessionsRoutes);
 
 const { approvalsRoutes } = await import('./routes/approvals.ts');
 app.route('/api', approvalsRoutes);
-
-const { mcpConfigRoutes } = await import('./routes/mcp-config.ts');
-app.route('/api', mcpConfigRoutes);
-
-const { skillsRoutes } = await import('./routes/skills.ts');
-app.route('/api', skillsRoutes);
 
 const { dashboardRoutes } = await import('./routes/dashboard.ts');
 app.route('/api', dashboardRoutes);
@@ -195,13 +189,13 @@ const { mountPluginRoutes } = await import('./lib/plugins/mount.ts');
 const repoPluginsDir = join(import.meta.dir, '../../plugins');
 const plugins = await scanPlugins(AGEMON_DIR, pluginBridge, { extraDirs: [repoPluginsDir], sessionApi });
 setPlugins(plugins);
-mountPluginRoutes(app, plugins);
+mountPluginRoutes(app, plugins, AGEMON_DIR);
 console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
 
 // Build plugin renderers and watch for changes
 const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
 await buildPluginRenderers(plugins);
-watchPlugins(plugins);
+watchPlugins(plugins, broadcast);
 watchPluginsDir(AGEMON_DIR, broadcast, pluginBridge);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
@@ -217,12 +211,12 @@ if (frontendExists) {
     const urlPath = new URL(c.req.url).pathname;
 
     // Let API, WS, and MCP routes pass through to their handlers
-    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws') || urlPath.startsWith('/p/')) {
+    if (urlPath.startsWith('/api') || urlPath.startsWith('/ws')) {
       return next();
     }
 
-    // Only serve static files for GET requests
-    if (c.req.method !== 'GET') return next();
+    // Only serve static files for GET/HEAD requests
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
 
     // Try to serve a static file
     const filePath = join(FRONTEND_DIST, urlPath);
@@ -233,7 +227,10 @@ if (frontendExists) {
 
     // SPA fallback — serve index.html for all non-file routes
     return new Response(indexHtml, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
     });
   });
 

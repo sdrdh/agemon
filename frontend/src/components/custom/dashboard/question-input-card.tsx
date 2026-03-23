@@ -72,7 +72,7 @@ export function QuestionInputCard({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onStop(input.sessionId); }}
                 disabled={!connected}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 transition-colors"
                 aria-label="Stop session"
                 title="Stop"
               >

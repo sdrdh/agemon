@@ -37,7 +37,6 @@ dashboardRoutes.get('/dashboard/active', (c) => {
     approvalsBySession.set(approval.sessionId, list);
   }
 
-  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
   const blocked: DashboardBlockedSession[] = [];
   const idle: DashboardIdleSession[] = [];
 
@@ -52,9 +51,10 @@ dashboardRoutes.get('/dashboard/active', (c) => {
     const sessionInputs = inputsBySession.get(session.id) ?? [];
     const sessionApprovals = approvalsBySession.get(session.id) ?? [];
 
-    // Only fetch lastAgentMessage for sessions that will appear in the response
+    // Blocked = has pending items (any active state)
+    // Idle = ready/starting with no pending items (running sessions appear in "Active" on frontend)
     const isBlocked = sessionInputs.length > 0 || sessionApprovals.length > 0;
-    const isIdle = !isBlocked && session.started_at >= sixHoursAgo;
+    const isIdle = !isBlocked && session.state !== 'running';
     if (!isBlocked && !isIdle) continue;
 
     const lastAgentMessage = db.getLastAgentMessage(session.id);

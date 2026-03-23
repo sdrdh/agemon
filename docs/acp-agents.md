@@ -1,8 +1,6 @@
 # ACP Agent Integration Guide
 
-> **Priority: HIGH** — Current `acp.ts` treats agents as simple JSONL-on-stdout processes.
-> Real ACP agents use **JSON-RPC 2.0 over stdin/stdout** and require bidirectional communication.
-> This must be fixed in Task 4.3 before any agent can actually work end-to-end.
+> ACP (Agent Client Protocol) is the session engine powering Agemon. JSON-RPC 2.0 over stdin/stdout is fully implemented in `backend/src/lib/acp/`.
 
 ---
 
@@ -45,10 +43,7 @@ claude-agent-acp --agent claude-code
 - Calls `process.stdin.resume()` — **stdin must remain open** or the process exits immediately
 - Communicates via ACP protocol (JSON-RPC 2.0) on stdin/stdout
 - Outputs a session ID on startup that can be used for `--resume`
-- Exits with code 0 if stdin closes (this is why our current implementation sees instant exit)
-
-**Current issue in acp.ts:**
-Our code spawns with `stdout: 'pipe'` but does NOT pipe stdin. The agent calls `process.stdin.resume()`, gets EOF on stdin, and exits immediately with code 0. We need `stdin: 'pipe'` and must implement the JSON-RPC handshake.
+- Exits with code 0 if stdin closes
 
 ---
 
@@ -76,7 +71,6 @@ opencode acp
 
 **Integration notes:**
 - Pass `OPENCODE_API_KEY` in the subprocess env (but still filter `AGEMON_KEY` and `GITHUB_PAT`)
-- Should work once we implement JSON-RPC stdin/stdout communication
 
 ---
 
@@ -109,39 +103,23 @@ gemini --experimental-acp
 
 ---
 
-## What Needs to Change in `acp.ts`
+## Implementation Status
 
-### Current (broken)
-```typescript
-// Spawns process but only reads stdout — no stdin, no JSON-RPC
-const proc = Bun.spawn([binaryPath, '--agent', agentType], {
-  stdout: 'pipe',
-  stderr: 'inherit',
-  env: safeEnv,
-});
-// Reads stdout line-by-line expecting JSONL events
-// Agent exits immediately because stdin is not piped
-```
+The ACP JSON-RPC 2.0 session engine is fully implemented in `backend/src/lib/acp/`:
 
-### Required (Task 4.3)
-```typescript
-// Must pipe stdin for bidirectional JSON-RPC communication
-const proc = Bun.spawn([binaryPath, '--agent', agentType], {
-  stdin: 'pipe',   // <-- CRITICAL: keeps agent alive
-  stdout: 'pipe',
-  stderr: 'inherit',
-  env: safeEnv,
-});
+| Component | File | Status |
+|-----------|------|--------|
+| Process spawning + stdin/stdout | `lifecycle.ts` | ✅ Implemented |
+| JSON-RPC handshake (`initialize` → `session/new`) | `handshake.ts` | ✅ Implemented |
+| Prompt turns (`session/prompt`) | `prompt.ts` | ✅ Implemented |
+| Session resume (`session/load`) | `resume.ts` | ✅ Implemented |
+| Event stream parsing | `event-log.ts` | ✅ Implemented |
+| Event log (JSONL) | `event-log.ts` | ✅ Implemented |
+| Auto-resume on startup | `lifecycle.ts` | ✅ Implemented |
+| Approval handling | `lifecycle.ts` | ✅ Implemented |
+| Turn cancellation | `prompt.ts` | ✅ Implemented |
 
-// Must implement JSON-RPC 2.0 handshake:
-// 1. Send initialize request → wait for response
-// 2. Send acp/setSessionInfo notification
-// 3. Send acp/promptTurn with the task description
-// 4. Read streaming responses (thoughts, actions, results)
-// 5. Send shutdown request when stopping
-```
-
-### JSON-RPC Message Format
+### JSON-RPC Message Format (reference)
 ```json
 // Request (client → agent)
 {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "agemon", "version": "1.0.0"}}}
@@ -158,11 +136,13 @@ const proc = Bun.spawn([binaryPath, '--agent', agentType], {
 
 ---
 
-## Recommended Integration Order
+## Agent Support Status
 
-1. **OpenCode** — simplest auth (env var), standard ACP, good for developing the JSON-RPC layer
-2. **claude-agent-acp** — primary agent, but more complex (needs `claude /login`, subprocess architecture)
-3. **Gemini CLI** — experimental flag, known issues, lowest priority
+| Agent | Auth | Notes |
+|-------|------|-------|
+| claude-agent-acp | CLI login (`claude /login`) | Primary agent; subprocess-based SDK |
+| opencode | `OPENCODE_API_KEY` | Simplest integration; env var auth |
+| gemini | `GOOGLE_API_KEY` / OAuth | Experimental `--experimental-acp` flag |
 
 ---
 
@@ -174,4 +154,4 @@ const proc = Bun.spawn([binaryPath, '--agent', agentType], {
 | opencode | `OPENCODE_API_KEY` | Env var |
 | gemini | `GOOGLE_API_KEY` or Google OAuth | CLI login or env var |
 
-All agents should NOT receive `AGEMON_KEY` or `GITHUB_PAT` in their environment (already filtered in current code).
+`AGEMON_KEY` and `GITHUB_PAT` are stripped from agent subprocess environments in `lifecycle.ts`.

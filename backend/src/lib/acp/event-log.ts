@@ -5,12 +5,14 @@
  *   meta.json     — session metadata snapshot
  */
 import { mkdir, appendFile, readFile, writeFile, readdir } from 'fs/promises';
-import { readFileSync } from 'fs';
+import { readFileSync, openSync, fstatSync, readSync, closeSync } from 'fs';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { AGEMON_DIR } from '../git.ts';
 import { sessionDirs as _sessionDirs } from './session-dirs.ts';
 import { writeSessionJson } from '../session-store.ts';
+import { flushPendingApprovals } from '../approval-store.ts';
+import { flushPendingInputs } from '../input-store.ts';
 
 export interface JsonlEvent {
   id: string;
@@ -79,6 +81,10 @@ export async function initSessionLog(
 
   // Flush pending session.json now that the dir exists
   writeSessionJson(sessionId, logDir);
+
+  // Flush any approvals/inputs that were buffered before the dir existed
+  flushPendingApprovals(sessionId);
+  flushPendingInputs(sessionId);
 }
 
 /**
@@ -118,6 +124,62 @@ export async function readSessionEvents(sessionId: string, agemonDir: string): P
   }
 
   return parseJsonlText(text);
+}
+
+/**
+ * Read the last non-prompt event content from a session's JSONL log.
+ * Reads from the tail (64 KB chunk) to avoid loading the full log.
+ * Falls back to a full read only if no qualifying event is found in the tail.
+ */
+export function getLastNonPromptEventSync(sessionId: string): string | null {
+  const logDir = _sessionDirs.get(sessionId);
+  if (!logDir) return null;
+  const eventsPath = join(logDir, 'events.jsonl');
+
+  let fd = -1;
+  try {
+    fd = openSync(eventsPath, 'r');
+    const { size } = fstatSync(fd);
+    if (size === 0) return null;
+
+    const CHUNK = 65536;
+    const readSize = Math.min(CHUNK, size);
+    const buf = Buffer.allocUnsafe(readSize);
+    readSync(fd, buf, 0, readSize, size - readSize);
+    closeSync(fd);
+    fd = -1;
+
+    const lines = buf.toString('utf8').split('\n');
+    // If we read a partial chunk, skip the first (potentially truncated) line
+    const startIdx = size > CHUNK ? 1 : 0;
+    for (let i = lines.length - 1; i >= startIdx; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const event: JsonlEvent = JSON.parse(line);
+        if (event.type !== 'prompt') return event.content;
+      } catch { /* malformed line */ }
+    }
+
+    // Not found in tail — fall back to full read
+    if (size > CHUNK) {
+      const fullLines = readFileSync(eventsPath, 'utf8').split('\n');
+      for (let i = fullLines.length - 1; i >= 0; i--) {
+        const line = fullLines[i].trim();
+        if (!line) continue;
+        try {
+          const event: JsonlEvent = JSON.parse(line);
+          if (event.type !== 'prompt') return event.content;
+        } catch { /* malformed line */ }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== -1) closeSync(fd);
+  }
 }
 
 /**

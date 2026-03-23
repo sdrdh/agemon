@@ -15,27 +15,6 @@ export function getPlugin(id: string): LoadedPlugin | undefined {
   return _plugins.find(p => p.manifest.id === id);
 }
 
-export interface NavPlugin {
-  id: string;
-  name: string;
-  navLabel: string;
-  navIcon?: string;
-}
-
-export function getNavPlugins(): NavPlugin[] {
-  const nav: NavPlugin[] = [];
-  for (const plugin of _plugins) {
-    if (plugin.manifest.navLabel) {
-      nav.push({
-        id: plugin.manifest.id,
-        name: plugin.manifest.name,
-        navLabel: plugin.manifest.navLabel,
-        navIcon: plugin.manifest.navIcon,
-      });
-    }
-  }
-  return nav;
-}
 
 export function getAllRenderers(): CustomRenderer[] {
   const renderers: CustomRenderer[] = [];

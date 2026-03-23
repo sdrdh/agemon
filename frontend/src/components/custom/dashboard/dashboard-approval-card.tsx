@@ -57,11 +57,11 @@ export function DashboardApprovalCard({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onStop(approval.sessionId); }}
                 disabled={!connected}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
                 aria-label="Stop session"
                 title="Stop"
               >
-                <Square className="h-4 w-4" />
+                <Square className="h-4 w-4 fill-current" />
               </button>
             )}
             {onArchive && (

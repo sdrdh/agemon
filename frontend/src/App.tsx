@@ -19,10 +19,9 @@ import { ConnectionBanner } from './components/custom/connection-banner';
 import { ThemeProvider } from './lib/theme-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
-const TaskCreatePage = lazy(() => import('./routes/tasks.new'));
 const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
-const KanbanPage = lazy(() => import('./routes/kanban'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
+const SessionDetailPage = lazy(() => import('./routes/sessions.$id'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
@@ -73,7 +72,9 @@ async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ 
 
 function BottomNav() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const hostLayout = useWsStore(s => s.hostLayout);
+  // Hide chrome when host route is a legacy task detail OR plugin requests fullscreen layout
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
   const pluginsRevision = useWsStore(s => s.pluginsRevision);
@@ -148,7 +149,8 @@ function BottomNav() {
 
 function RootLayout() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const hostLayout = useWsStore(s => s.hostLayout);
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 
@@ -188,12 +190,6 @@ const indexRoute = createRoute({
   component: IndexPage,
 });
 
-const taskNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/tasks/new',
-  component: TaskCreatePage,
-});
-
 const taskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks/$id',
@@ -203,12 +199,6 @@ const taskDetailRoute = createRoute({
   }),
 });
 
-const kanbanRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/kanban',
-  component: KanbanPage,
-});
-
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions',
@@ -216,6 +206,12 @@ const sessionsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({
     taskId: typeof search.taskId === 'string' ? search.taskId : undefined,
   }),
+});
+
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$id',
+  component: SessionDetailPage,
 });
 
 const settingsRoute = createRoute({
@@ -246,9 +242,8 @@ const pluginSubPageRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  taskNewRoute,
   taskDetailRoute,
-  kanbanRoute,
+  sessionDetailRoute,
   sessionsRoute,
   settingsRoute,
   projectsRoute,
@@ -256,7 +251,7 @@ const routeTree = rootRoute.addChildren([
   pluginSubPageRoute,
 ]);
 
-const router = createRouter({
+export const router = createRouter({
   routeTree,
   context: { onLogout: () => {} },
 });
