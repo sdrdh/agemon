@@ -51,6 +51,23 @@ async function installAndBuild(
   return { ...base, ok: true, message: successMessage };
 }
 
+// ─── Rebuild-only (no git pull) ─────────────────────────────────────────────
+
+/** Install deps + rebuild the frontend from the current working tree. */
+export async function rebuildFrontend(): Promise<{ ok: boolean; message: string }> {
+  const install = await run(['bun', 'install'], PROJECT_ROOT);
+  if (!install.ok) {
+    return { ok: false, message: `bun install failed:\n${install.stderr}` };
+  }
+
+  const build = await run(['bun', 'run', 'build'], FRONTEND_DIR);
+  if (!build.ok) {
+    return { ok: false, message: `frontend build failed:\n${build.stderr}` };
+  }
+
+  return { ok: true, message: 'Frontend rebuilt successfully.' };
+}
+
 // ─── Git Update Strategy ────────────────────────────────────────────────────
 
 const gitStrategy: UpdateStrategy = {

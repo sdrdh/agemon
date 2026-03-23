@@ -2,8 +2,9 @@ import { randomUUID } from 'crypto';
 import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions } from './session-registry.ts';
-import { deriveTaskStatus } from './task-status.ts';
+import { getBridge } from './lifecycle.ts';
 import { flushCurrentMessage } from './notifications.ts';
+import { appendEvent } from './event-log.ts';
 import { AGENT_CONFIGS } from '../agents.ts';
 import { buildFirstPromptContext } from '../context.ts';
 import type { AgentType, SessionUsage } from '@agemon/shared';
@@ -26,20 +27,20 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   entry.turnInFlight = true;
 
   const sessionRecord = db.getSession(sessionId);
-  if (sessionRecord) deriveTaskStatus(sessionRecord.task_id);
   if (!sessionRecord) {
     entry.turnInFlight = false;
     throw new Error(`Session ${sessionId} not found in database`);
   }
   const taskId = sessionRecord.task_id;
+  getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
+    .catch((err) => console.error('[acp] bridge emit error:', err));
 
-  // Store user message as an acp_event with type 'prompt'
-  db.insertEvent({
+  // Store user message in JSONL event log
+  void appendEvent(sessionId, {
     id: randomUUID(),
-    task_id: taskId,
-    session_id: sessionId,
     type: 'prompt',
     content,
+    ts: new Date().toISOString(),
   });
 
   if (!entry.acpSessionId) {
@@ -56,7 +57,6 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
       taskId,
       state: 'running',
     });
-    deriveTaskStatus(taskId);
   }
 
   // Set session name from first prompt (if not already named)
@@ -73,7 +73,7 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
   // On the first prompt, inject task context for agents that don't auto-load CLAUDE.md
   let promptContent = content;
   const isFirstPrompt = entry.promptsSent === 0;
-  if (isFirstPrompt && !AGENT_CONFIGS[entry.agentType].autoLoadsContextFile) {
+  if (isFirstPrompt && taskId && !AGENT_CONFIGS[entry.agentType].autoLoadsContextFile) {
     try {
       const task = db.getTask(taskId);
       if (task) {
@@ -151,7 +151,8 @@ export async function sendPromptTurn(sessionId: string, content: string): Promis
     flushCurrentMessage(sessionId, taskId);
     entry.turnInFlight = false;
     broadcast({ type: 'turn_completed', sessionId, taskId });
-    deriveTaskStatus(taskId);
+    getBridge()?.emit('session:state_changed', { sessionId, taskId, state: 'running' })
+      .catch((err) => console.error('[acp] bridge emit error:', err));
   }
 }
 

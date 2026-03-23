@@ -6,7 +6,7 @@ import { sessionChatQuery } from '@/lib/query';
 import { api } from '@/lib/api';
 import { groupMessages, isSessionTerminal } from '@/lib/chat-utils';
 import { applyToolCallEvent } from '@/lib/tool-call-helpers';
-import type { AgentSessionState, ChatMessage, ApprovalDecision, PendingApproval } from '@agemon/shared';
+import type { AgentSessionState, ChatMessage, ApprovalDecision } from '@agemon/shared';
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
@@ -28,7 +28,7 @@ function rehydrateToolCalls(
   }
 }
 
-export function useSessionChat(taskId: string, selectedSessionId: string | null, sessionState?: AgentSessionState) {
+export function useSessionChat(taskId: string | null, selectedSessionId: string | null, sessionState?: AgentSessionState) {
   // ── Per-session chat history from server ──────────────────────────────
   const { data: sessionChatData } = useQuery(
     sessionChatQuery(selectedSessionId ?? '', 50),
@@ -87,16 +87,16 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
 
   // Fetch and merge pending approvals on mount
   useEffect(() => {
-    if (!taskId) return;
-    fetch(`/api/tasks/${taskId}/approvals?all=1`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('agemon_key') ?? ''}` },
-    })
-      .then(r => r.ok ? r.json() : [])
-      .then((approvals: PendingApproval[]) => {
-        mergePendingApprovals(taskId, approvals);
-      })
-      .catch(() => { /* ignore */ });
-  }, [taskId, mergePendingApprovals]);
+    if (taskId) {
+      api.listApprovals(taskId)
+        .then((approvals) => mergePendingApprovals(taskId, approvals))
+        .catch(() => { /* ignore */ });
+    } else if (selectedSessionId) {
+      api.listSessionApprovals(selectedSessionId)
+        .then((approvals) => mergePendingApprovals(selectedSessionId, approvals))
+        .catch(() => { /* ignore */ });
+    }
+  }, [taskId, selectedSessionId, mergePendingApprovals]);
 
   const pendingInputs = useMemo(
     () => selectedSessionId
@@ -180,10 +180,11 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
     const text = inputText.trim();
     if (!text || !selectedSessionId) return;
 
-    if (pendingInputs.length > 0) {
-      const pi = pendingInputs[0];
-      sendClientEvent({ type: 'send_input', taskId, inputId: pi.inputId, response: text });
-      removePendingInput(pi.inputId);
+    // Capture before mutation so optimistic message has the correct eventType
+    const pendingInput = pendingInputs.length > 0 ? pendingInputs[0] : null;
+    if (pendingInput) {
+      sendClientEvent({ type: 'send_input', sessionId: selectedSessionId, inputId: pendingInput.inputId, response: text });
+      removePendingInput(pendingInput.inputId);
     } else {
       sendClientEvent({ type: 'send_message', sessionId: selectedSessionId, content: text });
     }
@@ -192,7 +193,7 @@ export function useSessionChat(taskId: string, selectedSessionId: string | null,
       id: `local-${Date.now()}`,
       role: 'user',
       content: text,
-      eventType: pendingInputs.length > 0 ? 'input_response' : 'prompt',
+      eventType: pendingInput ? 'input_response' : 'prompt',
       timestamp: new Date().toISOString(),
     };
     appendChatMessage(selectedSessionId, optimisticMsg);

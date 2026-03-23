@@ -106,10 +106,11 @@ export function SessionListPanel({
           const renderSession = (session: AgentSession) => {
             const label = labelMap.get(session.id) ?? '';
             const isActiveItem = session.id === activeSessionId;
-            const dotColor = SESSION_STATE_DOT[session.state];
-            const stateLabel = SESSION_STATE_LABEL[session.state];
+            const hasPendingInput = pendingInputSessionIds.has(session.id);
+            const dotColor = hasPendingInput ? 'bg-warning' : SESSION_STATE_DOT[session.state];
+            const stateLabel = hasPendingInput ? 'Awaiting Input' : SESSION_STATE_LABEL[session.state];
             const hasUnread = !isActiveItem && unreadSessions[session.id];
-            const needsAttention = !isActiveItem && pendingInputSessionIds.has(session.id);
+            const needsAttention = !isActiveItem && hasPendingInput;
             const canStop = isSessionActive(session.state);
             const canResume = isSessionTerminal(session.state) && !isDone;
             const usage = sessionUsage[session.id];

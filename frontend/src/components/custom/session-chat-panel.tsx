@@ -7,6 +7,7 @@ import { isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
 import { useWsStore } from '@/lib/store';
 import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
+import { useInputExtensions } from '@/lib/use-input-extensions';
 import type { ChatItem } from '@/lib/chat-utils';
 import type { AgentCommand, AgentSession, PendingApproval, ApprovalDecision, SessionUsage } from '@agemon/shared';
 
@@ -29,6 +30,7 @@ export function SessionChatPanel({
   onResume,
   onBack,
   isDesktop,
+  standalone = false,
   usage,
   hasMore,
   isLoadingMore,
@@ -43,7 +45,7 @@ export function SessionChatPanel({
   onApprovalDecision: (approvalId: string, decision: ApprovalDecision) => void;
   inputText: string;
   setInputText: (text: string) => void;
-  handleSend: () => void;
+  handleSend: (text?: string) => void;
   onCancelTurn: () => void;
   turnInFlight: boolean;
   isDone: boolean;
@@ -52,6 +54,8 @@ export function SessionChatPanel({
   onResume: (id: string) => void;
   onBack: () => void;
   isDesktop: boolean;
+  /** When true, always show header (standalone session view). */
+  standalone?: boolean;
   usage?: SessionUsage;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -62,6 +66,19 @@ export function SessionChatPanel({
   const sessionReady = session.state === 'ready';
   const canType = sessionRunning && !turnInFlight && !isDone;
   const connected = useWsStore((s) => s.connected);
+
+  // ── Input extensions ─────────────────────────────────────────────────
+  const { extensions, loadExtension } = useInputExtensions();
+  const [activeExtensionId, setActiveExtensionId] = useState<string | null>(null);
+
+  const handleActivateExtension = useCallback((pluginId: string, extId: string) => {
+    loadExtension(pluginId, extId);
+    setActiveExtensionId(`${pluginId}:${extId}`);
+  }, [loadExtension]);
+
+  const handleDeactivateExtension = useCallback(() => {
+    setActiveExtensionId(null);
+  }, []);
 
   // ── Config options ──────────────────────────────────────────────────────
   const configOptions = useWsStore((s) => s.configOptions[session.id]);
@@ -128,11 +145,11 @@ export function SessionChatPanel({
 
   const showCommandMenu = filteredCommands.length > 0;
 
-  // Reset selection when filtered list changes
+  // Reset selection when the command list appears/disappears or its length changes
   useEffect(() => {
     setSelectedCommandIdx(showCommandMenu ? 0 : -1);
     hasNavigatedRef.current = false;
-  }, [filteredCommands, showCommandMenu]);
+  }, [filteredCommands.length, showCommandMenu]);
 
   const selectCommand = useCallback((cmd: AgentCommand) => {
     setInputText(`/${cmd.name} `);
@@ -162,7 +179,7 @@ export function SessionChatPanel({
 
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-      {!isDesktop && (
+      {(!isDesktop || standalone) && (
         <SessionMobileHeader
           sessionLabel={sessionLabel}
           sessionState={session.state}
@@ -214,6 +231,9 @@ export function SessionChatPanel({
             filteredCommands={filteredCommands}
             selectedCommandIdx={selectedCommandIdx}
             hasNavigatedRef={hasNavigatedRef}
+            extensions={extensions}
+            activeExtensionId={activeExtensionId}
+            sessionState={session.state}
             onSetInputText={setInputText}
             onSend={handleSend}
             onCancelTurn={onCancelTurn}
@@ -221,6 +241,8 @@ export function SessionChatPanel({
             onSelectCommand={selectCommand}
             onSetSelectedCommandIdx={setSelectedCommandIdx}
             onAdjustTextareaHeight={adjustTextareaHeight}
+            onActivateExtension={handleActivateExtension}
+            onDeactivateExtension={handleDeactivateExtension}
           />
           <SessionModeBar
             modeOption={modeOption}

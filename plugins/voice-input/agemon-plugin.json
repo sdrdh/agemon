@@ -1,0 +1,17 @@
+{
+  "id": "voice-input",
+  "name": "Voice Input",
+  "version": "0.1.0",
+  "description": "Dictate messages using the browser Speech Recognition API",
+  "bundled": true,
+  "hasPages": false,
+  "showInSettings": true,
+  "inputExtensions": [
+    {
+      "id": "voice",
+      "label": "Voice Input",
+      "lucideIcon": "Mic",
+      "component": "voice-input"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import type { AgentCommand, ChatMessage, PendingApproval, ApprovalDecision, Sess
 
 export interface PendingInput {
   inputId: string;
-  taskId: string;
+  taskId: string | null;
   sessionId: string;
   question: string;
   receivedAt: number;
@@ -49,6 +49,9 @@ interface WsState {
   /** Incremented when the server signals plugins have changed */
   pluginsRevision: number;
   bumpPluginsRevision: () => void;
+  /** Plugin-controlled layout mode: 'fullscreen' hides host chrome (header + nav) */
+  hostLayout: 'default' | 'fullscreen';
+  setHostLayout: (layout: 'default' | 'fullscreen') => void;
   /** Reset store state for full resync (epoch mismatch or buffer overflow) */
   resetForFullSync: () => void;
   setConnected: (connected: boolean) => void;
@@ -90,16 +93,25 @@ export const useWsStore = create<WsState>((set) => ({
   toolCalls: {},
   updateAvailable: false,
   pluginsRevision: 0,
+  hostLayout: 'default',
 
   setUpdateAvailable: (available) => set({ updateAvailable: available }),
   bumpPluginsRevision: () => set(s => ({ pluginsRevision: s.pluginsRevision + 1 })),
+  setHostLayout: (layout) => set({ hostLayout: layout }),
 
   setConnected: (connected) => set({ connected }),
 
   appendChatMessage: (sessionId, msg) =>
     set((state) => {
       const existing = state.chatMessages[sessionId] ?? [];
-      // If message with same ID exists, append content (streaming chunk accumulation)
+      // Hot path: streaming chunks always accumulate on the last message — check it first
+      const last = existing[existing.length - 1];
+      if (last?.id === msg.id) {
+        const updated = [...existing];
+        updated[updated.length - 1] = { ...last, content: last.content + msg.content };
+        return { chatMessages: { ...state.chatMessages, [sessionId]: updated } };
+      }
+      // Fallback: linear scan for out-of-order or historical message updates
       const idx = existing.findIndex((m) => m.id === msg.id);
       if (idx >= 0) {
         const updated = [...existing];

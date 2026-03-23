@@ -1,10 +1,17 @@
 import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions, userStopped, KILL_TIMEOUT_MS, SHUTDOWN_REQUEST_TIMEOUT_MS } from './session-registry.ts';
-import { deriveTaskStatus } from './task-status.ts';
 import { resolveApproval, pendingApprovalResolvers } from './approvals.ts';
+import { writeCheckpoint } from './event-log.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
 import type { AgentSessionState, AgentSession } from '@agemon/shared';
+import { TERMINAL_STATES } from '../../db/helpers.ts';
+import type { EventBridge } from '../plugins/event-bridge.ts';
+
+// ─── EventBridge singleton (set once at startup from server.ts) ──────────────
+let _bridge: EventBridge | null = null;
+export function setBridge(bridge: EventBridge): void { _bridge = bridge; }
+export function getBridge(): EventBridge | null { return _bridge; }
 
 /**
  * Process exit handler. Cleans up session state and broadcasts to clients.
@@ -13,10 +20,9 @@ export async function handleExit(
   proc: ReturnType<typeof Bun.spawn>,
   transport: JsonRpcTransport,
   sessionId: string,
-  taskId: string
+  taskId: string | null
 ): Promise<void> {
   const exitCode = await proc.exited;
-  const state: AgentSessionState = exitCode === 0 ? 'stopped' : 'crashed';
 
   transport.close();
 
@@ -35,14 +41,30 @@ export async function handleExit(
     }
   }
 
-  db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
+  // Skip state update if already terminal (e.g. shutdownAllSessions pre-marked as interrupted)
+  const currentSession = db.getSession(sessionId);
+  const alreadyTerminal = currentSession && TERMINAL_STATES.has(currentSession.state);
+
+  const state: AgentSessionState = alreadyTerminal
+    ? currentSession!.state
+    : (exitCode === 0 || userStopped.has(sessionId)) ? 'stopped' : 'crashed';
+
+  if (!alreadyTerminal) {
+    db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
+  }
+
   sessions.delete(sessionId);
   userStopped.delete(sessionId);
 
+  // Write checkpoint to JSONL meta
+  writeCheckpoint(sessionId, state, null).catch(() => {});
+
   broadcast({ type: 'session_state_changed', sessionId, taskId, state });
 
-  // Derive task status from remaining sessions
-  deriveTaskStatus(taskId);
+  // Emit through EventBridge so plugins (e.g. tasks plugin) can react
+  _bridge?.emit('session:state_changed', { sessionId, taskId, state }).catch((err) => {
+    console.error('[acp] bridge emit error:', err);
+  });
 
   console.info(`[acp] session ${sessionId} exited with code ${exitCode} (${state})`);
 }
@@ -153,7 +175,11 @@ export async function shutdownAllSessions(): Promise<void> {
   for (const [sessionId, entry] of sessions) {
     console.info(`[acp] shutting down session ${sessionId}`);
 
-    // Try graceful JSON-RPC shutdown
+    // Mark as interrupted before killing so handleExit won't overwrite with 'crashed'
+    db.updateSessionState(sessionId, 'interrupted', { pid: null });
+    broadcast({ type: 'session_state_changed', sessionId, taskId: entry.taskId, state: 'interrupted' });
+
+    // Try graceful ACP shutdown first
     if (!entry.transport.isClosed) {
       entry.transport
         .request('shutdown', {})
@@ -207,7 +233,7 @@ export function cancelTurn(sessionId: string): void {
   // 2. Send ACP session/cancel notification (fire-and-forget, no response expected).
   //    Note: turnInFlight is NOT reset here — the in-flight sendPromptTurn() call
   //    will receive stopReason: "cancelled" and its finally block handles cleanup
-  //    (flushCurrentMessage, turnInFlight = false, deriveTaskStatus).
+  //    (flushCurrentMessage, turnInFlight = false, bridge emit for task status).
   entry.transport.notify('session/cancel', { sessionId: entry.acpSessionId });
   console.info(`[acp] session ${sessionId} turn cancel sent`);
 }

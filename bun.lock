@@ -65,6 +65,13 @@
         "vitest": "^2.1.8",
       },
     },
+    "plugins/mcp-config": {
+      "name": "agemon-plugin-mcp-config",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
     "plugins/mcp-server": {
       "name": "@agemon/plugin-mcp-server",
       "version": "0.1.0",
@@ -87,6 +94,25 @@
         "remark-gfm": "^4.0.1",
       },
     },
+    "plugins/skills-manager": {
+      "name": "agemon-plugin-skills-manager",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
+    "plugins/tasks": {
+      "name": "@agemon/plugin-tasks",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agemon/shared": "workspace:*",
+        "hono": "^4.6.0",
+      },
+    },
+    "plugins/voice-input": {
+      "name": "@agemon/plugin-voice-input",
+      "version": "0.1.0",
+    },
     "shared": {
       "name": "@agemon/shared",
       "version": "1.0.0",
@@ -102,6 +128,10 @@
     "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:plugins/mcp-server"],
 
     "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:plugins/memory-cms"],
+
+    "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:plugins/tasks"],
+
+    "@agemon/plugin-voice-input": ["@agemon/plugin-voice-input@workspace:plugins/voice-input"],
 
     "@agemon/shared": ["@agemon/shared@workspace:shared"],
 
@@ -434,6 +464,10 @@
     "@vitest/utils": ["@vitest/utils@2.1.9", "", { "dependencies": { "@vitest/pretty-format": "2.1.9", "loupe": "^3.1.2", "tinyrainbow": "^1.2.0" } }, "sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ=="],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
+
+    "agemon-plugin-mcp-config": ["agemon-plugin-mcp-config@workspace:plugins/mcp-config"],
+
+    "agemon-plugin-skills-manager": ["agemon-plugin-skills-manager@workspace:plugins/skills-manager"],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
 

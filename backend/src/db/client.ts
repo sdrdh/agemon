@@ -1,42 +1,25 @@
-import { Database } from 'bun:sqlite';
-import { join, resolve } from 'path';
-import { homedir } from 'os';
+/**
+ * Database facade — re-exports all domain modules.
+ *
+ * Previously backed by on-disk SQLite (agemon.db). Now all data lives in:
+ *   - Per-session JSON/JSONL files (~/.agemon/sessions/{id}/)
+ *   - Per-task JSON files (~/.agemon/plugins/tasks/data/tasks/)
+ *   - Global JSON config files (~/.agemon/settings.json, approval-rules.json, mcp-servers.json)
+ *   - In-memory SQLite projections (session-store, task-store)
+ *
+ * The `db` export preserves the same call-site API so routes/acp code is unchanged.
+ */
 import { slugify } from '../lib/slugify.ts';
+import { queryTaskIds } from '../lib/task-store.ts';
 
-// ─── Database Connection ──────────────────────────────────────────────────────
-
-const DB_PATH = process.env.DB_PATH
-  ? resolve(process.env.DB_PATH)
-  : join(homedir(), '.agemon', 'agemon.db');
-
-let _db: Database | null = null;
-
-export function getDb(): Database {
-  if (!_db) {
-    _db = new Database(DB_PATH, { create: true });
-    _db.run('PRAGMA journal_mode = WAL');
-    _db.run('PRAGMA foreign_keys = ON');
-  }
-  return _db;
-}
-
-export function resetDb(): void {
-  _db = null;
-}
-
-// ─── ID Generation ───────────────────────────────────────────────────────────
+// ─── ID Generation ─────────────────────────────────────────────────────────
 
 export function generateTaskId(title: string): string {
   const base = slugify(title);
-  const database = getDb();
-
-  const existing = database.query<{ id: string }, [string, string]>(
-    "SELECT id FROM tasks WHERE id = ? OR id LIKE ? || '-%'"
-  ).all(base, base);
+  const existing = queryTaskIds(base);
 
   if (existing.length === 0) return base;
 
-  // Find the highest numeric suffix among collisions
   let maxSuffix = 1;
   for (const row of existing) {
     if (row.id === base) continue;
@@ -48,11 +31,7 @@ export function generateTaskId(title: string): string {
   return `${base}-${maxSuffix + 1}`;
 }
 
-// ─── Re-export Migrations ─────────────────────────────────────────────────────
-
-export { runMigrations, SCHEMA_VERSION } from './migrations.ts';
-
-// ─── Re-export Helpers ────────────────────────────────────────────────────────
+// ─── Re-export Helpers ───────────────────────────────────────────────────────
 
 export { parseRepoName } from './helpers.ts';
 
@@ -62,10 +41,10 @@ import * as tasks from './tasks.ts';
 import * as repos from './repos.ts';
 import * as sessions from './sessions.ts';
 import * as events from './events.ts';
-import * as inputs from './inputs.ts';
-import * as diffs from './diffs.ts';
-import * as approvals from './approvals.ts';
-import * as mcpServers from './mcp-servers.ts';
+import * as inputs from '../lib/input-store.ts';
+import * as approvals from '../lib/approval-store.ts';
+import * as approvalRules from '../lib/approval-rules-store.ts';
+import * as mcpServers from '../lib/mcp-server-store.ts';
 import * as settings from './settings.ts';
 
 export const db = {
@@ -101,10 +80,7 @@ export const db = {
   listActiveSessions: sessions.listActiveSessions,
   listAllSessions: sessions.listAllSessions,
 
-  // Events
-  listEvents: events.listEvents,
-  insertEvent: events.insertEvent,
-  listChatHistory: events.listChatHistory,
+  // Events / Chat History
   getLastAgentMessage: events.getLastAgentMessage,
   listChatHistoryBySession: events.listChatHistoryBySession,
 
@@ -114,12 +90,6 @@ export const db = {
   insertAwaitingInput: inputs.insertAwaitingInput,
   answerInput: inputs.answerInput,
 
-  // Diffs
-  getDiff: diffs.getDiff,
-  getPendingDiff: diffs.getPendingDiff,
-  insertDiff: diffs.insertDiff,
-  updateDiffStatus: diffs.updateDiffStatus,
-
   // Approvals
   insertPendingApproval: approvals.insertPendingApproval,
   resolvePendingApproval: approvals.resolvePendingApproval,
@@ -128,8 +98,8 @@ export const db = {
   listPendingApprovalsBySession: approvals.listPendingApprovalsBySession,
   listAllPendingApprovals: approvals.listAllPendingApprovals,
   listAllApprovals: approvals.listAllApprovals,
-  insertApprovalRule: approvals.insertApprovalRule,
-  findApprovalRule: approvals.findApprovalRule,
+  insertApprovalRule: approvalRules.insertApprovalRule,
+  findApprovalRule: approvalRules.findApprovalRule,
 
   // MCP Servers
   addMcpServer: mcpServers.addMcpServer,

@@ -60,15 +60,30 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 
 ## Core Data Model
 
+All data lives in files under `~/.agemon/`. Two in-memory SQLite projections (via `bun:sqlite`) provide fast queries at startup, rebuilt from JSON files.
+
 ```
-tasks           id, title, description, status, agent, created_at
-repos           id, url (unique), name, created_at
-task_repos      task_id, repo_id  (many-to-many join table)
-agent_sessions  id, task_id, agent_type, external_session_id, pid, state, started_at, ended_at, exit_code
-acp_events      id, task_id, session_id, type (thought|action|await_input|result), content, created_at
-awaiting_input  id, task_id, session_id, question, status (pending|answered), response, created_at
-diffs           id, task_id, content, status (pending|approved|rejected), created_at
+~/.agemon/
+├── tasks/{id}.json            # Active task
+├── tasks/{id}_archived.json   # Archived task
+├── sessions/{id}/session.json         # Active session
+├── sessions/{id}/session_archived.json # Archived session
+├── sessions/{id}/events.jsonl         # ACP event stream (append-only JSONL)
+├── sessions/{id}/approvals.json       # Pending approvals for this session
+├── sessions/{id}/inputs.json          # Pending inputs for this session
+├── repos/{org}--{repo}.git   # Bare repo cache
+├── settings.json             # Global settings (flat KV)
+├── mcp-servers.json          # MCP server configurations
+├── approval-rules.json        # Auto-approval rules
+├── plugins/{id}/data/
+│   ├── store.json            # Plugin KV store
+│   └── settings.json         # Plugin settings
+└── plugins/{id}/data/tasks/{id}.json  # tasks plugin persistent data
 ```
+
+**In-memory SQLite projections** (rebuilt from JSON on startup):
+- `task-store` — tasks indexed by id, status
+- `session-store` — sessions indexed by id, task_id, state
 
 **Task statuses:** `todo` → `working` → `awaiting_input` → `working` → `done`
 
@@ -82,6 +97,8 @@ Task status is derived: `working` if any session is `running`; `awaiting_input` 
 - `external_session_id` = provider session ID captured from CLI output, used for `--resume` on re-spawn
 - Task status is **derived** from session states — no auto-done on agent exit, user must explicitly mark done
 - Stopped/crashed sessions can be resumed via ACP `session/load`
+
+**Session → events:** Sessions own their own `events.jsonl`, `approvals.json`, and `inputs.json` files. The task-store and session-store both keep in-memory SQLite projections for fast cross-querying.
 
 ---
 
@@ -97,7 +114,7 @@ Agemon stores all runtime data in `~/.agemon/` (override with `AGEMON_DIR` env v
 
 ```
 ~/.agemon/
-├── agemon.db                        # SQLite database
+├── agemon.db                        # SQLite database (in-memory projections only, not persisted)
 ├── CLAUDE.md                        # global instructions injected into every session
 ├── plugins/                         # global plugins (symlinked into agent discovery paths)
 ├── skills/                          # global skills (symlinked into agent discovery paths)
@@ -134,7 +151,6 @@ Global agemon skills are symlinked into `~/.claude/skills/agemon` and `~/.agents
 AGEMON_KEY        # required — static auth token
 GITHUB_PAT        # required for PR creation
 PORT              # optional, default 3000
-DB_PATH           # optional, default ~/.agemon/agemon.db
 AGEMON_DIR        # optional, default ~/.agemon
 ```
 
@@ -142,7 +158,7 @@ AGEMON_DIR        # optional, default ~/.agemon
 
 ## Testing
 
-**Backend API smoke tests** — `scripts/test-api.sh` runs 21 curl-based checks covering auth, CRUD, SSH validation, project grouping, repo attachment, agent start/stop stubs, and deletion. Requires a running backend.
+**Backend API smoke tests** — `scripts/test-api.sh` runs curl-based checks covering auth, task CRUD, session management, repo attachment, and deletion. Requires a running backend.
 
 ```bash
 # Terminal 1: start backend

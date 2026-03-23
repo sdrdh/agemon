@@ -17,7 +17,7 @@ export function useApprovalCountByTask(): Record<string, number> {
 
     const counts: Record<string, number> = {};
     for (const a of pendingApprovals) {
-      if (a.status === 'pending' && activeSessionIds.has(a.sessionId)) {
+      if (a.status === 'pending' && a.taskId && activeSessionIds.has(a.sessionId)) {
         counts[a.taskId] = (counts[a.taskId] ?? 0) + 1;
       }
     }

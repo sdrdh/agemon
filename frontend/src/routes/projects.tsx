@@ -17,7 +17,7 @@ export default function ProjectListView() {
       <div>
         <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
           <h1 className="text-lg font-semibold">Projects</h1>
-          <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
+          <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}>
             <Plus className="h-5 w-5" />
           </Button>
         </div>
@@ -46,7 +46,7 @@ export default function ProjectListView() {
     <div className="pb-20">
       <div className="sticky top-12 z-40 bg-background border-b px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Projects</h1>
-        <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/tasks/new' })}>
+        <Button size="icon" aria-label="Create new task" onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}>
           <Plus className="h-5 w-5" />
         </Button>
       </div>
@@ -55,7 +55,7 @@ export default function ProjectListView() {
         {projectNames.length === 0 && !hasUngrouped && (
           <div className="text-center py-12 text-muted-foreground">
             <p>No tasks yet.</p>
-            <Button variant="link" onClick={() => navigate({ to: '/tasks/new' })}>
+            <Button variant="link" onClick={() => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: 'new' } })}>
               Create your first task
             </Button>
           </div>

@@ -92,6 +92,13 @@ export function onServerEvent(fn: Listener) {
   return () => listeners.delete(fn);
 }
 
+/** Subscribe to raw WebSocket events typed as unknown — for use by plugin pages. */
+export function subscribeWsEvent(handler: (event: unknown) => void): () => void {
+  const typedHandler: Listener = (event) => handler(event);
+  listeners.add(typedHandler);
+  return () => listeners.delete(typedHandler);
+}
+
 /** Subscribe to WebSocket connection state changes. Returns an unsubscribe function. */
 export function onConnectionChange(fn: ConnectionListener) {
   connectionListeners.add(fn);

@@ -18,10 +18,17 @@ export function useSessionSelection(
   );
   const clearUnread = useWsStore((s) => s.clearUnread);
 
-  // ── Async session loading: sessions arrive after mount with URL param ──
-  if (initialSessionId && !selectedSessionId && sessions.some(s => s.id === initialSessionId)) {
-    setSelectedSessionId(initialSessionId);
-  }
+  // ── Sync selection from URL — handles async session load AND back navigation ──
+  useEffect(() => {
+    if (initialSessionId) {
+      if (sessions.some(s => s.id === initialSessionId)) {
+        setSelectedSessionId(initialSessionId);
+      }
+    } else {
+      // URL has no session param (e.g. back button popped to /tasks/$id without session)
+      setSelectedSessionId(null);
+    }
+  }, [initialSessionId, sessions]);
 
   // ── Session labels ────────────────────────────────────────────────────
   const sessionLabels = useMemo(() => {
@@ -55,36 +62,20 @@ export function useSessionSelection(
   const handleSelectSession = useCallback((sessionId: string) => {
     setSelectedSessionId(sessionId);
     clearUnread(sessionId);
-    navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: sessionId }, replace: true });
-    // Push history entry on mobile so back gesture returns to session list
-    if (!isDesktop) {
-      window.history.pushState({ agemonSession: sessionId }, '');
-    }
+    // Desktop: replace so back leaves the task page entirely.
+    // Mobile: push so back returns to the session list within the task page.
+    navigate({
+      to: '/tasks/$id',
+      params: { id: taskId },
+      search: { session: sessionId },
+      replace: isDesktop,
+    });
   }, [clearUnread, isDesktop, navigate, taskId]);
 
   const handleBackToList = useCallback(() => {
-    // Clear selection immediately so UI updates without waiting for popstate
     setSelectedSessionId(null);
     navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: undefined }, replace: true });
-    if (!isDesktop) {
-      // Also pop the history entry we pushed when selecting the session
-      window.history.back();
-    }
-  }, [isDesktop, navigate, taskId]);
-
-  // Handle browser back gesture / back button on mobile
-  useEffect(() => {
-    if (isDesktop) return;
-    const onPopState = (_e: PopStateEvent) => {
-      if (selectedSessionId) {
-        // User pressed back while viewing a session — return to session list
-        setSelectedSessionId(null);
-        navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: undefined }, replace: true });
-      }
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, [isDesktop, selectedSessionId, navigate, taskId]);
+  }, [navigate, taskId]);
 
   return {
     selectedSessionId,

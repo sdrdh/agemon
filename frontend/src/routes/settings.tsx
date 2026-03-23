@@ -274,6 +274,8 @@ function AboutSection({ onLogout }: { onLogout: () => void }) {
   const [isSystemd, setIsSystemd] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
   const [restartError, setRestartError] = useState<string | null>(null);
   const [autoUpgrade, setAutoUpgrade] = useState(false);
@@ -336,6 +338,31 @@ function AboutSection({ onLogout }: { onLogout: () => void }) {
       setRestartError((err as Error).message);
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const handleRebuild = async () => {
+    setRebuilding(true);
+    setRebuildResult(null);
+    try {
+      const result = await api.rebuild();
+      if (!result.ok) {
+        setRebuildResult(result);
+        return;
+      }
+      // Build succeeded — server will restart; poll until it's back
+      for (let i = 0; i < RESTART_POLL_MAX_ATTEMPTS; i++) {
+        await new Promise(r => setTimeout(r, RESTART_POLL_INTERVAL_MS));
+        try {
+          const res = await fetch('/api/health');
+          if (res.ok) { window.location.reload(); return; }
+        } catch { /* still down */ }
+      }
+      setRebuildResult({ ok: false, message: 'Server did not come back. Check systemd logs.' });
+    } catch (err) {
+      setRebuildResult({ ok: false, message: (err as Error).message });
+    } finally {
+      setRebuilding(false);
     }
   };
 
@@ -505,6 +532,36 @@ function AboutSection({ onLogout }: { onLogout: () => void }) {
       )}
       {restartError && (
         <p className="text-xs text-destructive">{restartError}</p>
+      )}
+
+      {/* Rebuild & Restart */}
+      {isSystemd && (
+        <div className="space-y-2 pt-2 border-t">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            Development
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Rebuild the frontend from the current working tree and restart the server.
+          </p>
+          <Button
+            variant="outline"
+            className="min-h-[44px]"
+            onClick={handleRebuild}
+            disabled={rebuilding}
+          >
+            {rebuilding ? 'Building...' : 'Rebuild & Restart'}
+          </Button>
+          {rebuildResult && (
+            rebuildResult.ok ? (
+              <p className="text-xs text-success">{rebuildResult.message}</p>
+            ) : (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+                <p className="text-sm font-medium text-destructive">Build failed</p>
+                <pre className="text-xs text-destructive/80 mt-1 whitespace-pre-wrap">{rebuildResult.message}</pre>
+              </div>
+            )
+          )}
+        </div>
       )}
 
       {/* Settings toggles */}

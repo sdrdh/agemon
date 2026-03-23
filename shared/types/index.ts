@@ -14,6 +14,11 @@ export interface Repo {
   created_at: string;
 }
 
+export interface TaskWorkspace {
+  provider: string;  // 'cwd' | 'git-worktree' | plugin-registered ID
+  config: Record<string, unknown>;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -22,12 +27,14 @@ export interface Task {
   repos: Repo[];
   agent: AgentType;
   archived: boolean;
+  workspace?: TaskWorkspace;
   created_at: string; // ISO 8601
 }
 
 export interface AgentSession {
   id: string;
-  task_id: string;
+  task_id: string | null;
+  meta_json?: string;              // Raw JSON for plugin access
   agent_type: AgentType;
   name: string | null;                // Human-readable label from first prompt
   external_session_id: string | null; // Provider session ID for --resume
@@ -52,7 +59,7 @@ export interface ACPEvent {
 
 export interface AwaitingInput {
   id: string;
-  task_id: string;
+  task_id: string | null;
   session_id: string;
   question: string;
   status: 'pending' | 'answered';
@@ -71,7 +78,7 @@ export interface ApprovalOption {
 
 export interface PendingApproval {
   id: string;
-  taskId: string;
+  taskId: string | null;
   sessionId: string;
   toolName: string;          // e.g. "Edit", "Bash", "Write"
   toolTitle: string;         // Full title from ACP (e.g. "Edit frontend/src/App.tsx")
@@ -231,26 +238,26 @@ export type ServerEventPayload = DistributiveOmit<ServerEvent, 'seq' | 'epoch'>;
 
 export type ServerEvent =
   | (ServerEventBase & { type: 'task_updated'; task: Task })
-  | (ServerEventBase & { type: 'agent_thought'; taskId: string; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string })
-  | (ServerEventBase & { type: 'awaiting_input'; taskId: string; sessionId: string; question: string; inputId: string })
+  | (ServerEventBase & { type: 'agent_thought'; taskId: string | null; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string })
+  | (ServerEventBase & { type: 'awaiting_input'; taskId: string | null; sessionId: string; question: string; inputId: string })
   | (ServerEventBase & { type: 'terminal_output'; sessionId: string; data: string })
-  | (ServerEventBase & { type: 'session_started'; taskId: string; session: AgentSession })
-  | (ServerEventBase & { type: 'session_ready'; taskId: string; session: AgentSession })
-  | (ServerEventBase & { type: 'session_state_changed'; sessionId: string; taskId: string; state: AgentSessionState })
+  | (ServerEventBase & { type: 'session_started'; taskId: string | null; session: AgentSession })
+  | (ServerEventBase & { type: 'session_ready'; taskId: string | null; session: AgentSession })
+  | (ServerEventBase & { type: 'session_state_changed'; sessionId: string; taskId: string | null; state: AgentSessionState })
   | (ServerEventBase & { type: 'approval_requested'; approval: PendingApproval })
   | (ServerEventBase & { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision })
-  | (ServerEventBase & { type: 'config_options_updated'; sessionId: string; taskId: string; configOptions: SessionConfigOption[] })
-  | (ServerEventBase & { type: 'available_commands'; sessionId: string; taskId: string; commands: AgentCommand[] })
-  | (ServerEventBase & { type: 'turn_cancelled'; sessionId: string; taskId: string })
-  | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string })
-  | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string; usage: SessionUsage })
+  | (ServerEventBase & { type: 'config_options_updated'; sessionId: string; taskId: string | null; configOptions: SessionConfigOption[] })
+  | (ServerEventBase & { type: 'available_commands'; sessionId: string; taskId: string | null; commands: AgentCommand[] })
+  | (ServerEventBase & { type: 'turn_cancelled'; sessionId: string; taskId: string | null })
+  | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string | null })
+  | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string | null; usage: SessionUsage })
   | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
   | (ServerEventBase & { type: 'plugins_changed'; pluginIds: string[] })
   | (ServerEventBase & { type: 'server_restarting' })
   | (ServerEventBase & { type: 'full_sync_required' });
 
 export type ClientEvent =
-  | { type: 'send_input'; taskId: string; inputId: string; response: string }
+  | { type: 'send_input'; sessionId: string; inputId: string; response: string }
   | { type: 'terminal_input'; sessionId: string; data: string }
   | { type: 'send_message'; sessionId: string; content: string }
   | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision }
@@ -283,17 +290,19 @@ export interface DashboardActiveResponse {
 export interface CreateTaskBody {
   title: string;
   description?: string;
-  repos?: string[];  // SSH URLs; optional, default []
-  agent?: AgentType; // default claude-code
+  repos?: string[];        // SSH URLs; optional, default []
+  agent?: AgentType;       // default claude-code
+  workspace?: TaskWorkspace;
 }
 
 export interface UpdateTaskBody {
   title?: string;
   description?: string;
   status?: TaskStatus;
-  repos?: string[];  // SSH URLs; replaces full set
+  repos?: string[];        // SSH URLs; replaces full set
   agent?: AgentType;
   archived?: boolean;
+  workspace?: TaskWorkspace;
 }
 
 export interface CreateSessionBody {
@@ -392,4 +401,4 @@ export const SSH_REPO_REGEX = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(?:\.git)?$/;
 
 // ─── Plugin Types ────────────────────────────────────────────────────────────
 
-export type { PluginManifest, CustomRendererManifest } from './plugin.ts';
+export type { PluginManifest, CustomRendererManifest, InputExtensionManifest, PluginSettingSchema } from './plugin.ts';

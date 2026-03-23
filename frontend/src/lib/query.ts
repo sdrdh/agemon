@@ -54,12 +54,21 @@ export function taskEventsQuery(id: string, limit = 500) {
 
 export const sessionKeys = {
   all: ['sessions'] as const,
+  detail: (sessionId: string) => [...sessionKeys.all, 'detail', sessionId] as const,
   listPrefix: () => [...sessionKeys.all, 'list'] as const,
   list: (includeArchived?: boolean) => [...sessionKeys.listPrefix(), { includeArchived }] as const,
   forTaskPrefix: (taskId: string) => [...sessionKeys.all, 'task', taskId] as const,
   forTask: (taskId: string, includeArchived?: boolean) => [...sessionKeys.forTaskPrefix(taskId), { includeArchived }] as const,
   chat: (sessionId: string) => [...sessionKeys.all, 'chat', sessionId] as const,
 };
+
+export function sessionDetailQuery(sessionId: string) {
+  return {
+    queryKey: sessionKeys.detail(sessionId),
+    queryFn: (): Promise<AgentSession> => api.getSession(sessionId),
+    enabled: !!sessionId,
+  };
+}
 
 export function sessionsListQuery(limit = 100, includeArchived = false) {
   return {

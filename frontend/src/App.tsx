@@ -9,7 +9,7 @@ import {
   useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Home, KanbanSquare, TerminalSquare, Settings, Puzzle } from 'lucide-react';
+import { Home, TerminalSquare, Settings, Puzzle } from 'lucide-react';
 import { hasApiKey, clearApiKey } from './lib/api';
 import { connectWs, disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
@@ -19,10 +19,9 @@ import { ConnectionBanner } from './components/custom/connection-banner';
 import { ThemeProvider } from './lib/theme-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
-const TaskCreatePage = lazy(() => import('./routes/tasks.new'));
 const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
-const KanbanPage = lazy(() => import('./routes/kanban'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
+const SessionDetailPage = lazy(() => import('./routes/sessions.$id'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
 const ProjectsPage = lazy(() => import('./routes/projects'));
@@ -43,13 +42,18 @@ interface NavItem {
   exact: boolean;
 }
 
-const NAV_START: NavItem[] = [
-  { to: '/', label: 'Home', icon: Home, exact: true },
-  { to: '/kanban', label: 'Kanban', icon: KanbanSquare, exact: false },
-  { to: '/sessions', label: 'Sessions', icon: TerminalSquare, exact: false },
-];
+const NAV_HOME: NavItem = { to: '/', label: 'Home', icon: Home, exact: true };
+const NAV_SESSIONS: NavItem = { to: '/sessions', label: 'Sessions', icon: TerminalSquare, exact: false };
 const NAV_END: NavItem = { to: '/settings', label: 'Settings', icon: Settings, exact: false };
 
+
+/** Resolve a Lucide icon by name from the already-loaded window.__AGEMON__.LucideReact bundle. */
+function resolveLucideIcon(name: string): React.ComponentType<{ className?: string }> {
+  const lucide = (window as any).__AGEMON__?.LucideReact as Record<string, unknown> | undefined;
+  const icon = lucide?.[name];
+  // lucide-react v0.4xx exports icons as forwardRef objects, not plain functions
+  return icon != null ? (icon as React.ComponentType<{ className?: string }>) : Puzzle;
+}
 
 /** Fetch a plugin's compiled icon component from the backend. */
 async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ className?: string }>> {
@@ -68,7 +72,9 @@ async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ 
 
 function BottomNav() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const hostLayout = useWsStore(s => s.hostLayout);
+  // Hide chrome when host route is a legacy task detail OR plugin requests fullscreen layout
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
   const pluginsRevision = useWsStore(s => s.pluginsRevision);
@@ -80,16 +86,27 @@ function BottomNav() {
     const controller = new AbortController();
     fetch('/api/plugins', { credentials: 'include', signal: controller.signal })
       .then(res => res.json())
-      .then((plugins: { id: string; navLabel: string | null; navIcon: string | null; navEnabled: boolean }[]) => {
-        const navPlugins = plugins.filter(p => p.navLabel && p.navEnabled);
-        return Promise.all(
-          navPlugins.map(async p => ({
-            to: `/p/${p.id}`,
-            label: p.navLabel!,
-            icon: p.navIcon ? await fetchPluginIcon(p.id) : Puzzle,
-            exact: true,
-          }))
-        );
+      .then(async (plugins: { id: string; navEnabled: boolean; navItems: { label: string; lucideIcon?: string | null; icon?: string | null; path: string; order?: number }[] }[]) => {
+        type SortedNavItem = NavItem & { order: number };
+        const items: SortedNavItem[] = [];
+        for (const p of plugins) {
+          if (!p.navEnabled || !p.navItems?.length) continue;
+          for (const ni of p.navItems) {
+            const subPath = ni.path === '/' ? '' : ni.path;
+            const icon = ni.lucideIcon
+              ? resolveLucideIcon(ni.lucideIcon)
+              : ni.icon ? await fetchPluginIcon(p.id) : Puzzle;
+            items.push({
+              to: `/p/${p.id}${subPath}`,
+              label: ni.label,
+              icon,
+              exact: ni.path === '/',
+              order: ni.order ?? 999,
+            });
+          }
+        }
+        items.sort((a, b) => a.order - b.order);
+        return items;
       })
       .then(setPluginNavItems)
       .catch(err => { if (err.name !== 'AbortError') console.error(err); });
@@ -98,7 +115,7 @@ function BottomNav() {
 
   if (isTaskDetail) return null;
 
-  const navItems = [...NAV_START, ...pluginNavItems, NAV_END];
+  const navItems = [NAV_HOME, ...pluginNavItems, NAV_SESSIONS, NAV_END];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
@@ -132,7 +149,8 @@ function BottomNav() {
 
 function RootLayout() {
   const matches = useMatches();
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id');
+  const hostLayout = useWsStore(s => s.hostLayout);
+  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
   const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 
@@ -172,12 +190,6 @@ const indexRoute = createRoute({
   component: IndexPage,
 });
 
-const taskNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/tasks/new',
-  component: TaskCreatePage,
-});
-
 const taskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/tasks/$id',
@@ -187,16 +199,19 @@ const taskDetailRoute = createRoute({
   }),
 });
 
-const kanbanRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/kanban',
-  component: KanbanPage,
-});
-
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions',
   component: SessionsPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    taskId: typeof search.taskId === 'string' ? search.taskId : undefined,
+  }),
+});
+
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$id',
+  component: SessionDetailPage,
 });
 
 const settingsRoute = createRoute({
@@ -227,9 +242,8 @@ const pluginSubPageRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  taskNewRoute,
   taskDetailRoute,
-  kanbanRoute,
+  sessionDetailRoute,
   sessionsRoute,
   settingsRoute,
   projectsRoute,
@@ -237,7 +251,7 @@ const routeTree = rootRoute.addChildren([
   pluginSubPageRoute,
 ]);
 
-const router = createRouter({
+export const router = createRouter({
   routeTree,
   context: { onLogout: () => {} },
 });

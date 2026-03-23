@@ -143,23 +143,29 @@ export function WsProvider({ children }: { children: ReactNode }) {
           });
           store().markUnread(event.sessionId);
           store().setAgentActivity(event.sessionId, null);
-          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          if (event.taskId) {
+            queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+            queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          }
           queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
         case 'session_started': {
-          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          if (event.taskId) {
+            queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+            queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+            queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          }
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'session_ready': {
           store().setAgentActivity(event.session.id, null);
-          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+          if (event.taskId) {
+            queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+            queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          }
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           break;
         }
         case 'session_state_changed': {
@@ -179,10 +185,12 @@ export function WsProvider({ children }: { children: ReactNode }) {
             });
           }
           store().setAgentActivity(event.sessionId, null);
-          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          if (event.taskId) {
+            queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+            queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+            queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          }
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
           queryClient.invalidateQueries({ queryKey: dashboardKeys.active });
           break;
         }
@@ -228,8 +236,10 @@ export function WsProvider({ children }: { children: ReactNode }) {
             timestamp: new Date().toISOString(),
           });
           store().setAgentActivity(event.sessionId, null);
-          queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
-          queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          if (event.taskId) {
+            queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
+            queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
+          }
           break;
         }
         case 'turn_completed': {

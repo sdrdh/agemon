@@ -12,8 +12,8 @@ interface QuestionInputCardProps {
   lastMessage?: { text: string; role: 'agent' | 'user' };
   agentType: string;
   connected: boolean;
-  onSubmit: (inputId: string, taskId: string, response: string) => void;
-  onNavigate: () => void;
+  onSubmit: (inputId: string, sessionId: string, response: string) => void;
+  onNavigate?: () => void;
   onStop?: (sessionId: string) => void;
   onArchive?: (sessionId: string) => void;
 }
@@ -36,7 +36,7 @@ export function QuestionInputCard({
 
   const handleSubmit = () => {
     if (!text.trim() || !connected) return;
-    onSubmit(input.inputId, input.taskId, text.trim());
+    onSubmit(input.inputId, input.sessionId, text.trim());
     setText('');
   };
 
@@ -55,7 +55,7 @@ export function QuestionInputCard({
       onClick={onNavigate}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) onNavigate?.(); }}
     >
       <div className="px-3 pt-3 pb-1">
         {/* Top line: badge + timestamp */}
@@ -72,7 +72,7 @@ export function QuestionInputCard({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onStop(input.sessionId); }}
                 disabled={!connected}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 transition-colors"
                 aria-label="Stop session"
                 title="Stop"
               >

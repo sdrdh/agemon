@@ -1,0 +1,12 @@
+{
+  "name": "@agemon/plugin-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "@agemon/shared": "workspace:*"
+  }
+}
