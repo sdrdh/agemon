@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../db/client.ts';
 import { CURRENT_VERSION, isRunningUnderSystemd, checkForUpdates } from '../lib/version.ts';
-import { getUpdateStrategy } from '../lib/updater.ts';
+import { getUpdateStrategy, rebuildFrontend } from '../lib/updater.ts';
 import type { VersionInfo, ReleaseChannel, RestartResult } from '@agemon/shared';
 
 const SETTINGS_ALLOWLIST = new Set([
@@ -56,6 +56,26 @@ systemRoutes.post('/update', async (c) => {
 
   const strategy = getUpdateStrategy();
   const result = await strategy.applyUpdate(targetRef, channel);
+  return c.json(result);
+});
+
+// POST /rebuild — rebuild frontend from current working tree, then restart
+systemRoutes.post('/rebuild', async (c) => {
+  if (!isRunningUnderSystemd()) {
+    return c.json({ ok: false, message: 'Server is not running under a process supervisor. Run the build manually and restart.' }, 400);
+  }
+
+  const result = await rebuildFrontend();
+  if (!result.ok) {
+    return c.json(result, 500);
+  }
+
+  const { broadcast } = await import('../server.ts');
+  const { shutdownAllSessions } = await import('../lib/acp/index.ts');
+  broadcast({ type: 'server_restarting' });
+  await shutdownAllSessions();
+  setTimeout(() => process.exit(0), 500);
+
   return c.json(result);
 });
 

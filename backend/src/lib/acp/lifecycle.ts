@@ -5,6 +5,7 @@ import { resolveApproval, pendingApprovalResolvers } from './approvals.ts';
 import { writeCheckpoint } from './event-log.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
 import type { AgentSessionState, AgentSession } from '@agemon/shared';
+import { TERMINAL_STATES } from '../../db/helpers.ts';
 import type { EventBridge } from '../plugins/event-bridge.ts';
 
 // ─── EventBridge singleton (set once at startup from server.ts) ──────────────
@@ -22,7 +23,6 @@ export async function handleExit(
   taskId: string | null
 ): Promise<void> {
   const exitCode = await proc.exited;
-  const state: AgentSessionState = exitCode === 0 ? 'stopped' : 'crashed';
 
   transport.close();
 
@@ -41,7 +41,18 @@ export async function handleExit(
     }
   }
 
-  db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
+  // Skip state update if already terminal (e.g. shutdownAllSessions pre-marked as interrupted)
+  const currentSession = db.getSession(sessionId);
+  const alreadyTerminal = currentSession && TERMINAL_STATES.has(currentSession.state);
+
+  const state: AgentSessionState = alreadyTerminal
+    ? currentSession!.state
+    : (exitCode === 0 || userStopped.has(sessionId)) ? 'stopped' : 'crashed';
+
+  if (!alreadyTerminal) {
+    db.updateSessionState(sessionId, state, { exit_code: exitCode, pid: null });
+  }
+
   sessions.delete(sessionId);
   userStopped.delete(sessionId);
 
@@ -164,7 +175,11 @@ export async function shutdownAllSessions(): Promise<void> {
   for (const [sessionId, entry] of sessions) {
     console.info(`[acp] shutting down session ${sessionId}`);
 
-    // Try graceful JSON-RPC shutdown
+    // Mark as interrupted before killing so handleExit won't overwrite with 'crashed'
+    db.updateSessionState(sessionId, 'interrupted', { pid: null });
+    broadcast({ type: 'session_state_changed', sessionId, taskId: entry.taskId, state: 'interrupted' });
+
+    // Try graceful ACP shutdown first
     if (!entry.transport.isClosed) {
       entry.transport
         .request('shutdown', {})

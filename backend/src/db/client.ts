@@ -81,7 +81,6 @@ export const db = {
   listAllSessions: sessions.listAllSessions,
 
   // Events / Chat History
-  listChatHistory: events.listChatHistory,
   getLastAgentMessage: events.getLastAgentMessage,
   listChatHistoryBySession: events.listChatHistoryBySession,
 

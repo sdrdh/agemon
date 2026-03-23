@@ -3,8 +3,7 @@
  * All data comes from per-session JSONL files + in-memory approval/input stores.
  * No on-disk SQLite dependency.
  */
-import { sessionDirs, readSessionEventsSync } from '../lib/acp/event-log.ts';
-import { listSessions } from '../lib/session-store.ts';
+import { readSessionEventsSync, getLastNonPromptEventSync } from '../lib/acp/event-log.ts';
 import * as approvalStore from '../lib/approval-store.ts';
 import * as inputStore from '../lib/input-store.ts';
 import type { ChatMessage } from '@agemon/shared';
@@ -20,15 +19,11 @@ const EVENT_TYPE_MAP: Record<string, ChatMessage['eventType']> = {
 };
 
 /**
- * Get the last agent 'thought' message for a session (used by dashboard previews).
- * Reads from the JSONL event log.
+ * Get the last agent message for a session (used by dashboard previews).
+ * Returns the content of the last non-prompt event (thought, action, result, etc.).
  */
 export function getLastAgentMessage(sessionId: string): string | null {
-  const events = readSessionEventsSync(sessionId);
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type === 'thought') return events[i].content;
-  }
-  return null;
+  return getLastNonPromptEventSync(sessionId);
 }
 
 /**
@@ -79,19 +74,3 @@ export function listChatHistoryBySession(sessionId: string, limit: number, befor
   return messages.length > limit ? messages.slice(messages.length - limit) : messages;
 }
 
-/**
- * Chat history across all sessions for a task.
- * Aggregates JSONL events from all task sessions.
- */
-export function listChatHistory(taskId: string, limit: number, before?: string): ChatMessage[] {
-  const sessions = listSessions(taskId);
-  const allMessages: ChatMessage[] = [];
-
-  for (const session of sessions) {
-    const sessionMessages = listChatHistoryBySession(session.id, limit, before);
-    allMessages.push(...sessionMessages);
-  }
-
-  allMessages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  return allMessages.length > limit ? allMessages.slice(allMessages.length - limit) : allMessages;
-}

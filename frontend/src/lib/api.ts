@@ -136,6 +136,8 @@ export const api = {
     request<UpdateResult>('/update', { method: 'POST' }),
   restart: () =>
     request<RestartResult>('/restart', { method: 'POST' }),
+  rebuild: () =>
+    request<{ ok: boolean; message: string }>('/rebuild', { method: 'POST' }),
 
   // Settings
   getSettings: () => request<Record<string, string>>('/settings'),
