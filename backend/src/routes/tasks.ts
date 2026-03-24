@@ -332,12 +332,12 @@ tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
     const git = simpleGit(cwd);
     let diff: string;
     if (toSha) {
-      diff = await git.raw(['diff', '-U20', sha, toSha]);
+      diff = await git.diff(['-U20', sha, toSha]);
     } else {
       try {
-        diff = await git.raw(['diff', '-U20', `${sha}^`, sha]);
+        diff = await git.diff(['-U20', `${sha}^`, sha]);
       } catch {
-        diff = await git.raw(['diff', '-U20', EMPTY_TREE_SHA, sha]);
+        diff = await git.diff(['-U20', EMPTY_TREE_SHA, sha]);
       }
     }
     return c.json({ raw: diff });

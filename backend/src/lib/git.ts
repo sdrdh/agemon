@@ -157,9 +157,8 @@ export class GitWorktreeManager {
     const worktreePath = this.getWorktreePath(taskId, repoName);
     const git = simpleGit(worktreePath);
 
-    // Get both staged and unstaged diffs with extra context for expandable lines
-    const staged = await git.diff(['--cached', '-U20']);
-    const unstaged = await git.diff(['-U20']);
+    const staged = await git.diff(['--cached']);
+    const unstaged = await git.diff([]);
 
     if (staged && unstaged) {
       return `${staged}\n${unstaged}`;

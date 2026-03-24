@@ -637,14 +637,11 @@ function RepoCommitsView({ sessionId, repoName, ...renderProps }: {
   const [showRangeDiff, setShowRangeDiff] = useState(false);
   const [selectedBase, setSelectedBase] = useState('');
   const refs = useRefs(sessionId, repoName, true);
-  const { commits, base, loading: commitsLoading, error: commitsError } = useCommitList(sessionId, repoName, true, selectedBase);
 
-  // Initialize selectedBase from refs once loaded
-  useEffect(() => {
-    if (refs?.defaultBase && !selectedBase) {
-      setSelectedBase(refs.defaultBase);
-    }
-  }, [refs?.defaultBase, selectedBase]);
+  // Derive effective base: user selection takes priority, then refs default.
+  // Gate the fetch on refs being loaded so we always start with the right base.
+  const effectiveBaseRef = selectedBase || refs?.defaultBase || '';
+  const { commits, base, loading: commitsLoading, error: commitsError } = useCommitList(sessionId, repoName, !!refs, effectiveBaseRef);
 
   if (showRangeDiff && base) {
     return (
@@ -676,7 +673,7 @@ function RepoCommitsView({ sessionId, repoName, ...renderProps }: {
         <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border text-xs shrink-0">
           <span className="text-muted-foreground whitespace-nowrap">Base:</span>
           <select
-            value={selectedBase || refs.defaultBase}
+            value={effectiveBaseRef}
             onChange={(e) => setSelectedBase(e.target.value)}
             className="bg-muted/50 border border-border rounded px-2 py-1 text-xs font-mono min-w-0 max-w-[240px] truncate focus:outline-none focus:ring-1 focus:ring-ring"
           >
