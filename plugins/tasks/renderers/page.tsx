@@ -14,7 +14,7 @@ import {
   Info,
   CheckCircle2,
   Archive,
-  Diff,
+  FileDiff,
 } from 'lucide-react';
 
 // ─── Internal router ─────────────────────────────────────────────────────────
@@ -581,7 +581,7 @@ function TaskDetail({ id }: { id: string }) {
               className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
               aria-label="View changes"
             >
-              <Diff className="h-4 w-4" />
+              <FileDiff className="h-4 w-4" />
             </button>
           )}
           <button
