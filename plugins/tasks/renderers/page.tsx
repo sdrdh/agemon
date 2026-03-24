@@ -667,7 +667,7 @@ function TaskDetail({ id }: { id: string }) {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <DiffViewer sessionId={selectedSession!} />
+              <DiffViewer sessionId={selectedSession!} live={!isDone} />
             </div>
           </div>
         </>

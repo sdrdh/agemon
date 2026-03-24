@@ -13,6 +13,13 @@ export interface SessionMeta {
   meta: Record<string, unknown>;  // parsed from session.meta_json if it exists, else {}
 }
 
+/** Per-repository diff result returned by WorkspaceProvider.getDiff. */
+export interface RepoDiff {
+  repoName: string;  // display name, e.g. "acme/web" or dir basename for cwd sessions
+  cwd: string;       // absolute path to the git repo root
+  diff: string;      // unified diff string (may be empty)
+}
+
 export interface WorkspaceResult {
   cwd: string;
   meta?: Record<string, unknown>;  // optional metadata to merge back into session meta
@@ -33,8 +40,10 @@ export interface WorkspaceProvider {
 
   /**
    * Generate a diff of changes. Optional — only for VCS-backed workspaces.
+   * Only `getDiff` uses a plain meta bag; other methods keep SessionMeta because
+   * they run in the context of a live session and legitimately need sessionId/agentType.
    */
-  getDiff?(session: SessionMeta): Promise<string | null>;
+  getDiff?(meta: Record<string, unknown>): Promise<RepoDiff[] | null>;
 
   /**
    * Extra markdown sections to inject into CLAUDE.md context.
