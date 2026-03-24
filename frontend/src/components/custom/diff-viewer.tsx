@@ -181,7 +181,7 @@ function useCommitList(sessionId: string, repoName: string, enabled: boolean, ba
           }
         }
       })
-      .catch(e => setError(e.message))
+      .catch(e => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [sessionId, repoName, enabled, baseRef]);
 

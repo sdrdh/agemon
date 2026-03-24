@@ -75,7 +75,7 @@ function createDiffStream(
             enqueue(`event: heartbeat\ndata: \n\n`);
           }
         } catch (err) {
-          enqueue(`event: error\ndata: ${(err as Error).message}\n\n`);
+          enqueue(`event: error\ndata: ${err instanceof Error ? err.message : String(err)}\n\n`);
         }
       };
 
@@ -234,7 +234,7 @@ tasksRoutes.get('/sessions/:id/refs', async (c) => {
 
     return c.json({ currentBranch, defaultBase, local, remote });
   } catch (err) {
-    return c.json({ error: 'Failed to list refs', details: (err as Error).message }, 500);
+    return c.json({ error: 'Failed to list refs', details: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
 
@@ -303,7 +303,7 @@ tasksRoutes.get('/sessions/:id/commits', async (c) => {
 
     return c.json({ commits, baseSha, baseRef, baseShortSha, baseMessage });
   } catch (err) {
-    return c.json({ error: 'Failed to list commits', details: (err as Error).message }, 500);
+    return c.json({ error: 'Failed to list commits', details: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
 
@@ -331,6 +331,6 @@ tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
     }
     return c.json({ raw: diff });
   } catch (err) {
-    return c.json({ error: 'Failed to get commit diff', details: (err as Error).message }, 500);
+    return c.json({ error: 'Failed to get commit diff', details: err instanceof Error ? err.message : String(err) }, 500);
   }
 });

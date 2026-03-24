@@ -46,9 +46,14 @@ export const defaultTaskWorkspaceProvider: WorkspaceProvider = {
       }),
     );
 
-    const results = settled
-      .filter((r): r is PromiseFulfilledResult<RepoDiff> => r.status === 'fulfilled')
-      .map(r => r.value);
+    const results: RepoDiff[] = [];
+    for (const r of settled) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      } else {
+        console.warn('[workspace-default] Failed to get diff for a repo:', r.reason);
+      }
+    }
 
     return results.length > 0 ? results : null;
   },
