@@ -575,7 +575,7 @@ function TaskDetail({ id }: { id: string }) {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
-          {DiffViewer && (
+          {DiffViewer && selectedSession && (
             <button
               onClick={() => setDiffOpen(true)}
               className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
@@ -667,7 +667,7 @@ function TaskDetail({ id }: { id: string }) {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <DiffViewer taskId={id} />
+              <DiffViewer sessionId={selectedSession!} />
             </div>
           </div>
         </>

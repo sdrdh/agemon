@@ -1,4 +1,4 @@
-import { ArrowLeft, Square } from 'lucide-react';
+import { ArrowLeft, Diff, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SESSION_STATE_DOT } from '@/lib/chat-utils';
 import type { AgentSessionState } from '@agemon/shared';
@@ -10,6 +10,7 @@ export function SessionMobileHeader({
   actionLoading,
   onBack,
   onStop,
+  onDiff,
 }: {
   sessionLabel: string;
   sessionState: AgentSessionState;
@@ -17,6 +18,7 @@ export function SessionMobileHeader({
   actionLoading: boolean;
   onBack: () => void;
   onStop: () => void;
+  onDiff?: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0 sticky top-0 z-50">
@@ -25,6 +27,11 @@ export function SessionMobileHeader({
       </Button>
       <span className={`inline-block h-2.5 w-2.5 rounded-full ${SESSION_STATE_DOT[sessionState]} shrink-0`} />
       <span className="text-sm font-medium flex-1 truncate">{sessionLabel}</span>
+      {onDiff && (
+        <Button size="icon" variant="ghost" aria-label="View changes" onClick={onDiff} className="min-h-[44px] min-w-[44px] shrink-0">
+          <Diff className="h-4 w-4" />
+        </Button>
+      )}
       {sessionRunning && (
         <Button
           size="sm"

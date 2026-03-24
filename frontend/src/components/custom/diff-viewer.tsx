@@ -3,7 +3,7 @@ import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 
 interface DiffViewerProps {
-  taskId: string;
+  sessionId: string;
   live?: boolean;
 }
 
@@ -18,7 +18,7 @@ interface RepoGroup {
   files: FileEntry[];
 }
 
-function useDiffData(taskId: string, live: boolean) {
+function useDiffData(sessionId: string, live: boolean) {
   const [repos, setRepos] = useState<RepoGroup[]>([]);
   const [rawDiff, setRawDiff] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,7 @@ function useDiffData(taskId: string, live: boolean) {
       return;
     }
 
-    const eventSource = new EventSource(`/api/tasks/${taskId}/diff/stream`);
+    const eventSource = new EventSource(`/api/sessions/${sessionId}/diff/stream`);
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('diff', (event) => {
@@ -55,11 +55,11 @@ function useDiffData(taskId: string, live: boolean) {
     return () => {
       eventSource.close();
     };
-  }, [taskId, live]);
+  }, [sessionId, live]);
 
   async function fetchOnce() {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/diff?format=structured`);
+      const res = await fetch(`/api/sessions/${sessionId}/diff?format=structured`);
       const data = await res.json();
       setRepos(data.repos || []);
       setRawDiff(data.raw || '');
@@ -73,8 +73,8 @@ function useDiffData(taskId: string, live: boolean) {
   return { repos, rawDiff, loading, liveUpdating };
 }
 
-export function DiffViewer({ taskId, live = true }: DiffViewerProps) {
-  const { repos, rawDiff, loading, liveUpdating } = useDiffData(taskId, live);
+export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
+  const { repos, rawDiff, loading, liveUpdating } = useDiffData(sessionId, live);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   const parsedDiffs = useMemo(() => {

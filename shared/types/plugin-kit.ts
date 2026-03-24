@@ -32,9 +32,9 @@ export interface PluginKit {
     status: string;
   }>;
 
-  /** Renders a diff viewer for a task's changes */
+  /** Renders a diff viewer for a session's workspace changes */
   DiffViewer: ReactComponent<{
-    taskId: string;
+    sessionId: string;
     live?: boolean;
   }>;
 }

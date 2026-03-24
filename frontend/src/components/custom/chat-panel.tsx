@@ -20,9 +20,11 @@ export interface ChatPanelProps {
   /** Called when the back button is tapped on mobile. Optional. */
   onBack?: () => void;
   isDone?: boolean;
+  /** Called when the diff button is tapped. Optional — when provided, a diff icon appears in the header. */
+  onDiff?: () => void;
 }
 
-export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false }: ChatPanelProps) {
+export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false, onDiff }: ChatPanelProps) {
   const isDesktop = useIsDesktop();
   const qc = useQueryClient();
   const [inputText, setInputText] = useState('');
@@ -155,6 +157,7 @@ export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false }: 
       hasMore={hasMore}
       isLoadingMore={isLoadingMore}
       onFetchOlderMessages={fetchOlderMessages}
+      onDiff={onDiff}
     />
   );
 }
