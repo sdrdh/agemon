@@ -1,4 +1,7 @@
 import { Hono } from 'hono';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { simpleGit } from 'simple-git';
 import { db } from '../db/client.ts';
 import { workspaceRegistry } from '../lib/plugins/workspace-registry.ts';
 
@@ -88,6 +91,52 @@ tasksRoutes.get('/tasks/:id/diff/stream', async (c) => {
       'Connection': 'keep-alive',
     },
   });
+});
+
+/**
+ * Resolve the working directory for a session.
+ * Task sessions: resolve from task workspace config.
+ * Standalone sessions: resolve from meta_json.cwd.
+ */
+function resolveSessionCwd(sessionId: string): string | null {
+  const session = db.getSession(sessionId);
+  if (!session) return null;
+  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+  return (meta.cwd as string) ?? null;
+}
+
+// GET /sessions/:id/file?path=...  — full file contents (old from HEAD, new from working tree)
+tasksRoutes.get('/sessions/:id/file', async (c) => {
+  const sessionId = c.req.param('id');
+  const filePath = c.req.query('path');
+  if (!filePath) return c.json({ error: 'Missing path query parameter' }, 400);
+
+  const cwd = resolveSessionCwd(sessionId);
+  if (!cwd) return c.json({ error: 'Session not found or no cwd' }, 404);
+
+  const git = simpleGit(cwd);
+  const isRepo = await git.checkIsRepo().catch(() => false);
+  if (!isRepo) return c.json({ error: 'Not a git repository' }, 400);
+
+  // Old content: from HEAD (committed version)
+  let oldContent = '';
+  try {
+    oldContent = await git.show([`HEAD:${filePath}`]);
+  } catch {
+    // File might be new (not in HEAD)
+    oldContent = '';
+  }
+
+  // New content: from working tree
+  let newContent = '';
+  try {
+    newContent = await readFile(join(cwd, filePath), 'utf-8');
+  } catch {
+    // File might be deleted
+    newContent = '';
+  }
+
+  return c.json({ oldContent, newContent });
 });
 
 // GET /sessions/:id/diff

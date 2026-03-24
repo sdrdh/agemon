@@ -158,12 +158,52 @@ function DiffSummaryBar({ files, liveUpdating }: {
 
 // ─── Per-file collapsed diff ─────────────────────────────────────────────────────
 
-function FileDiffCollapsed({ file, stats, rawDiff }: {
+/**
+ * Fetch full file contents (old from HEAD, new from working tree) and rebuild
+ * the FileDiffMetadata with isPartial=false so hunk expansion works.
+ */
+function useFullFileDiff(
+  sessionId: string,
+  partialFile: FileDiffMetadata,
+  shouldFetch: boolean,
+): { fileDiff: FileDiffMetadata; loading: boolean } {
+  const [fullDiff, setFullDiff] = useState<FileDiffMetadata | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!shouldFetch || fullDiff) return;
+    setLoading(true);
+
+    fetch(`/api/sessions/${sessionId}/file?path=${encodeURIComponent(partialFile.name)}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(({ oldContent, newContent }: { oldContent: string; newContent: string }) => {
+        // Rebuild with full file lines so the library can expand between hunks
+        const rebuilt: FileDiffMetadata = {
+          ...partialFile,
+          isPartial: false,
+          deletionLines: (oldContent || '').split('\n'),
+          additionLines: (newContent || '').split('\n'),
+        };
+        setFullDiff(rebuilt);
+      })
+      .catch(() => {
+        // Fall back to partial diff if fetch fails
+        setFullDiff(null);
+      })
+      .finally(() => setLoading(false));
+  }, [sessionId, partialFile.name, shouldFetch, fullDiff]);
+
+  return { fileDiff: fullDiff ?? partialFile, loading };
+}
+
+function FileDiffCollapsed({ file, stats, rawDiff, sessionId }: {
   file: FileDiffMetadata;
   stats: { additions: number; deletions: number };
   rawDiff: string;
+  sessionId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { fileDiff, loading: fileLoading } = useFullFileDiff(sessionId, file, expanded);
 
   // Lazy-extract the raw section only when needed for fallback
   const rawSection = useMemo(
@@ -190,18 +230,22 @@ function FileDiffCollapsed({ file, stats, rawDiff }: {
       </button>
       {expanded && (
         <div className="border-t border-border">
-          <DiffErrorBoundary fallback={rawSection}>
-            <Virtualizer>
-              <PierreFileDiff
-                fileDiff={file}
-                options={{
-                  expandUnchanged: true,
-                  hunkSeparators: 'line-info',
-                  expansionLineCount: 20,
-                }}
-              />
-            </Virtualizer>
-          </DiffErrorBoundary>
+          {fileLoading ? (
+            <div className="p-3 text-xs text-muted-foreground animate-pulse">Loading file...</div>
+          ) : (
+            <DiffErrorBoundary fallback={rawSection}>
+              <Virtualizer>
+                <PierreFileDiff
+                  fileDiff={fileDiff}
+                  options={{
+                    expandUnchanged: true,
+                    hunkSeparators: 'line-info',
+                    expansionLineCount: 20,
+                  }}
+                />
+              </Virtualizer>
+            </DiffErrorBoundary>
+          )}
         </div>
       )}
     </div>
@@ -249,7 +293,7 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
       <DiffSummaryBar files={files} liveUpdating={liveUpdating} />
       <div className="flex-1 overflow-auto">
         {files.map(({ file, stats }) => (
-          <FileDiffCollapsed key={file.name} file={file} stats={stats} rawDiff={rawDiff} />
+          <FileDiffCollapsed key={file.name} file={file} stats={stats} rawDiff={rawDiff} sessionId={sessionId} />
         ))}
       </div>
     </div>

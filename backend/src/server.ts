@@ -124,7 +124,7 @@ workspaceRegistry.register('cwd', {
     const isRepo = await git.checkIsRepo().catch(() => false);
 
     if (isRepo) {
-      const diff = await git.diff(['--', '.']);
+      const diff = await git.diff(['-U20', '--', '.']);
       return diff || null;
     }
 
@@ -138,7 +138,7 @@ workspaceRegistry.register('cwd', {
         const isSubrepo = await subgit.checkIsRepo().catch(() => false);
 
         if (isSubrepo) {
-          const diff = await subgit.diff(['--', '.']).catch(() => '');
+          const diff = await subgit.diff(['-U20', '--', '.']).catch(() => '');
           if (diff) subrepoDiffs.push(`\n### ${entry.name}\n\n${diff}`);
         }
       }
