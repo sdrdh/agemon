@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { Component, useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -7,6 +7,8 @@ interface DiffViewerProps {
   sessionId: string;
   live?: boolean;
 }
+
+// ─── Data fetching ────────────────────────────────────────────────────────────────
 
 function useDiffData(sessionId: string, live: boolean) {
   const [rawDiff, setRawDiff] = useState<string>('');
@@ -60,6 +62,8 @@ function useDiffData(sessionId: string, live: boolean) {
   return { rawDiff, loading, liveUpdating };
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────────
+
 function getFileStats(file: FileDiffMetadata) {
   let additions = 0;
   let deletions = 0;
@@ -69,6 +73,142 @@ function getFileStats(file: FileDiffMetadata) {
   }
   return { additions, deletions };
 }
+
+/** Extract raw unified diff text for a single file from the full diff string. */
+function extractRawFileSection(rawDiff: string, fileName: string): string {
+  const lines = rawDiff.split('\n');
+  const sections: string[] = [];
+  let capturing = false;
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      if (capturing) break;
+      // Match "diff --git a/path b/path" — check if the b/ side matches
+      if (line.includes(` b/${fileName}`)) capturing = true;
+    }
+    if (capturing) sections.push(line);
+  }
+  return sections.join('\n');
+}
+
+// ─── Error boundary ───────────────────────────────────────────────────────────────
+
+interface DiffErrorBoundaryProps {
+  fallback: string;
+  children: ReactNode;
+}
+
+interface DiffErrorBoundaryState {
+  hasError: boolean;
+}
+
+class DiffErrorBoundary extends Component<DiffErrorBoundaryProps, DiffErrorBoundaryState> {
+  constructor(props: DiffErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): DiffErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <pre className="text-xs text-muted-foreground p-3 overflow-auto whitespace-pre-wrap">
+          {this.props.fallback || 'Failed to render diff'}
+        </pre>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Summary bar ─────────────────────────────────────────────────────────────────
+
+function DiffSummaryBar({ files, liveUpdating }: {
+  files: { stats: { additions: number; deletions: number } }[];
+  liveUpdating: boolean;
+}) {
+  const totals = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const { stats } of files) {
+      additions += stats.additions;
+      deletions += stats.deletions;
+    }
+    return { additions, deletions };
+  }, [files]);
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 border-b border-border text-xs text-muted-foreground shrink-0">
+      {liveUpdating && (
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          Live
+        </span>
+      )}
+      <span className="font-medium text-foreground">
+        {files.length} {files.length === 1 ? 'file' : 'files'} changed
+      </span>
+      <span className="text-emerald-500 font-mono">+{totals.additions}</span>
+      <span className="text-red-500 font-mono">−{totals.deletions}</span>
+    </div>
+  );
+}
+
+// ─── Per-file collapsed diff ─────────────────────────────────────────────────────
+
+function FileDiffCollapsed({ file, stats, rawDiff }: {
+  file: FileDiffMetadata;
+  stats: { additions: number; deletions: number };
+  rawDiff: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Lazy-extract the raw section only when needed for fallback
+  const rawSection = useMemo(
+    () => expanded ? extractRawFileSection(rawDiff, file.name) : '',
+    [expanded, rawDiff, file.name],
+  );
+
+  return (
+    <div className="border-b border-border">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {expanded
+            ? <ChevronDown className="h-4 w-4 shrink-0" />
+            : <ChevronRight className="h-4 w-4 shrink-0" />}
+          <span className="text-sm font-mono truncate">{file.name}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs shrink-0 ml-2">
+          <span className="text-emerald-500">+{stats.additions}</span>
+          <span className="text-red-500">−{stats.deletions}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-border">
+          <DiffErrorBoundary fallback={rawSection}>
+            <Virtualizer>
+              <PierreFileDiff
+                fileDiff={file}
+                options={{
+                  expandUnchanged: true,
+                  hunkSeparators: 'line-info',
+                  expansionLineCount: 20,
+                }}
+              />
+            </Virtualizer>
+          </DiffErrorBoundary>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────────
 
 export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
   const { rawDiff, loading, liveUpdating } = useDiffData(sessionId, live);
@@ -96,7 +236,6 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground text-sm p-3">
         <span className="animate-pulse">Loading changes...</span>
-        {liveUpdating && <span className="text-xs">(live)</span>}
       </div>
     );
   }
@@ -107,46 +246,12 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {liveUpdating && (
-        <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground border-b border-border">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Updating...
-        </div>
-      )}
+      <DiffSummaryBar files={files} liveUpdating={liveUpdating} />
       <div className="flex-1 overflow-auto">
         {files.map(({ file, stats }) => (
-          <FileDiffCollapsed key={file.name} file={file} stats={stats} />
+          <FileDiffCollapsed key={file.name} file={file} stats={stats} rawDiff={rawDiff} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function FileDiffCollapsed({ file, stats }: { file: FileDiffMetadata; stats: { additions: number; deletions: number } }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="border-b border-border">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
-      >
-        <div className="flex items-center gap-2">
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          <span className="text-sm font-mono truncate">{file.name}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs shrink-0">
-          <span className="text-emerald-500">+{stats.additions}</span>
-          <span className="text-red-500">-{stats.deletions}</span>
-        </div>
-      </button>
-      {expanded && (
-        <div className="border-t border-border">
-          <Virtualizer>
-            <PierreFileDiff fileDiff={file} />
-          </Virtualizer>
-        </div>
-      )}
     </div>
   );
 }
