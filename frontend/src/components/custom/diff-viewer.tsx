@@ -1,7 +1,10 @@
-import { Component, useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
-import { parsePatchFiles, type FileDiffMetadata } from '@pierre/diffs';
+import { Component, useEffect, useMemo, useState, useRef, type ReactNode, type CSSProperties } from 'react';
+import { parsePatchFiles, parseDiffFromFile, type FileDiffMetadata, type FileContents, type ThemeTypes, type ThemesType } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useTheme } from '@/lib/theme-provider';
+import { useIsDesktop } from '@/hooks/use-is-desktop';
+import type { ThemeId } from '@/lib/theme';
 
 interface DiffViewerProps {
   sessionId: string;
@@ -90,6 +93,64 @@ function extractRawFileSection(rawDiff: string, fileName: string): string {
   return sections.join('\n');
 }
 
+// ─── Theme integration ───────────────────────────────────────────────────────────
+
+/** Map agemon theme → Shiki syntax highlighting theme pair */
+function getDiffsTheme(themeId: ThemeId): ThemesType {
+  switch (themeId) {
+    case 'dracula':
+      return { dark: 'dracula', light: 'dracula' };
+    case 'one-dark-pro':
+      return { dark: 'one-dark-pro', light: 'one-dark-pro' };
+    case 'terminal-green':
+      return { dark: 'github-dark', light: 'github-dark' };
+    case 'cyber-indigo':
+    case 'graphite-line-indigo':
+      return { dark: 'github-dark', light: 'github-light' };
+    case 'monochrome-stealth':
+    default:
+      return { dark: 'github-dark', light: 'github-light' };
+  }
+}
+
+/** Resolve effective dark/light from agemon's color mode */
+function useEffectiveThemeType(): ThemeTypes {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark ? 'dark' : 'light';
+}
+
+/**
+ * Build CSS variable overrides so the diff viewer's backgrounds, borders,
+ * and text colours match the active agemon theme.  We read from the app's
+ * HSL CSS custom properties at render time via getComputedStyle.
+ */
+function useDiffStyleOverrides(): CSSProperties {
+  const themeType = useEffectiveThemeType();
+
+  // Re-resolve whenever the theme flips
+  return useMemo(() => {
+    return {
+      // Font — use the same monospace font the app already uses
+      '--diffs-font-family': "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      '--diffs-font-size': '13px',
+      '--diffs-line-height': '20px',
+      '--diffs-header-font-family': 'inherit',
+      // Narrow gap for compact look
+      '--diffs-gap-inline': '6px',
+      '--diffs-gap-block': '4px',
+    } as CSSProperties;
+  }, [themeType]);
+}
+
 // ─── Error boundary ───────────────────────────────────────────────────────────────
 
 interface DiffErrorBoundaryProps {
@@ -109,6 +170,16 @@ class DiffErrorBoundary extends Component<DiffErrorBoundaryProps, DiffErrorBound
 
   static getDerivedStateFromError(): DiffErrorBoundaryState {
     return { hasError: true };
+  }
+
+  componentDidUpdate(prevProps: DiffErrorBoundaryProps) {
+    if (this.state.hasError && prevProps.fallback !== this.props.fallback) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn('DiffErrorBoundary caught:', error.message);
   }
 
   render() {
@@ -159,14 +230,15 @@ function DiffSummaryBar({ files, liveUpdating }: {
 // ─── Per-file collapsed diff ─────────────────────────────────────────────────────
 
 /**
- * Fetch full file contents (old from HEAD, new from working tree) and rebuild
- * the FileDiffMetadata with isPartial=false so hunk expansion works.
+ * Fetch full file contents (old from HEAD, new from working tree) and use
+ * parseDiffFromFile to produce a FileDiffMetadata with isPartial=false and
+ * correct hunk indexes aligned to the full line arrays.
  */
 function useFullFileDiff(
   sessionId: string,
   partialFile: FileDiffMetadata,
   shouldFetch: boolean,
-): { fileDiff: FileDiffMetadata; loading: boolean } {
+): { fileDiff: FileDiffMetadata; loading: boolean; hasFullFile: boolean } {
   const [fullDiff, setFullDiff] = useState<FileDiffMetadata | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -177,14 +249,15 @@ function useFullFileDiff(
     fetch(`/api/sessions/${sessionId}/file?path=${encodeURIComponent(partialFile.name)}`, { credentials: 'include' })
       .then(r => r.json())
       .then(({ oldContent, newContent }: { oldContent: string; newContent: string }) => {
-        // Rebuild with full file lines so the library can expand between hunks
-        const rebuilt: FileDiffMetadata = {
-          ...partialFile,
-          isPartial: false,
-          deletionLines: (oldContent || '').split('\n'),
-          additionLines: (newContent || '').split('\n'),
-        };
-        setFullDiff(rebuilt);
+        try {
+          const oldFile: FileContents = { name: partialFile.name, contents: oldContent || '' };
+          const newFile: FileContents = { name: partialFile.name, contents: newContent || '' };
+          const rebuilt = parseDiffFromFile(oldFile, newFile);
+          setFullDiff(rebuilt);
+        } catch (e) {
+          console.warn('parseDiffFromFile failed, falling back to partial:', e);
+          setFullDiff(null);
+        }
       })
       .catch(() => {
         // Fall back to partial diff if fetch fails
@@ -193,14 +266,18 @@ function useFullFileDiff(
       .finally(() => setLoading(false));
   }, [sessionId, partialFile.name, shouldFetch, fullDiff]);
 
-  return { fileDiff: fullDiff ?? partialFile, loading };
+  return { fileDiff: fullDiff ?? partialFile, loading, hasFullFile: fullDiff !== null };
 }
 
-function FileDiffCollapsed({ file, stats, rawDiff, sessionId }: {
+function FileDiffCollapsed({ file, stats, rawDiff, sessionId, diffTheme, themeType, styleOverrides, diffStyle }: {
   file: FileDiffMetadata;
   stats: { additions: number; deletions: number };
   rawDiff: string;
   sessionId: string;
+  diffTheme: ThemesType;
+  themeType: ThemeTypes;
+  styleOverrides: CSSProperties;
+  diffStyle: 'unified' | 'split';
 }) {
   const [expanded, setExpanded] = useState(false);
   const { fileDiff, loading: fileLoading } = useFullFileDiff(sessionId, file, expanded);
@@ -237,10 +314,16 @@ function FileDiffCollapsed({ file, stats, rawDiff, sessionId }: {
               <Virtualizer>
                 <PierreFileDiff
                   fileDiff={fileDiff}
+                  style={styleOverrides}
                   options={{
-                    expandUnchanged: true,
+                    expandUnchanged: false,
                     hunkSeparators: 'line-info',
                     expansionLineCount: 20,
+                    theme: diffTheme,
+                    themeType,
+                    diffStyle,
+                    overflow: 'wrap',
+                    disableFileHeader: true,
                   }}
                 />
               </Virtualizer>
@@ -256,6 +339,12 @@ function FileDiffCollapsed({ file, stats, rawDiff, sessionId }: {
 
 export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
   const { rawDiff, loading, liveUpdating } = useDiffData(sessionId, live);
+  const { themeId } = useTheme();
+  const isDesktop = useIsDesktop();
+  const themeType = useEffectiveThemeType();
+  const diffTheme = useMemo(() => getDiffsTheme(themeId), [themeId]);
+  const styleOverrides = useDiffStyleOverrides();
+  const diffStyle = isDesktop ? 'split' as const : 'unified' as const;
 
   const parsedDiffs = useMemo(() => {
     if (!rawDiff) return [];
@@ -293,7 +382,17 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
       <DiffSummaryBar files={files} liveUpdating={liveUpdating} />
       <div className="flex-1 overflow-auto">
         {files.map(({ file, stats }) => (
-          <FileDiffCollapsed key={file.name} file={file} stats={stats} rawDiff={rawDiff} sessionId={sessionId} />
+          <FileDiffCollapsed
+            key={file.name}
+            file={file}
+            stats={stats}
+            rawDiff={rawDiff}
+            sessionId={sessionId}
+            diffTheme={diffTheme}
+            themeType={themeType}
+            styleOverrides={styleOverrides}
+            diffStyle={diffStyle}
+          />
         ))}
       </div>
     </div>

@@ -40,7 +40,7 @@ For any phase, read its file or `grep -r "keyword" docs/tasks/` to find relevant
 | Phase 4: ACP Integration | ✅ Done | 3 | [docs/tasks/archive.md](docs/tasks/archive.md) |
 | Phase 4.5: Session-Centric UX | 🔲 Active | 69 | [docs/tasks/phase-4-5-session-ux.md](docs/tasks/phase-4-5-session-ux.md) |
 | Phase 5: Terminal PTY | 🔲 Pending | 17 | [docs/tasks/phase-5-terminal.md](docs/tasks/phase-5-terminal.md) |
-| Phase 6: Diff Viewer | 🔲 Pending | 5 | [docs/tasks/phase-6-diff.md](docs/tasks/phase-6-diff.md) |
+| Phase 6: Diff Viewer | ✅ Done | 0 | [docs/tasks/phase-6-diff.md](docs/tasks/phase-6-diff.md) |
 | Phase 7: Build & Distribution | 🔲 Pending | 34 | [docs/tasks/phase-7-build.md](docs/tasks/phase-7-build.md) |
 | Phase 8: Deployment & Docs | 🔲 Pending | 31 | [docs/tasks/phase-8-deploy.md](docs/tasks/phase-8-deploy.md) |
 | Phase 9: Notifications & OpenClaw | 🔲 Pending | 50 | [docs/tasks/phase-9-notifications.md](docs/tasks/phase-9-notifications.md) |

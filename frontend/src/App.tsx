@@ -155,7 +155,7 @@ function RootLayout() {
   const connected = useWsStore(s => s.connected);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className={`bg-background text-foreground ${isTaskDetail ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
       {!isTaskDetail && (
         <header className="sticky top-0 z-40 bg-background border-b">
           <div className="flex items-center justify-between h-11 px-4 max-w-5xl mx-auto">
