@@ -281,36 +281,25 @@ tasksRoutes.get('/sessions/:id/commits', async (c) => {
       try { baseMessage = (await git.raw(['log', '-1', '--format=%s', baseSha])).trim(); } catch { /* ignore */ }
     }
 
-    const range = baseSha ? `${baseSha}..HEAD` : 'HEAD';
-    const logOutput = await git.raw(['log', '--format=COMMIT %H %h %an%n%ai%n%s', '--numstat', range]);
+    type LogEntry = { sha: string; shortSha: string; message: string; author: string; date: string };
+    const logResult = await git.log<LogEntry>({
+      format: { sha: '%H', shortSha: '%h', message: '%s', author: '%an', date: '%ai' },
+      from: baseSha || undefined,
+      to: 'HEAD',
+      symmetric: false,
+      '--numstat': null,
+    } as any);
 
-    if (!logOutput.trim()) return c.json({ commits: [], baseSha, baseRef, baseShortSha, baseMessage });
-
-    const commits: {
-      sha: string; shortSha: string; message: string;
-      author: string; date: string;
-      additions: number; deletions: number; filesChanged: number;
-    }[] = [];
-
-    for (const block of logOutput.split(/^COMMIT /m).filter(Boolean)) {
-      const lines = block.split('\n');
-      const headerMatch = lines[0].match(/^(\S+)\s+(\S+)\s+(.+)$/);
-      if (!headerMatch) continue;
-      const [, sha, shortSha, author] = headerMatch;
-      const date = (lines[1] || '').trim();
-      const message = (lines[2] || '').trim();
-
-      let additions = 0, deletions = 0, filesChanged = 0;
-      for (let i = 3; i < lines.length; i++) {
-        const m = lines[i].match(/^(\d+|-)\t(\d+|-)\t/);
-        if (m) {
-          if (m[1] !== '-') additions += parseInt(m[1], 10);
-          if (m[2] !== '-') deletions += parseInt(m[2], 10);
-          filesChanged++;
-        }
-      }
-      commits.push({ sha, shortSha, message, author, date, additions, deletions, filesChanged });
-    }
+    const commits = logResult.all.map(c => ({
+      sha: c.sha,
+      shortSha: c.shortSha,
+      message: c.message,
+      author: c.author,
+      date: c.date,
+      additions: (c as any).diff?.insertions ?? 0,
+      deletions: (c as any).diff?.deletions ?? 0,
+      filesChanged: (c as any).diff?.changed ?? 0,
+    }));
 
     return c.json({ commits, baseSha, baseRef, baseShortSha, baseMessage });
   } catch (err) {
