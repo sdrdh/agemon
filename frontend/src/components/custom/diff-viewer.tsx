@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useState, useRef, type ReactNode, type CSSProperties } from 'react';
 import { parsePatchFiles, parseDiffFromFile, type FileDiffMetadata, type FileContents, type ThemeTypes, type ThemesType } from '@pierre/diffs';
 import { FileDiff as PierreFileDiff, Virtualizer } from '@pierre/diffs/react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCommit, ArrowLeft } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import type { ThemeId } from '@/lib/theme';
@@ -63,6 +63,63 @@ function useDiffData(sessionId: string, live: boolean) {
   }
 
   return { rawDiff, loading, liveUpdating };
+}
+
+// ─── Commit data fetching ─────────────────────────────────────────────────────────
+
+interface CommitInfo {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: string;
+  date: string;
+  additions: number;
+  deletions: number;
+  filesChanged: number;
+}
+
+function useCommitList(sessionId: string, enabled: boolean) {
+  const [commits, setCommits] = useState<CommitInfo[]>([]);
+  const [baseSha, setBaseSha] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setLoading(true);
+    setError(null);
+    fetch(`/api/sessions/${sessionId}/commits`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          setError(data.error);
+        } else {
+          setCommits(data.commits || []);
+          setBaseSha(data.baseSha || '');
+        }
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [sessionId, enabled]);
+
+  return { commits, baseSha, loading, error };
+}
+
+function useCommitDiff(sessionId: string, sha: string | null) {
+  const [rawDiff, setRawDiff] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!sha) { setRawDiff(''); return; }
+    setLoading(true);
+    fetch(`/api/sessions/${sessionId}/commits/${sha}/diff`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setRawDiff(data.raw || ''))
+      .catch(() => setRawDiff(''))
+      .finally(() => setLoading(false));
+  }, [sessionId, sha]);
+
+  return { rawDiff, loading };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────────
@@ -335,7 +392,188 @@ function FileDiffCollapsed({ file, stats, rawDiff, sessionId, diffTheme, themeTy
   );
 }
 
+// ─── Commit list ────────────────────────────────────────────────────────────────
+
+function formatCommitDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    const diffDays = Math.floor(diffHrs / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+function CommitListItem({ commit, onClick }: { commit: CommitInfo; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/50 border-b border-border transition-colors"
+    >
+      <GitCommit className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{commit.message}</p>
+        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+          <span className="font-mono">{commit.shortSha}</span>
+          <span>·</span>
+          <span>{commit.author}</span>
+          <span>·</span>
+          <span>{formatCommitDate(commit.date)}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 text-xs shrink-0 mt-0.5">
+        <span className="text-muted-foreground">{commit.filesChanged}f</span>
+        <span className="text-emerald-500">+{commit.additions}</span>
+        <span className="text-red-500">−{commit.deletions}</span>
+      </div>
+    </button>
+  );
+}
+
+/** Full commit diff view: back button + file list for a single commit */
+function CommitDiffView({ sessionId, commit, onBack, diffTheme, themeType, styleOverrides, diffStyle }: {
+  sessionId: string;
+  commit: CommitInfo;
+  onBack: () => void;
+  diffTheme: ThemesType;
+  themeType: ThemeTypes;
+  styleOverrides: CSSProperties;
+  diffStyle: 'unified' | 'split';
+}) {
+  const { rawDiff, loading } = useCommitDiff(sessionId, commit.sha);
+
+  const files = useMemo(() => {
+    if (!rawDiff) return [];
+    try {
+      const patches = parsePatchFiles(rawDiff);
+      const allFiles: { file: FileDiffMetadata; stats: { additions: number; deletions: number } }[] = [];
+      for (const patch of patches) {
+        for (const file of patch.files) {
+          allFiles.push({ file, stats: getFileStats(file) });
+        }
+      }
+      return allFiles;
+    } catch {
+      return [];
+    }
+  }, [rawDiff]);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
+        <button onClick={onBack} className="p-1 rounded-md hover:bg-muted">
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{commit.message}</p>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono">{commit.shortSha}</span>
+            {' · '}{commit.author}
+            {' · '}{formatCommitDate(commit.date)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs shrink-0">
+          <span className="text-emerald-500">+{commit.additions}</span>
+          <span className="text-red-500">−{commit.deletions}</span>
+        </div>
+      </div>
+      {/* Diff content */}
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="p-3 text-sm text-muted-foreground animate-pulse">Loading commit diff...</div>
+        ) : files.length === 0 ? (
+          <p className="text-muted-foreground text-sm p-3">No file changes in this commit</p>
+        ) : (
+          files.map(({ file, stats }) => (
+            <CommitFileDiffCollapsed
+              key={file.name}
+              file={file}
+              stats={stats}
+              rawDiff={rawDiff}
+              diffTheme={diffTheme}
+              themeType={themeType}
+              styleOverrides={styleOverrides}
+              diffStyle={diffStyle}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** File diff within a commit — no full-file expansion needed, diff is self-contained */
+function CommitFileDiffCollapsed({ file, stats, rawDiff, diffTheme, themeType, styleOverrides, diffStyle }: {
+  file: FileDiffMetadata;
+  stats: { additions: number; deletions: number };
+  rawDiff: string;
+  diffTheme: ThemesType;
+  themeType: ThemeTypes;
+  styleOverrides: CSSProperties;
+  diffStyle: 'unified' | 'split';
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const rawSection = useMemo(
+    () => expanded ? extractRawFileSection(rawDiff, file.name) : '',
+    [expanded, rawDiff, file.name],
+  );
+
+  return (
+    <div className="border-b border-border">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {expanded
+            ? <ChevronDown className="h-4 w-4 shrink-0" />
+            : <ChevronRight className="h-4 w-4 shrink-0" />}
+          <span className="text-sm font-mono truncate">{file.name}</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs shrink-0 ml-2">
+          <span className="text-emerald-500">+{stats.additions}</span>
+          <span className="text-red-500">−{stats.deletions}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-border">
+          <DiffErrorBoundary fallback={rawSection}>
+            <Virtualizer>
+              <PierreFileDiff
+                fileDiff={file}
+                style={styleOverrides}
+                options={{
+                  expandUnchanged: false,
+                  hunkSeparators: 'line-info',
+                  expansionLineCount: 20,
+                  theme: diffTheme,
+                  themeType,
+                  diffStyle,
+                  overflow: 'wrap',
+                  disableFileHeader: true,
+                }}
+              />
+            </Virtualizer>
+          </DiffErrorBoundary>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────────
+
+type DiffTab = 'changes' | 'commits';
 
 export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
   const { rawDiff, loading, liveUpdating } = useDiffData(sessionId, live);
@@ -345,6 +583,10 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
   const diffTheme = useMemo(() => getDiffsTheme(themeId), [themeId]);
   const styleOverrides = useDiffStyleOverrides();
   const diffStyle = isDesktop ? 'split' as const : 'unified' as const;
+
+  const [tab, setTab] = useState<DiffTab>('changes');
+  const [selectedCommit, setSelectedCommit] = useState<CommitInfo | null>(null);
+  const { commits, loading: commitsLoading, error: commitsError } = useCommitList(sessionId, tab === 'commits');
 
   const parsedDiffs = useMemo(() => {
     if (!rawDiff) return [];
@@ -365,6 +607,21 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
     return allFiles;
   }, [parsedDiffs]);
 
+  // If viewing a commit diff, show that instead of the tab layout
+  if (selectedCommit) {
+    return (
+      <CommitDiffView
+        sessionId={sessionId}
+        commit={selectedCommit}
+        onBack={() => setSelectedCommit(null)}
+        diffTheme={diffTheme}
+        themeType={themeType}
+        styleOverrides={styleOverrides}
+        diffStyle={diffStyle}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground text-sm p-3">
@@ -373,28 +630,87 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
     );
   }
 
-  if (files.length === 0) {
-    return <p className="text-muted-foreground text-sm p-3">No changes</p>;
-  }
-
   return (
     <div className="flex flex-col h-full">
-      <DiffSummaryBar files={files} liveUpdating={liveUpdating} />
-      <div className="flex-1 overflow-auto">
-        {files.map(({ file, stats }) => (
-          <FileDiffCollapsed
-            key={file.name}
-            file={file}
-            stats={stats}
-            rawDiff={rawDiff}
-            sessionId={sessionId}
-            diffTheme={diffTheme}
-            themeType={themeType}
-            styleOverrides={styleOverrides}
-            diffStyle={diffStyle}
-          />
-        ))}
+      {/* Tab bar */}
+      <div className="flex items-center border-b border-border shrink-0">
+        <button
+          onClick={() => setTab('changes')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'changes'
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Changes
+          {files.length > 0 && (
+            <span className="ml-1.5 text-xs text-muted-foreground">{files.length}</span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('commits')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'commits'
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Commits
+          {commits.length > 0 && (
+            <span className="ml-1.5 text-xs text-muted-foreground">{commits.length}</span>
+          )}
+        </button>
+        {liveUpdating && tab === 'changes' && (
+          <span className="flex items-center gap-1.5 ml-auto mr-3 text-xs text-muted-foreground">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live
+          </span>
+        )}
       </div>
+
+      {/* Tab content */}
+      {tab === 'changes' ? (
+        files.length === 0 ? (
+          <p className="text-muted-foreground text-sm p-3">No uncommitted changes</p>
+        ) : (
+          <>
+            <DiffSummaryBar files={files} liveUpdating={false} />
+            <div className="flex-1 overflow-auto">
+              {files.map(({ file, stats }) => (
+                <FileDiffCollapsed
+                  key={file.name}
+                  file={file}
+                  stats={stats}
+                  rawDiff={rawDiff}
+                  sessionId={sessionId}
+                  diffTheme={diffTheme}
+                  themeType={themeType}
+                  styleOverrides={styleOverrides}
+                  diffStyle={diffStyle}
+                />
+              ))}
+            </div>
+          </>
+        )
+      ) : (
+        <div className="flex-1 overflow-auto">
+          {commitsLoading ? (
+            <div className="p-3 text-sm text-muted-foreground animate-pulse">Loading commits...</div>
+          ) : commitsError ? (
+            <p className="text-muted-foreground text-sm p-3">{commitsError}</p>
+          ) : commits.length === 0 ? (
+            <p className="text-muted-foreground text-sm p-3">No commits found</p>
+          ) : (
+            commits.map(commit => (
+              <CommitListItem
+                key={commit.sha}
+                commit={commit}
+                onClick={() => setSelectedCommit(commit)}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

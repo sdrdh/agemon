@@ -211,3 +211,104 @@ tasksRoutes.get('/sessions/:id/diff/stream', async (c) => {
     },
   });
 });
+
+// ─── Commit history ──────────────────────────────────────────────────────────────
+
+const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+// GET /sessions/:id/commits — list commits ahead of base branch
+tasksRoutes.get('/sessions/:id/commits', async (c) => {
+  const sessionId = c.req.param('id');
+
+  const cwd = resolveSessionCwd(sessionId);
+  if (!cwd) return c.json({ error: 'Session not found or no working directory' }, 404);
+
+  try {
+    const git = simpleGit(cwd);
+
+    // Find the merge-base with origin/main or origin/master
+    let baseSha = '';
+    for (const ref of ['origin/main', 'origin/master']) {
+      try {
+        baseSha = (await git.raw(['merge-base', 'HEAD', ref])).trim();
+        break;
+      } catch { /* try next */ }
+    }
+    if (!baseSha) {
+      // Fallback: first commit in repo (show all history)
+      try {
+        baseSha = (await git.raw(['rev-list', '--max-parents=0', 'HEAD'])).trim().split('\n')[0];
+      } catch { /* empty repo */ }
+    }
+
+    const range = baseSha ? `${baseSha}..HEAD` : 'HEAD';
+
+    // Single git log with numstat to avoid N+1 queries
+    // Format: commit line, then numstat lines, separated by empty line
+    const logOutput = await git.raw([
+      'log', '--format=COMMIT %H %h %an%n%ai%n%s', '--numstat', range,
+    ]);
+
+    if (!logOutput.trim()) return c.json({ commits: [], baseSha });
+
+    const commits: {
+      sha: string; shortSha: string; message: string;
+      author: string; date: string;
+      additions: number; deletions: number; filesChanged: number;
+    }[] = [];
+
+    // Parse the interleaved output
+    const blocks = logOutput.split(/^COMMIT /m).filter(Boolean);
+    for (const block of blocks) {
+      const lines = block.split('\n');
+      // First line: sha shortSha author
+      const headerMatch = lines[0].match(/^(\S+)\s+(\S+)\s+(.+)$/);
+      if (!headerMatch) continue;
+      const [, sha, shortSha, author] = headerMatch;
+      const date = (lines[1] || '').trim();
+      const message = (lines[2] || '').trim();
+
+      // numstat lines follow after blank line
+      let additions = 0, deletions = 0, filesChanged = 0;
+      for (let i = 3; i < lines.length; i++) {
+        const m = lines[i].match(/^(\d+|-)\t(\d+|-)\t/);
+        if (m) {
+          if (m[1] !== '-') additions += parseInt(m[1], 10);
+          if (m[2] !== '-') deletions += parseInt(m[2], 10);
+          filesChanged++;
+        }
+      }
+
+      commits.push({ sha, shortSha, message, author, date, additions, deletions, filesChanged });
+    }
+
+    return c.json({ commits, baseSha });
+  } catch (err) {
+    return c.json({ error: 'Failed to list commits', details: (err as Error).message }, 500);
+  }
+});
+
+// GET /sessions/:id/commits/:sha/diff — diff for a single commit
+tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
+  const sessionId = c.req.param('id');
+  const sha = c.req.param('sha');
+
+  const cwd = resolveSessionCwd(sessionId);
+  if (!cwd) return c.json({ error: 'Session not found or no working directory' }, 404);
+
+  try {
+    const git = simpleGit(cwd);
+
+    // Try sha^..sha first; for root commits, diff against empty tree
+    let diff: string;
+    try {
+      diff = await git.raw(['diff', '-U20', `${sha}^`, sha]);
+    } catch {
+      diff = await git.raw(['diff', '-U20', EMPTY_TREE_SHA, sha]);
+    }
+
+    return c.json({ raw: diff });
+  } catch (err) {
+    return c.json({ error: 'Failed to get commit diff', details: (err as Error).message }, 500);
+  }
+});
