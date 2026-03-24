@@ -11,9 +11,8 @@
 **Estimated Time:** 8 hours
 
 **Deliverables:**
-- [x] Backend endpoint: `GET /tasks/:id/diff` — runs `git diff` in the task's worktree(s) and returns raw unified diff
-- [x] Backend endpoint: `GET /sessions/:id/diff` — for non-task sessions using cwd provider
-- [x] SSE endpoints for live updates: `GET /tasks/:id/diff/stream` and `GET /sessions/:id/diff/stream`
+- [x] Backend endpoints: `GET /sessions/:id/diff` and `GET /sessions/:id/diff/stream` (SSE) — all diff access is session-scoped; task sessions resolve through the task's workspace provider
+
 - [x] Frontend: diff viewer component with syntax-highlighted diff via @pierre/diffs
 - [x] Collapsible file sections (click to expand/collapse)
 - [x] "View Changes" button on task detail page and session detail page
@@ -45,7 +44,7 @@
 
 | Component | File | Description |
 |---|---|---|
-| Backend routes | `backend/src/routes/tasks.ts` | GET /tasks/:id/diff, /sessions/:id/diff and SSE streams |
+| Backend routes | `backend/src/routes/tasks.ts` | GET /sessions/:id/diff and SSE stream — session-scoped, task sessions resolve via task workspace |
 | getDiff impl | `backend/src/lib/plugins/workspace-default.ts` | git-worktree provider |
 | getDiff impl | `backend/src/server.ts` | cwd provider |
 | DiffViewer component | `frontend/src/components/custom/diff-viewer.tsx` | Collapsible file list |

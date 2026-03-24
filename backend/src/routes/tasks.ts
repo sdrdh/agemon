@@ -113,37 +113,19 @@ const SSE_HEADERS = {
   'Connection': 'keep-alive',
 };
 
-// GET /tasks/:id/diff
-tasksRoutes.get('/tasks/:id/diff', async (c) => {
-  const taskId = c.req.param('id');
-  const task = db.getTask(taskId);
-  if (!task) return c.json({ error: 'Task not found' }, 404);
 
-  const workspace = parseWorkspace(task.workspace_json);
-  const repos = await getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
-  return c.json({ repos });
-});
-
-// GET /tasks/:id/diff/stream
-tasksRoutes.get('/tasks/:id/diff/stream', (c) => {
-  const taskId = c.req.param('id');
-
-  const stream = createDiffStream(
-    c.req.raw.signal,
-    () => {
-      const task = db.getTask(taskId);
-      if (!task) throw new Error('Task not found');
-      const workspace = parseWorkspace(task.workspace_json);
-      return getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
-    },
-    () => {
-      const sessions = db.listSessions(taskId);
-      return sessions.some(s => s.state === 'running' || s.state === 'ready');
-    },
-  );
-
-  return new Response(stream, { headers: SSE_HEADERS });
-});
+function resolveSessionDiffMeta(session: { meta_json?: string | null }): { provider: string; meta: Record<string, unknown> } {
+  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+  const taskId = meta.task_id as string | undefined;
+  if (taskId) {
+    // Task session: use the task's workspace_json (same as /tasks/:id/diff)
+    const task = db.getTask(taskId);
+    const workspace = parseWorkspace(task?.workspace_json);
+    return { provider: workspace.provider, meta: { task_id: taskId, ...workspace.config } };
+  }
+  // Standalone cwd session
+  return { provider: (meta.workspaceProvider as string | undefined) ?? 'cwd', meta };
+}
 
 // GET /sessions/:id/diff
 tasksRoutes.get('/sessions/:id/diff', async (c) => {
@@ -151,11 +133,8 @@ tasksRoutes.get('/sessions/:id/diff', async (c) => {
   const session = db.getSession(sessionId);
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
-  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
-  const providerName = meta.workspace?.provider ?? 'cwd';
-  const config = meta.workspace?.config ?? {};
-
-  const repos = await getDiffRepos(providerName, { ...meta, ...config });
+  const { provider, meta } = resolveSessionDiffMeta(session);
+  const repos = await getDiffRepos(provider, meta);
   return c.json({ repos });
 });
 
@@ -168,10 +147,8 @@ tasksRoutes.get('/sessions/:id/diff/stream', (c) => {
     () => {
       const session = db.getSession(sessionId);
       if (!session) throw new Error('Session not found');
-      const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
-      const providerName = meta.workspace?.provider ?? 'cwd';
-      const config = meta.workspace?.config ?? {};
-      return getDiffRepos(providerName, { ...meta, ...config });
+      const { provider, meta } = resolveSessionDiffMeta(session);
+      return getDiffRepos(provider, meta);
     },
     () => {
       const session = db.getSession(sessionId);
