@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { simpleGit } from 'simple-git';
 import { db } from '../db/client.ts';
 import { workspaceRegistry } from '../lib/plugins/workspace-registry.ts';
@@ -25,7 +25,8 @@ async function getDiffRepos(providerName: string, meta: Record<string, unknown>)
 /**
  * Resolve the git repo root for a session + repo name.
  * - Task sessions: uses gitManager.getWorktreePath(taskId, repoName)
- * - Standalone cwd sessions: single-repo by definition, returns meta.cwd (repoName ignored)
+ * - Standalone cwd sessions (single-repo): repoName is the basename of cwd, return cwd directly.
+ * - Standalone cwd sessions (multi-repo): repoName is a subdirectory, return join(cwd, repoName).
  */
 function resolveRepoCwd(sessionId: string, repoName: string): string | null {
   const session = db.getSession(sessionId);
@@ -36,7 +37,14 @@ function resolveRepoCwd(sessionId: string, repoName: string): string | null {
     if (!repoName) return null;
     return gitManager.getWorktreePath(taskId, repoName);
   }
-  return (meta.cwd as string) ?? null;
+  const cwd = meta.cwd as string | undefined;
+  if (!cwd) return null;
+  // For multi-repo cwd sessions, repoName is a subdirectory of cwd.
+  // For single-repo, repoName is the basename of cwd itself — return cwd directly.
+  if (repoName && repoName !== basename(cwd)) {
+    return join(cwd, repoName);
+  }
+  return cwd;
 }
 
 const POLL_INTERVAL_MS = 5000;
