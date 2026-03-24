@@ -31,6 +31,12 @@ export interface PluginKit {
   StatusBadge: ReactComponent<{
     status: string;
   }>;
+
+  /** Renders a diff viewer for a task's changes */
+  DiffViewer: ReactComponent<{
+    taskId: string;
+    live?: boolean;
+  }>;
 }
 
 /** Partial version used as the context default — all members optional. */

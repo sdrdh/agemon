@@ -23,6 +23,7 @@ import { PluginKitContext } from './lib/plugin-kit-context';
 import { SessionList } from './components/custom/session-list';
 import { ChatPanel } from './components/custom/chat-panel';
 import { StatusBadge } from './components/custom/status-badge';
+import { DiffViewer } from './components/custom/diff-viewer';
 import './index.css';
 import App, { router } from './App.tsx';
 
@@ -48,7 +49,7 @@ import App, { router } from './App.tsx';
   /** The React context object — plugins call useContext(window.__AGEMON__.PluginKitContext). */
   PluginKitContext,
   /** Host component kit — plugins import from '@agemon/host' which resolves to window.__AGEMON__.host. */
-  host: { SessionList, ChatPanel, StatusBadge },
+  host: { SessionList, ChatPanel, StatusBadge, DiffViewer },
 };
 
 function GlobalToast() {

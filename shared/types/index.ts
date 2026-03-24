@@ -28,6 +28,7 @@ export interface Task {
   agent: AgentType;
   archived: boolean;
   workspace?: TaskWorkspace;
+  workspace_json?: string | null; // Raw JSON from DB
   created_at: string; // ISO 8601
 }
 

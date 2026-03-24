@@ -8,6 +8,7 @@ import type { WorkspaceProvider, SessionMeta, WorkspaceResult } from './workspac
 import { getTaskDir, refreshTaskContext } from '../context.ts';
 import { db } from '../../db/client.ts';
 import { mkdir } from 'fs/promises';
+import { gitManager } from '../git.ts';
 
 export const defaultTaskWorkspaceProvider: WorkspaceProvider = {
   async prepare(session: SessionMeta, signal: AbortSignal): Promise<WorkspaceResult> {
@@ -28,5 +29,27 @@ export const defaultTaskWorkspaceProvider: WorkspaceProvider = {
     await refreshTaskContext(task);
 
     return { cwd: taskDir };
+  },
+
+  async getDiff(session: SessionMeta): Promise<string | null> {
+    const taskId = session.meta.task_id as string | undefined;
+    if (!taskId) return null;
+
+    const task = db.getTask(taskId);
+    if (!task?.repos) return null;
+
+    const git = gitManager;
+    const diffs: string[] = [];
+
+    for (const repo of task.repos) {
+      try {
+        const diff = await git.getDiff(taskId, repo.name);
+        if (diff) diffs.push(diff);
+      } catch {
+        // Skip repos where diff fails
+      }
+    }
+
+    return diffs.length > 0 ? diffs.join('\n') : null;
   },
 };

@@ -14,6 +14,7 @@ import {
   Info,
   CheckCircle2,
   Archive,
+  Diff,
 } from 'lucide-react';
 
 // ─── Internal router ─────────────────────────────────────────────────────────
@@ -432,7 +433,7 @@ function TaskInfoDrawer({
 // ─── Task Detail ──────────────────────────────────────────────────────────────
 
 function TaskDetail({ id }: { id: string }) {
-  const { SessionList, ChatPanel, StatusBadge: HostStatusBadge } = (window as any).__AGEMON__?.host ?? {};
+  const { SessionList, ChatPanel, StatusBadge: HostStatusBadge, DiffViewer } = (window as any).__AGEMON__?.host ?? {};
   const api = (window as any).__AGEMON__?.api;
 
   const [task, setTask] = useState<Task | null>(null);
@@ -441,6 +442,7 @@ function TaskDetail({ id }: { id: string }) {
   const [markingDone, setMarkingDone] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
 
   // Read initial session from URL search params (passed by dashboard navigation)
   const [selectedSession, setSelectedSession] = useState<string | null>(() => {
@@ -573,6 +575,15 @@ function TaskDetail({ id }: { id: string }) {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-semibold flex-1 truncate">{task.title}</h1>
+          {DiffViewer && (
+            <button
+              onClick={() => setDiffOpen(true)}
+              className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
+              aria-label="View changes"
+            >
+              <Diff className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={() => setInfoOpen(true)}
             className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
@@ -638,6 +649,29 @@ function TaskDetail({ id }: { id: string }) {
         onArchive={handleArchive}
         archiving={archiving}
       />
+
+      {diffOpen && DiffViewer && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/40"
+            onClick={() => setDiffOpen(false)}
+          />
+          <div className="fixed inset-4 z-50 bg-background border rounded-lg shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+              <h2 className="text-sm font-semibold">Changes</h2>
+              <button
+                onClick={() => setDiffOpen(false)}
+                className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <DiffViewer taskId={id} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

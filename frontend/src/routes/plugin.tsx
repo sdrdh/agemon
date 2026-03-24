@@ -4,6 +4,7 @@ import { PluginKitContext } from '@/lib/plugin-kit-context';
 import { SessionList } from '@/components/custom/session-list';
 import { ChatPanel } from '@/components/custom/chat-panel';
 import { StatusBadge } from '@/components/custom/status-badge';
+import { DiffViewer } from '@/components/custom/diff-viewer';
 import type { PluginKit } from '../../../shared/types/plugin-kit';
 
 async function fetchBuildError(pluginId: string): Promise<string | null> {
@@ -24,6 +25,7 @@ const pluginKit: PluginKit = {
   SessionList,
   ChatPanel,
   StatusBadge: StatusBadgeForKit,
+  DiffViewer,
 };
 
 export default function PluginPage() {

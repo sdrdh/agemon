@@ -1,4 +1,4 @@
-import { mkdir, symlink, lstat, stat } from 'fs/promises';
+import { mkdir, symlink, lstat, stat, readdir } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { db } from './db/client.ts';
@@ -8,6 +8,7 @@ import { AGEMON_DIR } from './lib/git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import { createApp, websocket } from './app.ts';
 import { registerBuiltinAgents } from './lib/plugins/agent-registry.ts';
+import type { SessionMeta } from './lib/plugins/workspace.ts';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -104,6 +105,8 @@ const { defaultTaskWorkspaceProvider } = await import('./lib/plugins/workspace-d
 workspaceRegistry.register('git-worktree', defaultTaskWorkspaceProvider);
 
 // cwd: run in any local directory, no git setup required
+import { simpleGit } from 'simple-git';
+
 workspaceRegistry.register('cwd', {
   async prepare(session) {
     const cwd = session.meta.cwd as string | undefined;
@@ -111,6 +114,37 @@ workspaceRegistry.register('cwd', {
     if (!(await stat(cwd).then(() => true).catch(() => false)))
       throw new Error(`[workspace:cwd] directory not found: ${cwd}`);
     return { cwd };
+  },
+
+  async getDiff(session: SessionMeta): Promise<string | null> {
+    const cwd = session.meta.cwd as string | undefined;
+    if (!cwd) return null;
+
+    const git = simpleGit(cwd);
+    const isRepo = await git.checkIsRepo().catch(() => false);
+
+    if (isRepo) {
+      const diff = await git.diff(['--', '.']);
+      return diff || null;
+    }
+
+    const entries = await readdir(cwd, { withFileTypes: true }).catch(() => []);
+    const subrepoDiffs: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const subpath = join(cwd, entry.name);
+        const subgit = simpleGit(subpath);
+        const isSubrepo = await subgit.checkIsRepo().catch(() => false);
+
+        if (isSubrepo) {
+          const diff = await subgit.diff(['--', '.']).catch(() => '');
+          if (diff) subrepoDiffs.push(`\n### ${entry.name}\n\n${diff}`);
+        }
+      }
+    }
+
+    return subrepoDiffs.length > 0 ? subrepoDiffs.join('\n') : null;
   },
 });
 
@@ -162,6 +196,9 @@ app.route('/api', systemRoutes);
 
 const { renderersRoutes } = await import('./routes/renderers.ts');
 app.route('/api/renderers', renderersRoutes);
+
+const { tasksRoutes } = await import('./routes/tasks.ts');
+app.route('/api', tasksRoutes);
 
 // ─── Plugins ─────────────────────────────────────────────────────────────────
 const { EventBridge } = await import('./lib/plugins/event-bridge.ts');
