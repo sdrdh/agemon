@@ -38,16 +38,17 @@ export const defaultTaskWorkspaceProvider: WorkspaceProvider = {
     const task = db.getTask(taskId);
     if (!task?.repos) return null;
 
-    const results: RepoDiff[] = [];
-    for (const repo of task.repos) {
-      try {
+    const settled = await Promise.allSettled(
+      task.repos.map(async (repo) => {
         const cwd = gitManager.getWorktreePath(taskId, repo.name);
         const diff = await gitManager.getDiff(taskId, repo.name);
-        results.push({ repoName: repo.name, cwd, diff: diff ?? '' });
-      } catch {
-        // Skip repos where diff fails
-      }
-    }
+        return { repoName: repo.name, cwd, diff: diff ?? '' };
+      }),
+    );
+
+    const results = settled
+      .filter((r): r is PromiseFulfilledResult<RepoDiff> => r.status === 'fulfilled')
+      .map(r => r.value);
 
     return results.length > 0 ? results : null;
   },

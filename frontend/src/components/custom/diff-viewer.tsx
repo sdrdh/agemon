@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, GitCommit, ArrowLeft } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import type { ThemeId } from '@/lib/theme';
+import { authHeaders } from '@/lib/api';
+import { formatRelativeTime } from '@/lib/time-utils';
 
 interface RepoDiff {
   repoName: string;
@@ -17,6 +19,53 @@ interface DiffViewerProps {
   live?: boolean;
 }
 
+interface DiffRenderProps {
+  diffTheme: ThemesType;
+  themeType: ThemeTypes;
+  styleOverrides: CSSProperties;
+  diffStyle: 'unified' | 'split';
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────────
+
+function apiFetch(url: string): Promise<Response> {
+  return fetch(url, { headers: authHeaders(), credentials: 'include' });
+}
+
+function getFileStats(file: FileDiffMetadata) {
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of file.hunks) {
+    additions += hunk.additionLines;
+    deletions += hunk.deletionLines;
+  }
+  return { additions, deletions };
+}
+
+function parseFilesFromDiff(rawDiff: string): { file: FileDiffMetadata; stats: { additions: number; deletions: number } }[] {
+  if (!rawDiff) return [];
+  try {
+    const patches = parsePatchFiles(rawDiff);
+    return patches.flatMap(p => p.files.map(file => ({ file, stats: getFileStats(file) })));
+  } catch {
+    return [];
+  }
+}
+
+function extractRawFileSection(rawDiff: string, fileName: string): string {
+  const lines = rawDiff.split('\n');
+  const sections: string[] = [];
+  let capturing = false;
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      if (capturing) break;
+      if (line.includes(` b/${fileName}`)) capturing = true;
+    }
+    if (capturing) sections.push(line);
+  }
+  return sections.join('\n');
+}
+
 // ─── Data fetching ────────────────────────────────────────────────────────────────
 
 function useDiffData(sessionId: string, live: boolean) {
@@ -26,7 +75,7 @@ function useDiffData(sessionId: string, live: boolean) {
 
   useEffect(() => {
     if (!live) {
-      fetch(`/api/sessions/${sessionId}/diff`)
+      apiFetch(`/api/sessions/${sessionId}/diff`)
         .then(r => r.json())
         .then(data => setRepos(data.repos ?? []))
         .catch(() => {})
@@ -92,7 +141,7 @@ function useRefs(sessionId: string, repoName: string, enabled: boolean) {
   useEffect(() => {
     if (!enabled || !repoName) return;
     setRefs(null);
-    fetch(`/api/sessions/${sessionId}/refs?repo=${encodeURIComponent(repoName)}`, { credentials: 'include' })
+    apiFetch(`/api/sessions/${sessionId}/refs?repo=${encodeURIComponent(repoName)}`)
       .then(r => r.json())
       .then(data => { if (!data.error) setRefs(data); })
       .catch(() => {});
@@ -109,11 +158,13 @@ function useCommitList(sessionId: string, repoName: string, enabled: boolean, ba
 
   useEffect(() => {
     if (!enabled || !repoName) return;
+    setCommits([]);
+    setBase(null);
     setLoading(true);
     setError(null);
     const repoParam = `repo=${encodeURIComponent(repoName)}`;
     const baseParam = baseRef ? `&base=${encodeURIComponent(baseRef)}` : '';
-    fetch(`/api/sessions/${sessionId}/commits?${repoParam}${baseParam}`, { credentials: 'include' })
+    apiFetch(`/api/sessions/${sessionId}/commits?${repoParam}${baseParam}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) {
@@ -127,8 +178,6 @@ function useCommitList(sessionId: string, repoName: string, enabled: boolean, ba
               ref: data.baseRef || '',
               message: data.baseMessage || '',
             });
-          } else {
-            setBase(null);
           }
         }
       })
@@ -148,7 +197,7 @@ function useCommitDiff(sessionId: string, repoName: string, sha: string | null, 
     setLoading(true);
     const repoParam = `repo=${encodeURIComponent(repoName)}`;
     const toParam = toSha ? `&to=${toSha}` : '';
-    fetch(`/api/sessions/${sessionId}/commits/${sha}/diff?${repoParam}${toParam}`, { credentials: 'include' })
+    apiFetch(`/api/sessions/${sessionId}/commits/${sha}/diff?${repoParam}${toParam}`)
       .then(r => r.json())
       .then(data => setRawDiff(data.raw || ''))
       .catch(() => setRawDiff(''))
@@ -156,32 +205,6 @@ function useCommitDiff(sessionId: string, repoName: string, sha: string | null, 
   }, [sessionId, repoName, sha, toSha]);
 
   return { rawDiff, loading };
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────────
-
-function getFileStats(file: FileDiffMetadata) {
-  let additions = 0;
-  let deletions = 0;
-  for (const hunk of file.hunks) {
-    additions += hunk.additionLines;
-    deletions += hunk.deletionLines;
-  }
-  return { additions, deletions };
-}
-
-function extractRawFileSection(rawDiff: string, fileName: string): string {
-  const lines = rawDiff.split('\n');
-  const sections: string[] = [];
-  let capturing = false;
-  for (const line of lines) {
-    if (line.startsWith('diff --git ')) {
-      if (capturing) break;
-      if (line.includes(` b/${fileName}`)) capturing = true;
-    }
-    if (capturing) sections.push(line);
-  }
-  return sections.join('\n');
 }
 
 // ─── Theme integration ───────────────────────────────────────────────────────────
@@ -358,7 +381,7 @@ function useFullFileDiff(
     setLoading(true);
 
     const repoParam = `repo=${encodeURIComponent(repoName)}`;
-    fetch(`/api/sessions/${sessionId}/file?path=${encodeURIComponent(partialFile.name)}&${repoParam}`, { credentials: 'include' })
+    apiFetch(`/api/sessions/${sessionId}/file?path=${encodeURIComponent(partialFile.name)}&${repoParam}`)
       .then(r => r.json())
       .then(({ oldContent, newContent }: { oldContent: string; newContent: string }) => {
         try {
@@ -376,19 +399,24 @@ function useFullFileDiff(
   return { fileDiff: fullDiff ?? partialFile, loading };
 }
 
-function FileDiffCollapsed({ file, stats, rawDiff, sessionId, repoName, diffTheme, themeType, styleOverrides, diffStyle }: {
+// Unified collapsed file diff — used in both working-tree changes (with sessionId/repoName for full-file fetch)
+// and commit diffs (no sessionId, renders the parsed file directly).
+function FileDiffCollapsed({ file, stats, rawDiff, sessionId, repoName, ...renderProps }: {
   file: FileDiffMetadata;
   stats: { additions: number; deletions: number };
   rawDiff: string;
-  sessionId: string;
-  repoName: string;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
+  sessionId?: string;
+  repoName?: string;
+} & DiffRenderProps) {
   const [expanded, setExpanded] = useState(false);
-  const { fileDiff, loading: fileLoading } = useFullFileDiff(sessionId, repoName, file, expanded);
+  const shouldFetch = expanded && !!sessionId;
+  const { fileDiff, loading: fileLoading } = useFullFileDiff(
+    sessionId ?? '',
+    repoName ?? '',
+    file,
+    shouldFetch,
+  );
+  const { diffTheme, themeType, styleOverrides, diffStyle } = renderProps;
 
   const rawSection = useMemo(
     () => expanded ? extractRawFileSection(rawDiff, file.name) : '',
@@ -444,24 +472,6 @@ function FileDiffCollapsed({ file, stats, rawDiff, sessionId, repoName, diffThem
 
 // ─── Commit list ────────────────────────────────────────────────────────────────
 
-function formatCommitDate(dateStr: string) {
-  try {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
-    const diffDays = Math.floor(diffHrs / 24);
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch {
-    return dateStr;
-  }
-}
-
 function CommitListItem({ commit, onClick }: { commit: CommitInfo; onClick: () => void }) {
   return (
     <button
@@ -476,7 +486,7 @@ function CommitListItem({ commit, onClick }: { commit: CommitInfo; onClick: () =
           <span>·</span>
           <span>{commit.author}</span>
           <span>·</span>
-          <span>{formatCommitDate(commit.date)}</span>
+          <span>{formatRelativeTime(commit.date)}</span>
         </div>
       </div>
       <div className="flex items-center gap-2 text-xs shrink-0 mt-0.5">
@@ -488,33 +498,14 @@ function CommitListItem({ commit, onClick }: { commit: CommitInfo; onClick: () =
   );
 }
 
-function CommitDiffView({ sessionId, repoName, commit, onBack, diffTheme, themeType, styleOverrides, diffStyle }: {
+function CommitDiffView({ sessionId, repoName, commit, onBack, ...renderProps }: {
   sessionId: string;
   repoName: string;
   commit: CommitInfo;
   onBack: () => void;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
+} & DiffRenderProps) {
   const { rawDiff, loading } = useCommitDiff(sessionId, repoName, commit.sha);
-
-  const files = useMemo(() => {
-    if (!rawDiff) return [];
-    try {
-      const patches = parsePatchFiles(rawDiff);
-      const allFiles: { file: FileDiffMetadata; stats: { additions: number; deletions: number } }[] = [];
-      for (const patch of patches) {
-        for (const file of patch.files) {
-          allFiles.push({ file, stats: getFileStats(file) });
-        }
-      }
-      return allFiles;
-    } catch {
-      return [];
-    }
-  }, [rawDiff]);
+  const files = useMemo(() => parseFilesFromDiff(rawDiff), [rawDiff]);
 
   return (
     <div className="flex flex-col h-full">
@@ -527,7 +518,7 @@ function CommitDiffView({ sessionId, repoName, commit, onBack, diffTheme, themeT
           <p className="text-xs text-muted-foreground">
             <span className="font-mono">{commit.shortSha}</span>
             {' · '}{commit.author}
-            {' · '}{formatCommitDate(commit.date)}
+            {' · '}{formatRelativeTime(commit.date)}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs shrink-0">
@@ -542,15 +533,12 @@ function CommitDiffView({ sessionId, repoName, commit, onBack, diffTheme, themeT
           <p className="text-muted-foreground text-sm p-3">No file changes in this commit</p>
         ) : (
           files.map(({ file, stats }) => (
-            <CommitFileDiffCollapsed
+            <FileDiffCollapsed
               key={file.name}
               file={file}
               stats={stats}
               rawDiff={rawDiff}
-              diffTheme={diffTheme}
-              themeType={themeType}
-              styleOverrides={styleOverrides}
-              diffStyle={diffStyle}
+              {...renderProps}
             />
           ))
         )}
@@ -559,33 +547,14 @@ function CommitDiffView({ sessionId, repoName, commit, onBack, diffTheme, themeT
   );
 }
 
-function RangeDiffView({ sessionId, repoName, base, onBack, diffTheme, themeType, styleOverrides, diffStyle }: {
+function RangeDiffView({ sessionId, repoName, base, onBack, ...renderProps }: {
   sessionId: string;
   repoName: string;
   base: BaseInfo;
   onBack: () => void;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
+} & DiffRenderProps) {
   const { rawDiff, loading } = useCommitDiff(sessionId, repoName, base.sha, 'HEAD');
-
-  const files = useMemo(() => {
-    if (!rawDiff) return [];
-    try {
-      const patches = parsePatchFiles(rawDiff);
-      const allFiles: { file: FileDiffMetadata; stats: { additions: number; deletions: number } }[] = [];
-      for (const patch of patches) {
-        for (const file of patch.files) {
-          allFiles.push({ file, stats: getFileStats(file) });
-        }
-      }
-      return allFiles;
-    } catch {
-      return [];
-    }
-  }, [rawDiff]);
+  const files = useMemo(() => parseFilesFromDiff(rawDiff), [rawDiff]);
 
   return (
     <div className="flex flex-col h-full">
@@ -610,15 +579,12 @@ function RangeDiffView({ sessionId, repoName, base, onBack, diffTheme, themeType
           <>
             <DiffSummaryBar files={files} liveUpdating={false} />
             {files.map(({ file, stats }) => (
-              <CommitFileDiffCollapsed
+              <FileDiffCollapsed
                 key={file.name}
                 file={file}
                 stats={stats}
                 rawDiff={rawDiff}
-                diffTheme={diffTheme}
-                themeType={themeType}
-                styleOverrides={styleOverrides}
-                diffStyle={diffStyle}
+                {...renderProps}
               />
             ))}
           </>
@@ -628,91 +594,14 @@ function RangeDiffView({ sessionId, repoName, base, onBack, diffTheme, themeType
   );
 }
 
-function CommitFileDiffCollapsed({ file, stats, rawDiff, diffTheme, themeType, styleOverrides, diffStyle }: {
-  file: FileDiffMetadata;
-  stats: { additions: number; deletions: number };
-  rawDiff: string;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  const rawSection = useMemo(
-    () => expanded ? extractRawFileSection(rawDiff, file.name) : '',
-    [expanded, rawDiff, file.name],
-  );
-
-  return (
-    <div className="border-b border-border">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {expanded
-            ? <ChevronDown className="h-4 w-4 shrink-0" />
-            : <ChevronRight className="h-4 w-4 shrink-0" />}
-          <span className="text-sm font-mono truncate">{file.name}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs shrink-0 ml-2">
-          <span className="text-emerald-500">+{stats.additions}</span>
-          <span className="text-red-500">−{stats.deletions}</span>
-        </div>
-      </button>
-      {expanded && (
-        <div className="border-t border-border">
-          <DiffErrorBoundary fallback={rawSection}>
-            <Virtualizer>
-              <PierreFileDiff
-                fileDiff={file}
-                style={styleOverrides}
-                options={{
-                  expandUnchanged: false,
-                  hunkSeparators: 'line-info',
-                  expansionLineCount: 20,
-                  theme: diffTheme,
-                  themeType,
-                  diffStyle,
-                  overflow: 'wrap',
-                  disableFileHeader: true,
-                }}
-              />
-            </Virtualizer>
-          </DiffErrorBoundary>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Per-repo Changes view ────────────────────────────────────────────────────────
 
-function RepoChangesView({ repo, sessionId, liveUpdating, diffTheme, themeType, styleOverrides, diffStyle }: {
+function RepoChangesView({ repo, sessionId, liveUpdating, ...renderProps }: {
   repo: RepoDiff;
   sessionId: string;
   liveUpdating: boolean;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
-  const files = useMemo(() => {
-    if (!repo.diff) return [];
-    try {
-      const patches = parsePatchFiles(repo.diff);
-      const allFiles: { file: FileDiffMetadata; stats: { additions: number; deletions: number } }[] = [];
-      for (const patch of patches) {
-        for (const file of patch.files) {
-          allFiles.push({ file, stats: getFileStats(file) });
-        }
-      }
-      return allFiles;
-    } catch {
-      return [];
-    }
-  }, [repo.diff]);
+} & DiffRenderProps) {
+  const files = useMemo(() => parseFilesFromDiff(repo.diff), [repo.diff]);
 
   if (files.length === 0) {
     return <p className="text-muted-foreground text-sm p-3">No uncommitted changes</p>;
@@ -730,10 +619,7 @@ function RepoChangesView({ repo, sessionId, liveUpdating, diffTheme, themeType, 
             rawDiff={repo.diff}
             sessionId={sessionId}
             repoName={repo.repoName}
-            diffTheme={diffTheme}
-            themeType={themeType}
-            styleOverrides={styleOverrides}
-            diffStyle={diffStyle}
+            {...renderProps}
           />
         ))}
       </div>
@@ -743,19 +629,22 @@ function RepoChangesView({ repo, sessionId, liveUpdating, diffTheme, themeType, 
 
 // ─── Per-repo Commits view ────────────────────────────────────────────────────────
 
-function RepoCommitsView({ sessionId, repoName, diffTheme, themeType, styleOverrides, diffStyle }: {
+function RepoCommitsView({ sessionId, repoName, ...renderProps }: {
   sessionId: string;
   repoName: string;
-  diffTheme: ThemesType;
-  themeType: ThemeTypes;
-  styleOverrides: CSSProperties;
-  diffStyle: 'unified' | 'split';
-}) {
+} & DiffRenderProps) {
   const [selectedCommit, setSelectedCommit] = useState<CommitInfo | null>(null);
   const [showRangeDiff, setShowRangeDiff] = useState(false);
   const [selectedBase, setSelectedBase] = useState('');
   const refs = useRefs(sessionId, repoName, true);
   const { commits, base, loading: commitsLoading, error: commitsError } = useCommitList(sessionId, repoName, true, selectedBase);
+
+  // Initialize selectedBase from refs once loaded
+  useEffect(() => {
+    if (refs?.defaultBase && !selectedBase) {
+      setSelectedBase(refs.defaultBase);
+    }
+  }, [refs?.defaultBase, selectedBase]);
 
   if (showRangeDiff && base) {
     return (
@@ -764,10 +653,7 @@ function RepoCommitsView({ sessionId, repoName, diffTheme, themeType, styleOverr
         repoName={repoName}
         base={base}
         onBack={() => setShowRangeDiff(false)}
-        diffTheme={diffTheme}
-        themeType={themeType}
-        styleOverrides={styleOverrides}
-        diffStyle={diffStyle}
+        {...renderProps}
       />
     );
   }
@@ -779,10 +665,7 @@ function RepoCommitsView({ sessionId, repoName, diffTheme, themeType, styleOverr
         repoName={repoName}
         commit={selectedCommit}
         onBack={() => setSelectedCommit(null)}
-        diffTheme={diffTheme}
-        themeType={themeType}
-        styleOverrides={styleOverrides}
-        diffStyle={diffStyle}
+        {...renderProps}
       />
     );
   }
@@ -890,7 +773,9 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
 
   const activeRepo = repos.find(r => r.repoName === selectedRepo) ?? repos[0];
 
-  // File counts per repo for the Changes tab bar
+  // NOTE(E2): repoCounts re-parses each repo's diff string independently here and again in
+  // RepoChangesView. Avoiding this would require lifting the parsed files array up, which
+  // adds prop-drilling complexity. The double-parse is cheap for typical diff sizes.
   const repoCounts = useMemo(() => repos.map(r => {
     try {
       const patches = parsePatchFiles(r.diff || '');
@@ -903,7 +788,7 @@ export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
 
   const totalFiles = repoCounts.reduce((n, r) => n + r.count, 0);
 
-  const sharedProps = { diffTheme, themeType, styleOverrides, diffStyle };
+  const sharedProps: DiffRenderProps = { diffTheme, themeType, styleOverrides, diffStyle };
 
   if (loading) {
     return (

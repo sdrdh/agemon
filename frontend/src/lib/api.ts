@@ -30,6 +30,12 @@ function headers() {
   };
 }
 
+/** Auth-only header for GET fetches that handle their own error handling. */
+export function authHeaders(): Record<string, string> {
+  const key = getKey();
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...init, headers: headers() });
   if (!res.ok) {

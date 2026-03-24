@@ -9,6 +9,13 @@ import type { RepoDiff } from '../lib/plugins/workspace.ts';
 
 export const tasksRoutes = new Hono();
 
+function parseWorkspace(workspaceJson: string | null | undefined): { provider: string; config: Record<string, unknown> } {
+  try {
+    if (workspaceJson) return JSON.parse(workspaceJson);
+  } catch { /* fall through */ }
+  return { provider: 'git-worktree', config: {} };
+}
+
 async function getDiffRepos(providerName: string, meta: Record<string, unknown>): Promise<RepoDiff[]> {
   const provider = workspaceRegistry.get(providerName);
   if (!provider?.getDiff) return [];
@@ -32,94 +39,107 @@ function resolveRepoCwd(sessionId: string, repoName: string): string | null {
   return (meta.cwd as string) ?? null;
 }
 
-// GET /tasks/:id/diff
-tasksRoutes.get('/tasks/:id/diff', async (c) => {
-  const taskId = c.req.param('id');
+const POLL_INTERVAL_MS = 5000;
+const HEARTBEAT_INTERVAL_MS = 30000;
 
-  const task = db.getTask(taskId);
-  if (!task) return c.json({ error: 'Task not found' }, 404);
-
-  let workspace: { provider: string; config: Record<string, unknown> };
-  try {
-    workspace = task.workspace_json
-      ? JSON.parse(task.workspace_json)
-      : { provider: 'git-worktree', config: {} };
-  } catch {
-    workspace = { provider: 'git-worktree', config: {} };
-  }
-
-  const repos = await getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
-  return c.json({ repos });
-});
-
-// GET /tasks/:id/diff/stream
-tasksRoutes.get('/tasks/:id/diff/stream', async (c) => {
-  const taskId = c.req.param('id');
-
-  const stream = new ReadableStream({
+/** Creates an SSE ReadableStream that polls for diffs until inactive or aborted.
+ *  Sends a `diff` event only when the data changes; otherwise sends a `heartbeat`
+ *  every 30 seconds to keep the connection alive. */
+function createDiffStream(
+  signal: AbortSignal,
+  getRepos: () => Promise<RepoDiff[]>,
+  isActive: () => boolean,
+): ReadableStream {
+  return new ReadableStream({
     start(controller) {
+      let closed = false;
       const encoder = new TextEncoder();
+      let lastPayload = '';
+      let lastSentAt = 0;
+
+      const enqueue = (data: string) => {
+        if (!closed) controller.enqueue(encoder.encode(data));
+      };
 
       const sendUpdate = async () => {
         try {
-          const task = db.getTask(taskId);
-          if (!task) {
-            controller.enqueue(encoder.encode(`event: error\ndata: Task not found\n\n`));
-            return;
-          }
-
-          let workspace: { provider: string; config: Record<string, unknown> };
-          try {
-            workspace = task.workspace_json
-              ? JSON.parse(task.workspace_json)
-              : { provider: 'git-worktree', config: {} };
-          } catch {
-            workspace = { provider: 'git-worktree', config: {} };
-          }
-
-          const repos = await getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
+          const repos = await getRepos();
           const payload = JSON.stringify({ repos });
-          controller.enqueue(encoder.encode(`event: diff\ndata: ${payload}\n\n`));
+          const now = Date.now();
+          if (payload !== lastPayload) {
+            lastPayload = payload;
+            lastSentAt = now;
+            enqueue(`event: diff\ndata: ${payload}\n\n`);
+          } else if (now - lastSentAt >= HEARTBEAT_INTERVAL_MS) {
+            lastSentAt = now;
+            enqueue(`event: heartbeat\ndata: \n\n`);
+          }
         } catch (err) {
-          controller.enqueue(encoder.encode(`event: error\ndata: ${(err as Error).message}\n\n`));
+          enqueue(`event: error\ndata: ${(err as Error).message}\n\n`);
         }
       };
 
       sendUpdate();
 
-      const pollInterval = setInterval(async () => {
-        const sessions = db.listSessions(taskId);
-        const hasRunning = sessions.some(s => s.state === 'running' || s.state === 'ready');
-
-        if (!hasRunning) {
+      const pollInterval = setInterval(() => {
+        if (!isActive()) {
           clearInterval(pollInterval);
-          controller.enqueue(encoder.encode(`event: done\ndata: \n\n`));
+          enqueue(`event: done\ndata: \n\n`);
           return;
         }
-
         sendUpdate();
-      }, 2000);
+      }, POLL_INTERVAL_MS);
 
-      c.req.raw.signal.addEventListener('abort', () => {
+      signal.addEventListener('abort', () => {
         clearInterval(pollInterval);
+        closed = true;
         controller.close();
       });
     },
   });
+}
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+};
+
+// GET /tasks/:id/diff
+tasksRoutes.get('/tasks/:id/diff', async (c) => {
+  const taskId = c.req.param('id');
+  const task = db.getTask(taskId);
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+
+  const workspace = parseWorkspace(task.workspace_json);
+  const repos = await getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
+  return c.json({ repos });
+});
+
+// GET /tasks/:id/diff/stream
+tasksRoutes.get('/tasks/:id/diff/stream', (c) => {
+  const taskId = c.req.param('id');
+
+  const stream = createDiffStream(
+    c.req.raw.signal,
+    () => {
+      const task = db.getTask(taskId);
+      if (!task) throw new Error('Task not found');
+      const workspace = parseWorkspace(task.workspace_json);
+      return getDiffRepos(workspace.provider, { task_id: taskId, ...workspace.config });
     },
-  });
+    () => {
+      const sessions = db.listSessions(taskId);
+      return sessions.some(s => s.state === 'running' || s.state === 'ready');
+    },
+  );
+
+  return new Response(stream, { headers: SSE_HEADERS });
 });
 
 // GET /sessions/:id/diff
 tasksRoutes.get('/sessions/:id/diff', async (c) => {
   const sessionId = c.req.param('id');
-
   const session = db.getSession(sessionId);
   if (!session) return c.json({ error: 'Session not found' }, 404);
 
@@ -132,66 +152,33 @@ tasksRoutes.get('/sessions/:id/diff', async (c) => {
 });
 
 // GET /sessions/:id/diff/stream
-tasksRoutes.get('/sessions/:id/diff/stream', async (c) => {
+tasksRoutes.get('/sessions/:id/diff/stream', (c) => {
   const sessionId = c.req.param('id');
 
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-
-      const sendUpdate = async () => {
-        try {
-          const session = db.getSession(sessionId);
-          if (!session) {
-            controller.enqueue(encoder.encode(`event: error\ndata: Session not found\n\n`));
-            return;
-          }
-
-          const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
-          const providerName = meta.workspace?.provider ?? 'cwd';
-          const config = meta.workspace?.config ?? {};
-
-          const repos = await getDiffRepos(providerName, { ...meta, ...config });
-          const payload = JSON.stringify({ repos });
-          controller.enqueue(encoder.encode(`event: diff\ndata: ${payload}\n\n`));
-        } catch (err) {
-          controller.enqueue(encoder.encode(`event: error\ndata: ${(err as Error).message}\n\n`));
-        }
-      };
-
-      sendUpdate();
-
-      const pollInterval = setInterval(async () => {
-        const session = db.getSession(sessionId);
-        if (!session || (session.state !== 'running' && session.state !== 'ready')) {
-          clearInterval(pollInterval);
-          controller.enqueue(encoder.encode(`event: done\ndata: \n\n`));
-          return;
-        }
-        sendUpdate();
-      }, 2000);
-
-      c.req.raw.signal.addEventListener('abort', () => {
-        clearInterval(pollInterval);
-        controller.close();
-      });
+  const stream = createDiffStream(
+    c.req.raw.signal,
+    () => {
+      const session = db.getSession(sessionId);
+      if (!session) throw new Error('Session not found');
+      const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+      const providerName = meta.workspace?.provider ?? 'cwd';
+      const config = meta.workspace?.config ?? {};
+      return getDiffRepos(providerName, { ...meta, ...config });
     },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+    () => {
+      const session = db.getSession(sessionId);
+      return !!session && (session.state === 'running' || session.state === 'ready');
     },
-  });
+  );
+
+  return new Response(stream, { headers: SSE_HEADERS });
 });
 
 // ─── Commit history ──────────────────────────────────────────────────────────────
 
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-// GET /sessions/:id/file?path=...&repo=...  — full file contents (old from HEAD, new from working tree)
+// GET /sessions/:id/file?path=...&repo=...
 tasksRoutes.get('/sessions/:id/file', async (c) => {
   const sessionId = c.req.param('id');
   const filePath = c.req.query('path');
@@ -206,23 +193,15 @@ tasksRoutes.get('/sessions/:id/file', async (c) => {
   if (!isRepo) return c.json({ error: 'Not a git repository' }, 400);
 
   let oldContent = '';
-  try {
-    oldContent = await git.show([`HEAD:${filePath}`]);
-  } catch {
-    oldContent = '';
-  }
+  try { oldContent = await git.show([`HEAD:${filePath}`]); } catch { /* new file */ }
 
   let newContent = '';
-  try {
-    newContent = await readFile(join(cwd, filePath), 'utf-8');
-  } catch {
-    newContent = '';
-  }
+  try { newContent = await readFile(join(cwd, filePath), 'utf-8'); } catch { /* deleted file */ }
 
   return c.json({ oldContent, newContent });
 });
 
-// GET /sessions/:id/refs?repo=... — list available branches/refs for comparison
+// GET /sessions/:id/refs?repo=...
 tasksRoutes.get('/sessions/:id/refs', async (c) => {
   const sessionId = c.req.param('id');
   const repoName = c.req.query('repo') ?? '';
@@ -232,7 +211,6 @@ tasksRoutes.get('/sessions/:id/refs', async (c) => {
 
   try {
     const git = simpleGit(cwd);
-
     const currentBranch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
     const branchOutput = await git.raw(['branch', '-a', '--format=%(refname:short)']);
     const allRefs = branchOutput.trim().split('\n').filter(Boolean);
@@ -245,11 +223,8 @@ tasksRoutes.get('/sessions/:id/refs', async (c) => {
       const clean = ref.replace(/^remotes\//, '');
       if (seen.has(clean)) continue;
       seen.add(clean);
-      if (clean.startsWith('origin/')) {
-        remote.push(clean);
-      } else {
-        local.push(clean);
-      }
+      if (clean.startsWith('origin/')) remote.push(clean);
+      else local.push(clean);
     }
 
     let defaultBase = '';
@@ -300,19 +275,14 @@ tasksRoutes.get('/sessions/:id/commits', async (c) => {
       } catch { /* empty repo */ }
     }
 
-    let baseShortSha = baseSha ? baseSha.slice(0, 7) : '';
+    const baseShortSha = baseSha ? baseSha.slice(0, 7) : '';
     let baseMessage = '';
     if (baseSha) {
-      try {
-        baseMessage = (await git.raw(['log', '-1', '--format=%s', baseSha])).trim();
-      } catch { /* ignore */ }
+      try { baseMessage = (await git.raw(['log', '-1', '--format=%s', baseSha])).trim(); } catch { /* ignore */ }
     }
 
     const range = baseSha ? `${baseSha}..HEAD` : 'HEAD';
-
-    const logOutput = await git.raw([
-      'log', '--format=COMMIT %H %h %an%n%ai%n%s', '--numstat', range,
-    ]);
+    const logOutput = await git.raw(['log', '--format=COMMIT %H %h %an%n%ai%n%s', '--numstat', range]);
 
     if (!logOutput.trim()) return c.json({ commits: [], baseSha, baseRef, baseShortSha, baseMessage });
 
@@ -322,8 +292,7 @@ tasksRoutes.get('/sessions/:id/commits', async (c) => {
       additions: number; deletions: number; filesChanged: number;
     }[] = [];
 
-    const blocks = logOutput.split(/^COMMIT /m).filter(Boolean);
-    for (const block of blocks) {
+    for (const block of logOutput.split(/^COMMIT /m).filter(Boolean)) {
       const lines = block.split('\n');
       const headerMatch = lines[0].match(/^(\S+)\s+(\S+)\s+(.+)$/);
       if (!headerMatch) continue;
@@ -340,7 +309,6 @@ tasksRoutes.get('/sessions/:id/commits', async (c) => {
           filesChanged++;
         }
       }
-
       commits.push({ sha, shortSha, message, author, date, additions, deletions, filesChanged });
     }
 
@@ -362,7 +330,6 @@ tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
 
   try {
     const git = simpleGit(cwd);
-
     let diff: string;
     if (toSha) {
       diff = await git.raw(['diff', '-U20', sha, toSha]);
@@ -373,7 +340,6 @@ tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
         diff = await git.raw(['diff', '-U20', EMPTY_TREE_SHA, sha]);
       }
     }
-
     return c.json({ raw: diff });
   } catch (err) {
     return c.json({ error: 'Failed to get commit diff', details: (err as Error).message }, 500);
