@@ -110,8 +110,76 @@ export async function unwireExtensionSkills(manifest: ExtensionManifest, agemonD
   }
 }
 
+/** App root: four dirs up from backend/src/lib/extensions/ */
+const APP_ROOT = join(import.meta.dir, '..', '..', '..', '..');
+
+/** Lazily-built map of workspace package names → absolute paths. */
+let _wsMap: Record<string, string> | null = null;
+function workspaceMap(): Record<string, string> {
+  if (_wsMap) return _wsMap;
+  _wsMap = {};
+  try {
+    const rootPkg = JSON.parse(readFileSync(join(APP_ROOT, 'package.json'), 'utf-8'));
+    for (const pattern of (rootPkg.workspaces ?? []) as string[]) {
+      if (pattern.includes('*')) {
+        const base = join(APP_ROOT, pattern.replace('/*', ''));
+        try {
+          for (const entry of require('fs').readdirSync(base, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            try {
+              const p = JSON.parse(readFileSync(join(base, entry.name, 'package.json'), 'utf-8'));
+              if (p.name) _wsMap![p.name] = join(base, entry.name);
+            } catch { /* skip */ }
+          }
+        } catch { /* skip */ }
+      } else {
+        try {
+          const p = JSON.parse(readFileSync(join(APP_ROOT, pattern, 'package.json'), 'utf-8'));
+          if (p.name) _wsMap![p.name] = join(APP_ROOT, pattern);
+        } catch { /* skip */ }
+      }
+    }
+  } catch { /* root package.json not readable */ }
+  return _wsMap;
+}
+
+/**
+ * Temporarily rewrite `workspace:*` deps in an extension's package.json to
+ * `file:` paths pointing at the monorepo packages. This lets `bun install`
+ * succeed for extensions outside the workspace (e.g. user extensions in
+ * ~/.agemon/extensions/).  Returns the original content so the caller can
+ * restore it after install.
+ */
+export function patchWorkspaceDeps(extensionDir: string): string | null {
+  const pkgPath = join(extensionDir, 'package.json');
+  const original = readFileSync(pkgPath, 'utf-8');
+  const pkg = JSON.parse(original);
+  const wsPackages = workspaceMap();
+  let modified = false;
+
+  for (const depKey of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
+    const deps = pkg[depKey];
+    if (!deps) continue;
+    for (const [name, version] of Object.entries(deps)) {
+      if (typeof version === 'string' && version.startsWith('workspace:')) {
+        const resolved = wsPackages[name];
+        if (resolved) {
+          deps[name] = `file:${resolved}`;
+          modified = true;
+        }
+      }
+    }
+  }
+
+  if (!modified) return null;
+  require('fs').writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  return original;
+}
+
 /**
  * Run `bun install` in an extension directory if it has a package.json.
+ * Temporarily rewrites workspace:* deps to file: paths, then restores the
+ * original package.json so git stays clean.
  */
 async function ensureDepsInstalled(extensionDir: string, extensionId: string): Promise<void> {
   try {
@@ -120,15 +188,25 @@ async function ensureDepsInstalled(extensionDir: string, extensionId: string): P
     return; // no package.json, nothing to install
   }
 
-  const proc = Bun.spawn(['bun', 'install'], {
-    cwd: extensionDir,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  });
-  const exit = await proc.exited;
-  if (exit !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`bun install failed: ${stderr.trim()}`);
+  // Patch workspace deps for install, restore after
+  const original = patchWorkspaceDeps(extensionDir);
+
+  try {
+    const proc = Bun.spawn(['bun', 'install'], {
+      cwd: extensionDir,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    });
+    const exit = await proc.exited;
+    if (exit !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(`bun install failed: ${stderr.trim()}`);
+    }
+  } finally {
+    // Always restore original package.json
+    if (original) {
+      require('fs').writeFileSync(join(extensionDir, 'package.json'), original);
+    }
   }
 }
 

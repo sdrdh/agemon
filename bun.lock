@@ -26,6 +26,61 @@
         "typescript": "^5.0.0",
       },
     },
+    "extensions/mcp-config": {
+      "name": "agemon-plugin-mcp-config",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
+    "extensions/mcp-server": {
+      "name": "@agemon/plugin-mcp-server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@hono/mcp": "^0.2.4",
+        "@modelcontextprotocol/sdk": "^1.27.1",
+        "hono": "^4.6.0",
+        "pkce-challenge": "^4.1.0",
+        "zod": "^3.24.0",
+        "zod-to-json-schema": "^3.24.0",
+      },
+    },
+    "extensions/memory-cms": {
+      "name": "@agemon/plugin-memory-cms",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+        "marked": "^17.0.0",
+        "react-markdown": "^10.1.0",
+        "remark-gfm": "^4.0.1",
+      },
+    },
+    "extensions/server-logs": {
+      "name": "@agemon/plugin-server-logs",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
+    "extensions/skills-manager": {
+      "name": "agemon-plugin-skills-manager",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.6.0",
+      },
+    },
+    "extensions/tasks": {
+      "name": "@agemon/plugin-tasks",
+      "version": "0.1.0",
+      "dependencies": {
+        "@agemon/shared": "workspace:*",
+        "hono": "^4.6.0",
+      },
+    },
+    "extensions/voice-input": {
+      "name": "@agemon/plugin-voice-input",
+      "version": "0.1.0",
+    },
     "frontend": {
       "name": "@agemon/frontend",
       "version": "1.0.0",
@@ -67,61 +122,6 @@
         "vitest": "^2.1.8",
       },
     },
-    "plugins/mcp-config": {
-      "name": "agemon-plugin-mcp-config",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "plugins/mcp-server": {
-      "name": "@agemon/plugin-mcp-server",
-      "version": "0.1.0",
-      "dependencies": {
-        "@hono/mcp": "^0.2.4",
-        "@modelcontextprotocol/sdk": "^1.27.1",
-        "hono": "^4.6.0",
-        "pkce-challenge": "^4.1.0",
-        "zod": "^3.24.0",
-        "zod-to-json-schema": "^3.24.0",
-      },
-    },
-    "plugins/memory-cms": {
-      "name": "@agemon/plugin-memory-cms",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-        "marked": "^17.0.0",
-        "react-markdown": "^10.1.0",
-        "remark-gfm": "^4.0.1",
-      },
-    },
-    "plugins/server-logs": {
-      "name": "@agemon/plugin-server-logs",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "plugins/skills-manager": {
-      "name": "agemon-plugin-skills-manager",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "plugins/tasks": {
-      "name": "@agemon/plugin-tasks",
-      "version": "0.1.0",
-      "dependencies": {
-        "@agemon/shared": "workspace:*",
-        "hono": "^4.6.0",
-      },
-    },
-    "plugins/voice-input": {
-      "name": "@agemon/plugin-voice-input",
-      "version": "0.1.0",
-    },
     "shared": {
       "name": "@agemon/shared",
       "version": "1.0.0",
@@ -134,15 +134,15 @@
 
     "@agemon/frontend": ["@agemon/frontend@workspace:frontend"],
 
-    "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:plugins/mcp-server"],
+    "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:extensions/mcp-server"],
 
-    "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:plugins/memory-cms"],
+    "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:extensions/memory-cms"],
 
-    "@agemon/plugin-server-logs": ["@agemon/plugin-server-logs@workspace:plugins/server-logs"],
+    "@agemon/plugin-server-logs": ["@agemon/plugin-server-logs@workspace:extensions/server-logs"],
 
-    "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:plugins/tasks"],
+    "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:extensions/tasks"],
 
-    "@agemon/plugin-voice-input": ["@agemon/plugin-voice-input@workspace:plugins/voice-input"],
+    "@agemon/plugin-voice-input": ["@agemon/plugin-voice-input@workspace:extensions/voice-input"],
 
     "@agemon/shared": ["@agemon/shared@workspace:shared"],
 
@@ -496,9 +496,9 @@
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 
-    "agemon-plugin-mcp-config": ["agemon-plugin-mcp-config@workspace:plugins/mcp-config"],
+    "agemon-plugin-mcp-config": ["agemon-plugin-mcp-config@workspace:extensions/mcp-config"],
 
-    "agemon-plugin-skills-manager": ["agemon-plugin-skills-manager@workspace:plugins/skills-manager"],
+    "agemon-plugin-skills-manager": ["agemon-plugin-skills-manager@workspace:extensions/skills-manager"],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
 

@@ -64,14 +64,19 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
     return false;
   }
 
-  // bun install
+  // bun install (patch workspace deps temporarily for out-of-monorepo extensions)
   console.info(`[extension:${pluginId}] running bun install...`);
+  const { patchWorkspaceDeps } = await import('./loader.ts');
+  const originalPkg = patchWorkspaceDeps(pluginDir);
   const install = Bun.spawn(['bun', 'install'], {
     cwd: pluginDir,
     stdout: 'ignore',
     stderr: 'pipe',
   });
   const installExit = await install.exited;
+  if (originalPkg) {
+    require('fs').writeFileSync(pkgPath, originalPkg);
+  }
   if (installExit !== 0) {
     const stderr = await new Response(install.stderr).text();
     console.error(`[extension:${pluginId}] bun install failed:`, stderr);
