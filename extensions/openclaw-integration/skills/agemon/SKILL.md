@@ -109,7 +109,18 @@ curl -s -X POST "${AGEMON_URL}/api/extensions/openclaw-integration/configure" \
   -d '{"taskId": "fix-login-bug", "metadata": {"channel": "#dev", "agentId": "main"}}'
 ```
 
-`metadata` is opaque — Agemon stores and forwards it verbatim in webhook payloads. The consumer (e.g. OpenClaw) decides how to interpret it.
+`metadata` is opaque — Agemon stores and forwards it verbatim in webhook payloads. Fields are spread into the OpenClaw hook action for routing.
+
+**Thread-aware notifications:** To route Agemon events back to the Slack thread you're in, include your session context:
+
+```bash
+curl -s -X POST "${AGEMON_URL}/api/extensions/openclaw-integration/configure" \
+  -H "Authorization: Bearer ${AGEMON_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"taskId": "fix-login-bug", "metadata": {"channel": "slack", "sessionKey": "<your-current-session-key>"}}'
+```
+
+The `sessionKey` tells OpenClaw to deliver to the same conversation (including thread) that the originating session was in. If you're an OpenClaw agent running in a Slack thread, pass your own session key.
 
 **List:** `GET /api/extensions/openclaw-integration/mappings`
 
