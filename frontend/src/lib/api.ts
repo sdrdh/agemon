@@ -78,13 +78,13 @@ export async function setAuthCookie(key: string): Promise<void> {
 }
 
 export const api = {
-  // Tasks (plugin: tasks → /api/extensions/tasks/*)
-  listTasks: (includeArchived = false) => request<Task[]>(`/plugins/tasks/tasks${includeArchived ? '?archived=true' : ''}`),
-  listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/plugins/tasks/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
-  getTask: (id: string) => request<Task>(`/plugins/tasks/tasks/${id}`),
-  updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/plugins/tasks/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  // Tasks (extension: tasks → /api/extensions/tasks/*)
+  listTasks: (includeArchived = false) => request<Task[]>(`/extensions/tasks/tasks${includeArchived ? '?archived=true' : ''}`),
+  listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/extensions/tasks/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
+  getTask: (id: string) => request<Task>(`/extensions/tasks/tasks/${id}`),
+  updateTask: (id: string, body: UpdateTaskBody) => request<Task>(`/extensions/tasks/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   listRepos: () => request<Repo[]>('/repos'),
-  listEvents: (id: string, limit = 500) => request<ACPEvent[]>(`/plugins/tasks/tasks/${id}/events?limit=${limit}`),
+  listEvents: (id: string, limit = 500) => request<ACPEvent[]>(`/extensions/tasks/tasks/${id}/events?limit=${limit}`),
 
   // Sessions
   createSession: (taskId: string, body: CreateSessionBody = {}) =>
@@ -119,19 +119,19 @@ export const api = {
       body: JSON.stringify({ configId, value }),
     }),
 
-  // MCP Servers (plugin: mcp-config → /api/extensions/mcp-config/*)
-  listGlobalMcpServers: () => request<McpServerEntry[]>('/plugins/mcp-config/mcp-servers'),
+  // MCP Servers (extension: mcp-config → /api/extensions/mcp-config/*)
+  listGlobalMcpServers: () => request<McpServerEntry[]>('/extensions/mcp-config/mcp-servers'),
   addGlobalMcpServer: (body: CreateMcpServerBody) =>
-    request<McpServerEntry>('/plugins/mcp-config/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
-  removeGlobalMcpServer: (id: string) => request<void>(`/plugins/mcp-config/mcp-servers/${id}`, { method: 'DELETE' }),
+    request<McpServerEntry>('/extensions/mcp-config/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+  removeGlobalMcpServer: (id: string) => request<void>(`/extensions/mcp-config/mcp-servers/${id}`, { method: 'DELETE' }),
   listTaskMcpServers: (taskId: string) =>
-    request<{ global: McpServerEntry[]; task: McpServerEntry[] }>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers`),
+    request<{ global: McpServerEntry[]; task: McpServerEntry[] }>(`/extensions/mcp-config/tasks/${taskId}/mcp-servers`),
   addTaskMcpServer: (taskId: string, body: CreateMcpServerBody) =>
-    request<McpServerEntry>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers`, { method: 'POST', body: JSON.stringify(body) }),
+    request<McpServerEntry>(`/extensions/mcp-config/tasks/${taskId}/mcp-servers`, { method: 'POST', body: JSON.stringify(body) }),
   removeTaskMcpServer: (taskId: string, serverId: string) =>
-    request<void>(`/plugins/mcp-config/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
+    request<void>(`/extensions/mcp-config/tasks/${taskId}/mcp-servers/${serverId}`, { method: 'DELETE' }),
   testMcpServer: (body: TestMcpServerBody) =>
-    request<TestMcpServerResult>('/plugins/mcp-config/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
+    request<TestMcpServerResult>('/extensions/mcp-config/mcp-servers/test', { method: 'POST', body: JSON.stringify(body) }),
 
   // System / Version
   getVersion: () =>
