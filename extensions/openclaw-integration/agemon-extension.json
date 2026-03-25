@@ -1,0 +1,23 @@
+{
+  "id": "openclaw-integration",
+  "name": "OpenClaw Integration",
+  "version": "0.1.0",
+  "description": "Bridges Agemon task/session events to OpenClaw channels and exposes an agemon skill for OpenClaw agents",
+  "entryPoint": "index.ts",
+  "showInSettings": true,
+  "skills": ["agemon"],
+  "settings": [
+    {
+      "key": "OPENCLAW_WEBHOOK_URL",
+      "label": "OpenClaw Webhook URL",
+      "type": "string",
+      "description": "URL to send Agemon event notifications to (e.g. http://localhost:4040/api/webhooks/agemon)"
+    },
+    {
+      "key": "OPENCLAW_WEBHOOK_TOKEN",
+      "label": "Webhook Auth Token",
+      "type": "secret",
+      "description": "Bearer token for authenticating with the OpenClaw webhook endpoint"
+    }
+  ]
+}
