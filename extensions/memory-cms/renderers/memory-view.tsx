@@ -43,7 +43,7 @@ function FileView({ taskId, type, onBack }: { taskId: string; type: string; onBa
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/plugins/memory-cms/memory/${taskId}/${type}`, { credentials: 'include', signal: controller.signal })
+    fetch(`/api/extensions/memory-cms/memory/${taskId}/${type}`, { credentials: 'include', signal: controller.signal })
       .then(res => { if (!res.ok) throw new Error('Not found'); return res.text(); })
       .then(setContent)
       .catch(err => { if (err.name !== 'AbortError') setError(err.message); })
@@ -134,7 +134,7 @@ export default function MemoryPage() {
   const [selected, setSelected] = useState<{ taskId: string; type: string } | null>(null);
 
   useEffect(() => {
-    fetch('/api/plugins/memory-cms/files', { credentials: 'include' })
+    fetch('/api/extensions/memory-cms/files', { credentials: 'include' })
       .then(res => res.json())
       .then((data: MemoryFile[]) => {
         const map = new Map<string, MemoryFile[]>();

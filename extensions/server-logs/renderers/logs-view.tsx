@@ -73,7 +73,7 @@ export default function LogsView() {
 
   // Load history
   useEffect(() => {
-    fetch(`/api/plugins/server-logs/history?lines=${INITIAL_LINES}`, { credentials: 'include' })
+    fetch(`/api/extensions/server-logs/history?lines=${INITIAL_LINES}`, { credentials: 'include' })
       .then(res => res.text())
       .then(text => {
         const parsed = text.split('\n').filter(Boolean).map(parseLine);
@@ -85,7 +85,7 @@ export default function LogsView() {
 
   // SSE stream
   useEffect(() => {
-    const es = new EventSource('/api/plugins/server-logs/stream');
+    const es = new EventSource('/api/extensions/server-logs/stream');
 
     es.onmessage = (event) => {
       const raw = JSON.parse(event.data) as string;

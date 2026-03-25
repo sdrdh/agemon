@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   Archive,
   FileDiff,
+  GitBranch,
+  X,
+  Loader2,
 } from 'lucide-react';
 
 // ─── Internal router ─────────────────────────────────────────────────────────
@@ -33,11 +36,17 @@ function navigate(path: string): void {
 
 // ─── API base ────────────────────────────────────────────────────────────────
 
-const API = '/api/plugins/tasks';
+const API = '/api/extensions/tasks';
 
 // ─── Inline types (no @agemon/shared import in browser bundle) ───────────────
 
 type TaskStatus = 'todo' | 'working' | 'awaiting_input' | 'done';
+
+interface Repo {
+  id: number;
+  url: string;
+  name: string;
+}
 
 interface Task {
   id: string;
@@ -46,7 +55,17 @@ interface Task {
   status: TaskStatus;
   agent: string;
   archived: boolean;
+  repos: Repo[];
   created_at: string;
+}
+
+interface UpdateTaskBody {
+  title?: string;
+  description?: string;
+  agent?: string;
+  repos?: string[];
+  status?: TaskStatus;
+  archived?: boolean;
 }
 
 // ─── Shared components ───────────────────────────────────────────────────────
@@ -324,6 +343,7 @@ function TaskInfoDrawer({
   isDone,
   onArchive,
   archiving,
+  onUpdateTask,
 }: {
   task: Task;
   open: boolean;
@@ -333,7 +353,41 @@ function TaskInfoDrawer({
   isDone: boolean;
   onArchive: () => void;
   archiving: boolean;
+  onUpdateTask: (body: Partial<UpdateTaskBody>) => Promise<void>;
 }) {
+  const [addingRepo, setAddingRepo] = useState(false);
+  const [newRepoUrl, setNewRepoUrl] = useState('');
+  const [repoSaving, setRepoSaving] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+
+  const handleAddRepo = async () => {
+    const url = newRepoUrl.trim();
+    if (!url) return;
+    setRepoSaving(true);
+    setRepoError(null);
+    try {
+      const existing = task.repos.map(r => r.url);
+      await onUpdateTask({ repos: [...existing, url] });
+      setNewRepoUrl('');
+      setAddingRepo(false);
+    } catch (e: unknown) {
+      setRepoError(e instanceof Error ? e.message : 'Failed to add repo');
+    } finally {
+      setRepoSaving(false);
+    }
+  };
+
+  const handleRemoveRepo = async (url: string) => {
+    setRepoSaving(true);
+    try {
+      const remaining = task.repos.filter(r => r.url !== url).map(r => r.url);
+      await onUpdateTask({ repos: remaining });
+    } catch (e: unknown) {
+      console.error('Failed to remove repo:', e);
+    } finally {
+      setRepoSaving(false);
+    }
+  };
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -400,6 +454,77 @@ function TaskInfoDrawer({
                 <span className="ml-auto font-mono text-xs truncate max-w-[140px]">{task.id}</span>
               </div>
             </div>
+          </section>
+
+          {/* Repositories */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Repositories</h3>
+              {!isDone && (
+                <button
+                  type="button"
+                  onClick={() => setAddingRepo(true)}
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Plus className="h-3 w-3" /> Add
+                </button>
+              )}
+            </div>
+            {task.repos.length > 0 ? (
+              <div className="space-y-1.5">
+                {task.repos.map((repo) => (
+                  <div key={repo.url} className="flex items-center gap-2 group">
+                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-mono truncate flex-1" title={repo.url}>{repo.name || repo.url}</span>
+                    {!isDone && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRepo(repo.url)}
+                        disabled={repoSaving}
+                        className="opacity-0 group-hover:opacity-100 h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all disabled:opacity-50"
+                        aria-label={`Remove ${repo.name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No repositories attached</p>
+            )}
+            {addingRepo && (
+              <div className="mt-2 space-y-2">
+                <input
+                  type="text"
+                  value={newRepoUrl}
+                  onChange={e => setNewRepoUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddRepo(); } if (e.key === 'Escape') { setAddingRepo(false); setNewRepoUrl(''); setRepoError(null); } }}
+                  placeholder="git@github.com:org/repo.git"
+                  autoFocus
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {repoError && <p className="text-xs text-destructive">{repoError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddRepo}
+                    disabled={repoSaving || !newRepoUrl.trim()}
+                    className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {repoSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    Add repo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingRepo(false); setNewRepoUrl(''); setRepoError(null); }}
+                    className="h-8 px-3 rounded-md text-xs text-muted-foreground hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="pt-2 border-t space-y-1">
@@ -655,6 +780,11 @@ function TaskDetail({ id }: { id: string }) {
         isDone={isDone}
         onArchive={handleArchive}
         archiving={archiving}
+        onUpdateTask={async (body) => {
+          if (!api?.updateTask) return;
+          const updated = await api.updateTask(id, body);
+          setTask(updated);
+        }}
       />
 
       {diffOpen && DiffViewer && (

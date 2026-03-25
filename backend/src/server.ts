@@ -269,7 +269,15 @@ if (frontendExists) {
     const filePath = join(FRONTEND_DIST, urlPath);
     const file = Bun.file(filePath);
     if (await file.exists()) {
-      return new Response(file);
+      // Hashed assets (Vite output) are immutable; everything else should revalidate
+      const isHashed = urlPath.startsWith('/assets/');
+      return new Response(file, {
+        headers: {
+          'Cache-Control': isHashed
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
+        },
+      });
     }
 
     // SPA fallback — serve index.html for all non-file routes
