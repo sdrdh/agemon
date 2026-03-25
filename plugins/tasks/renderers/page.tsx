@@ -493,6 +493,12 @@ function TaskDetail({ id }: { id: string }) {
     }
   }, [id, archiving]);
 
+  // Signal host: fullscreen (hide nav) only when actively viewing a session
+  useEffect(() => {
+    setHostLayout?.(selectedSession ? 'fullscreen' : 'default');
+    return () => { setHostLayout?.('default'); };
+  }, [selectedSession]);
+
   const handleSelectSession = useCallback((sessionId: string) => {
     setSelectedSession(sessionId);
   }, []);
@@ -563,7 +569,7 @@ function TaskDetail({ id }: { id: string }) {
   const isDone = task.status === 'done';
 
   return (
-    <div className="flex flex-col h-dvh">
+    <div className={`flex flex-col ${selectedSession ? 'h-dvh' : 'h-[calc(100dvh-3.5rem)]'}`}>
       {/* Header — shown on mobile when no session selected, always on desktop */}
       {(isDesktop || !selectedSession) && (
         <div className="sticky top-0 z-40 bg-background border-b px-4 py-3 flex items-center gap-3">
@@ -621,6 +627,7 @@ function TaskDetail({ id }: { id: string }) {
             sessionId={selectedSession!}
             onBack={handleBackToList}
             isDone={isDone}
+            onDiff={DiffViewer ? () => setDiffOpen(true) : undefined}
           />
         )}
 
@@ -858,12 +865,6 @@ export default function TasksApp() {
   }, []);
 
   const isTaskDetail = path.length > 1 && /^\/[a-z0-9-]+$/i.test(path);
-
-  // Signal host to hide/show chrome based on current view
-  useEffect(() => {
-    setHostLayout?.(isTaskDetail ? 'fullscreen' : 'default');
-    return () => { setHostLayout?.('default'); };
-  }, [isTaskDetail]);
 
   if (path === '/kanban') return <Kanban />;
   if (path === '/new') return <NewTask />;
