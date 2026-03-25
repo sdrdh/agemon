@@ -1,158 +1,321 @@
 import { Hono } from 'hono';
-import { parsePatchFiles } from '@pierre/diffs';
+import { readFile } from 'fs/promises';
+import { join, basename } from 'path';
+import { simpleGit } from 'simple-git';
 import { db } from '../db/client.ts';
 import { workspaceRegistry } from '../lib/plugins/workspace-registry.ts';
+import { gitManager } from '../lib/git.ts';
+import type { RepoDiff } from '../lib/plugins/workspace.ts';
 
 export const tasksRoutes = new Hono();
 
-interface DiffFileStats {
-  path: string;
-  additions: number;
-  deletions: number;
-}
-
-function parseDiffStats(diff: string): DiffFileStats[] {
-  const files: DiffFileStats[] = [];
+function parseWorkspace(workspaceJson: string | null | undefined): { provider: string; config: Record<string, unknown> } {
   try {
-    const parsed = parsePatchFiles(diff);
-    for (const patch of parsed) {
-      for (const file of patch.files) {
-        let additions = 0;
-        let deletions = 0;
-        for (const hunk of file.hunks) {
-          additions += hunk.additionLines;
-          deletions += hunk.deletionLines;
-        }
-        files.push({ path: file.name, additions, deletions });
-      }
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return files;
+    if (workspaceJson) return JSON.parse(workspaceJson);
+  } catch { /* fall through */ }
+  return { provider: 'git-worktree', config: {} };
 }
 
-function buildResponse(diff: string | null) {
-  if (!diff) return { repos: [], raw: '' };
-
-  const files = parseDiffStats(diff);
-  const byRepo = new Map<string, DiffFileStats[]>();
-  for (const file of files) {
-    const repo = file.path.split('/')[0] || 'root';
-    const existing = byRepo.get(repo) || [];
-    existing.push(file);
-    byRepo.set(repo, existing);
-  }
-
-  const repos = Array.from(byRepo.entries()).map(([name, repoFiles]) => ({ name, files: repoFiles }));
-  return { repos, raw: diff };
+async function getDiffRepos(providerName: string, meta: Record<string, unknown>): Promise<RepoDiff[]> {
+  const provider = workspaceRegistry.get(providerName);
+  if (!provider?.getDiff) return [];
+  return (await provider.getDiff(meta)) ?? [];
 }
 
 /**
- * Resolve diff for a session. Handles both task-backed and standalone sessions.
- * - Task sessions: resolves workspace from the task's workspace_json
- * - Standalone sessions: resolves workspace from session meta_json (cwd provider)
+ * Resolve the git repo root for a session + repo name.
+ * - Task sessions: uses gitManager.getWorktreePath(taskId, repoName)
+ * - Standalone cwd sessions (single-repo): repoName is the basename of cwd, return cwd directly.
+ * - Standalone cwd sessions (multi-repo): repoName is a subdirectory, return join(cwd, repoName).
  */
-async function getSessionDiff(sessionId: string): Promise<string | null> {
+function resolveRepoCwd(sessionId: string, repoName: string): string | null {
   const session = db.getSession(sessionId);
   if (!session) return null;
-
   const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
-
-  // Task-backed session: resolve workspace from task
-  if (session.task_id) {
-    const task = db.getTask(session.task_id);
-    if (!task) return null;
-    const workspace = task.workspace_json
-      ? JSON.parse(task.workspace_json)
-      : { provider: 'git-worktree', config: {} };
-    const provider = workspaceRegistry.get(workspace.provider);
-    if (!provider?.getDiff) return null;
-    return provider.getDiff({
-      sessionId,
-      agentType: session.agent_type ?? '',
-      meta: { task_id: session.task_id, ...workspace.config },
-    });
+  const taskId = meta.task_id as string | undefined;
+  if (taskId) {
+    if (!repoName) return null;
+    return gitManager.getWorktreePath(taskId, repoName);
   }
-
-  // Standalone session: resolve workspace from meta
-  const providerName = meta.workspace?.provider ?? 'cwd';
-  const config = meta.workspace?.config ?? {};
-  const provider = workspaceRegistry.get(providerName);
-  if (!provider?.getDiff) return null;
-  return provider.getDiff({
-    sessionId,
-    agentType: session.agent_type ?? '',
-    meta: { ...meta, ...config },
-  });
+  const cwd = meta.cwd as string | undefined;
+  if (!cwd) return null;
+  // For multi-repo cwd sessions, repoName is a subdirectory of cwd.
+  // For single-repo, repoName is the basename of cwd itself — return cwd directly.
+  if (repoName && repoName !== basename(cwd)) {
+    return join(cwd, repoName);
+  }
+  return cwd;
 }
 
-// ─── Session-based diff endpoints ────────────────────────────────────────────
+const POLL_INTERVAL_MS = 5000;
+const HEARTBEAT_INTERVAL_MS = 30000;
 
-// GET /sessions/:id/diff
-tasksRoutes.get('/sessions/:id/diff', async (c) => {
-  const sessionId = c.req.param('id');
-  const format = c.req.query('format') || 'unified';
-
-  const session = db.getSession(sessionId);
-  if (!session) return c.json({ error: 'Session not found' }, 404);
-
-  const diff = await getSessionDiff(sessionId);
-  if (!diff) return c.json(buildResponse(null));
-
-  if (format === 'structured') {
-    return c.json(buildResponse(diff));
-  }
-  return c.text(diff);
-});
-
-// GET /sessions/:id/diff/stream
-tasksRoutes.get('/sessions/:id/diff/stream', async (c) => {
-  const sessionId = c.req.param('id');
-
-  const session = db.getSession(sessionId);
-  if (!session) return c.json({ error: 'Session not found' }, 404);
-
-  const stream = new ReadableStream({
+/** Creates an SSE ReadableStream that polls for diffs until inactive or aborted.
+ *  Sends a `diff` event only when the data changes; otherwise sends a `heartbeat`
+ *  every 30 seconds to keep the connection alive. */
+function createDiffStream(
+  signal: AbortSignal,
+  getRepos: () => Promise<RepoDiff[]>,
+  isActive: () => boolean,
+): ReadableStream {
+  return new ReadableStream({
     start(controller) {
+      let closed = false;
       const encoder = new TextEncoder();
+      let lastPayload = '';
+      let lastSentAt = 0;
+
+      const enqueue = (data: string) => {
+        if (!closed) controller.enqueue(encoder.encode(data));
+      };
 
       const sendUpdate = async () => {
         try {
-          const diff = await getSessionDiff(sessionId);
-          const payload = JSON.stringify(buildResponse(diff));
-          controller.enqueue(encoder.encode(`event: diff\ndata: ${payload}\n\n`));
+          const repos = await getRepos();
+          const payload = JSON.stringify({ repos });
+          const now = Date.now();
+          if (payload !== lastPayload) {
+            lastPayload = payload;
+            lastSentAt = now;
+            enqueue(`event: diff\ndata: ${payload}\n\n`);
+          } else if (now - lastSentAt >= HEARTBEAT_INTERVAL_MS) {
+            lastSentAt = now;
+            enqueue(`event: heartbeat\ndata: \n\n`);
+          }
         } catch (err) {
-          controller.enqueue(encoder.encode(`event: error\ndata: ${(err as Error).message}\n\n`));
+          enqueue(`event: error\ndata: ${err instanceof Error ? err.message : String(err)}\n\n`);
         }
       };
 
       sendUpdate();
 
-      const pollInterval = setInterval(async () => {
-        const current = db.getSession(sessionId);
-        if (!current || (current.state !== 'running' && current.state !== 'ready')) {
+      const pollInterval = setInterval(() => {
+        if (!isActive()) {
           clearInterval(pollInterval);
-          // Send one final update then close
-          await sendUpdate();
-          controller.enqueue(encoder.encode(`event: done\ndata: \n\n`));
+          enqueue(`event: done\ndata: \n\n`);
           return;
         }
         sendUpdate();
-      }, 2000);
+      }, POLL_INTERVAL_MS);
 
-      c.req.raw.signal.addEventListener('abort', () => {
+      signal.addEventListener('abort', () => {
         clearInterval(pollInterval);
+        closed = true;
         controller.close();
       });
     },
   });
+}
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+};
+
+
+function resolveSessionDiffMeta(session: { meta_json?: string | null }): { provider: string; meta: Record<string, unknown> } {
+  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+  const taskId = meta.task_id as string | undefined;
+  if (taskId) {
+    // Task session: use the task's workspace_json (same as /tasks/:id/diff)
+    const task = db.getTask(taskId);
+    const workspace = parseWorkspace(task?.workspace_json);
+    return { provider: workspace.provider, meta: { task_id: taskId, ...workspace.config } };
+  }
+  // Standalone cwd session
+  return { provider: (meta.workspaceProvider as string | undefined) ?? 'cwd', meta };
+}
+
+// GET /sessions/:id/diff
+tasksRoutes.get('/sessions/:id/diff', async (c) => {
+  const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) return c.json({ error: 'Session not found' }, 404);
+
+  const { provider, meta } = resolveSessionDiffMeta(session);
+  const repos = await getDiffRepos(provider, meta);
+  return c.json({ repos });
+});
+
+// GET /sessions/:id/diff/stream
+tasksRoutes.get('/sessions/:id/diff/stream', (c) => {
+  const sessionId = c.req.param('id');
+
+  const stream = createDiffStream(
+    c.req.raw.signal,
+    () => {
+      const session = db.getSession(sessionId);
+      if (!session) throw new Error('Session not found');
+      const { provider, meta } = resolveSessionDiffMeta(session);
+      return getDiffRepos(provider, meta);
     },
-  });
+    () => {
+      const session = db.getSession(sessionId);
+      return !!session && (session.state === 'running' || session.state === 'ready');
+    },
+  );
+
+  return new Response(stream, { headers: SSE_HEADERS });
+});
+
+// ─── Commit history ──────────────────────────────────────────────────────────────
+
+const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+// GET /sessions/:id/file?path=...&repo=...
+tasksRoutes.get('/sessions/:id/file', async (c) => {
+  const sessionId = c.req.param('id');
+  const filePath = c.req.query('path');
+  const repoName = c.req.query('repo') ?? '';
+  if (!filePath) return c.json({ error: 'Missing path query parameter' }, 400);
+
+  const cwd = resolveRepoCwd(sessionId, repoName);
+  if (!cwd) return c.json({ error: 'Session not found, no cwd, or missing repo param' }, 404);
+
+  const git = simpleGit(cwd);
+  const isRepo = await git.checkIsRepo().catch(() => false);
+  if (!isRepo) return c.json({ error: 'Not a git repository' }, 400);
+
+  let oldContent = '';
+  try { oldContent = await git.show([`HEAD:${filePath}`]); } catch { /* new file */ }
+
+  let newContent = '';
+  try { newContent = await readFile(join(cwd, filePath), 'utf-8'); } catch { /* deleted file */ }
+
+  return c.json({ oldContent, newContent });
+});
+
+// GET /sessions/:id/refs?repo=...
+tasksRoutes.get('/sessions/:id/refs', async (c) => {
+  const sessionId = c.req.param('id');
+  const repoName = c.req.query('repo') ?? '';
+
+  const cwd = resolveRepoCwd(sessionId, repoName);
+  if (!cwd) return c.json({ error: 'Session not found or no working directory' }, 404);
+
+  try {
+    const git = simpleGit(cwd);
+    const currentBranch = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+    const branchOutput = await git.raw(['branch', '-a', '--format=%(refname:short)']);
+    const allRefs = branchOutput.trim().split('\n').filter(Boolean);
+
+    const local: string[] = [];
+    const remote: string[] = [];
+    const seen = new Set<string>();
+    for (const ref of allRefs) {
+      if (ref === currentBranch) continue;
+      const clean = ref.replace(/^remotes\//, '');
+      if (seen.has(clean)) continue;
+      seen.add(clean);
+      if (clean.startsWith('origin/')) remote.push(clean);
+      else local.push(clean);
+    }
+
+    let defaultBase = '';
+    for (const ref of ['origin/main', 'origin/master', 'main', 'master']) {
+      if (seen.has(ref)) { defaultBase = ref; break; }
+    }
+
+    return c.json({ currentBranch, defaultBase, local, remote });
+  } catch (err) {
+    return c.json({ error: 'Failed to list refs', details: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// GET /sessions/:id/commits?repo=...&base=...
+tasksRoutes.get('/sessions/:id/commits', async (c) => {
+  const sessionId = c.req.param('id');
+  const requestedBase = c.req.query('base') || '';
+  const repoName = c.req.query('repo') ?? '';
+
+  const cwd = resolveRepoCwd(sessionId, repoName);
+  if (!cwd) return c.json({ error: 'Session not found or no working directory' }, 404);
+
+  try {
+    const git = simpleGit(cwd);
+
+    let baseSha = '';
+    let baseRef = '';
+    if (requestedBase) {
+      try {
+        baseSha = (await git.raw(['merge-base', 'HEAD', requestedBase])).trim();
+        baseRef = requestedBase;
+      } catch {
+        return c.json({ error: `Invalid base ref: ${requestedBase}` }, 400);
+      }
+    } else {
+      for (const ref of ['origin/main', 'origin/master']) {
+        try {
+          baseSha = (await git.raw(['merge-base', 'HEAD', ref])).trim();
+          baseRef = ref;
+          break;
+        } catch { /* try next */ }
+      }
+    }
+    if (!baseSha) {
+      try {
+        baseSha = (await git.raw(['rev-list', '--max-parents=0', 'HEAD'])).trim().split('\n')[0];
+        baseRef = baseRef || 'root';
+      } catch { /* empty repo */ }
+    }
+
+    const baseShortSha = baseSha ? baseSha.slice(0, 7) : '';
+    let baseMessage = '';
+    if (baseSha) {
+      try { baseMessage = (await git.raw(['log', '-1', '--format=%s', baseSha])).trim(); } catch { /* ignore */ }
+    }
+
+    type LogEntry = { sha: string; shortSha: string; message: string; author: string; date: string };
+    const logResult = await git.log<LogEntry>({
+      format: { sha: '%H', shortSha: '%h', message: '%s', author: '%an', date: '%ai' },
+      from: baseSha || undefined,
+      to: 'HEAD',
+      symmetric: false,
+      '--numstat': null,
+    } as any);
+
+    const commits = logResult.all.map(c => ({
+      sha: c.sha,
+      shortSha: c.shortSha,
+      message: c.message,
+      author: c.author,
+      date: c.date,
+      additions: (c as any).diff?.insertions ?? 0,
+      deletions: (c as any).diff?.deletions ?? 0,
+      filesChanged: (c as any).diff?.changed ?? 0,
+    }));
+
+    return c.json({ commits, baseSha, baseRef, baseShortSha, baseMessage });
+  } catch (err) {
+    return c.json({ error: 'Failed to list commits', details: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// GET /sessions/:id/commits/:sha/diff?repo=...&to=<sha>
+tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
+  const sessionId = c.req.param('id');
+  const sha = c.req.param('sha');
+  const toSha = c.req.query('to');
+  const repoName = c.req.query('repo') ?? '';
+
+  const cwd = resolveRepoCwd(sessionId, repoName);
+  if (!cwd) return c.json({ error: 'Session not found or no working directory' }, 404);
+
+  try {
+    const git = simpleGit(cwd);
+    let diff: string;
+    if (toSha) {
+      diff = await git.diff(['-U20', sha, toSha]);
+    } else {
+      try {
+        diff = await git.diff(['-U20', `${sha}^`, sha]);
+      } catch {
+        diff = await git.diff(['-U20', EMPTY_TREE_SHA, sha]);
+      }
+    }
+    return c.json({ raw: diff });
+  } catch (err) {
+    return c.json({ error: 'Failed to get commit diff', details: err instanceof Error ? err.message : String(err) }, 500);
+  }
 });

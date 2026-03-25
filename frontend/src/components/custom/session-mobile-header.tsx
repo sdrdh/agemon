@@ -1,4 +1,4 @@
-import { ArrowLeft, Diff, Square } from 'lucide-react';
+import { ArrowLeft, FileDiff, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SESSION_STATE_DOT } from '@/lib/chat-utils';
 import type { AgentSessionState } from '@agemon/shared';
@@ -21,7 +21,7 @@ export function SessionMobileHeader({
   onDiff?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0 sticky top-0 z-50">
+    <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0 z-50">
       <Button size="icon" variant="ghost" aria-label="Back to sessions" onClick={onBack} className="min-h-[44px] min-w-[44px]">
         <ArrowLeft className="h-5 w-5" />
       </Button>
@@ -29,7 +29,7 @@ export function SessionMobileHeader({
       <span className="text-sm font-medium flex-1 truncate">{sessionLabel}</span>
       {onDiff && (
         <Button size="icon" variant="ghost" aria-label="View changes" onClick={onDiff} className="min-h-[44px] min-w-[44px] shrink-0">
-          <Diff className="h-4 w-4" />
+          <FileDiff className="h-4 w-4" />
         </Button>
       )}
       {sessionRunning && (

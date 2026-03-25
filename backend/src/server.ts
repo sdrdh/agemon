@@ -8,7 +8,7 @@ import { AGEMON_DIR } from './lib/git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import { createApp, websocket } from './app.ts';
 import { registerBuiltinAgents } from './lib/plugins/agent-registry.ts';
-import type { SessionMeta } from './lib/plugins/workspace.ts';
+import type { RepoDiff } from './lib/plugins/workspace.ts';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -116,20 +116,21 @@ workspaceRegistry.register('cwd', {
     return { cwd };
   },
 
-  async getDiff(session: SessionMeta): Promise<string | null> {
-    const cwd = session.meta.cwd as string | undefined;
+  async getDiff(meta: Record<string, unknown>): Promise<RepoDiff[] | null> {
+    const cwd = meta.cwd as string | undefined;
     if (!cwd) return null;
 
     const git = simpleGit(cwd);
     const isRepo = await git.checkIsRepo().catch(() => false);
 
     if (isRepo) {
-      const diff = await git.diff(['--', '.']);
-      return diff || null;
+      const diff = await git.diff(['--', '.']).catch(() => '');
+      const repoName = cwd.split('/').pop() || cwd;
+      return diff ? [{ repoName, cwd, diff }] : null;
     }
 
     const entries = await readdir(cwd, { withFileTypes: true }).catch(() => []);
-    const subrepoDiffs: string[] = [];
+    const results: RepoDiff[] = [];
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
@@ -139,12 +140,12 @@ workspaceRegistry.register('cwd', {
 
         if (isSubrepo) {
           const diff = await subgit.diff(['--', '.']).catch(() => '');
-          if (diff) subrepoDiffs.push(`\n### ${entry.name}\n\n${diff}`);
+          if (diff) results.push({ repoName: entry.name, cwd: subpath, diff });
         }
       }
     }
 
-    return subrepoDiffs.length > 0 ? subrepoDiffs.join('\n') : null;
+    return results.length > 0 ? results : null;
   },
 });
 

@@ -4,7 +4,7 @@
  * Used when no custom WorkspaceProvider plugin is registered.
  */
 
-import type { WorkspaceProvider, SessionMeta, WorkspaceResult } from './workspace.ts';
+import type { WorkspaceProvider, SessionMeta, WorkspaceResult, RepoDiff } from './workspace.ts';
 import { getTaskDir, refreshTaskContext } from '../context.ts';
 import { db } from '../../db/client.ts';
 import { mkdir } from 'fs/promises';
@@ -31,25 +31,30 @@ export const defaultTaskWorkspaceProvider: WorkspaceProvider = {
     return { cwd: taskDir };
   },
 
-  async getDiff(session: SessionMeta): Promise<string | null> {
-    const taskId = session.meta.task_id as string | undefined;
+  async getDiff(meta: Record<string, unknown>): Promise<RepoDiff[] | null> {
+    const taskId = meta.task_id as string | undefined;
     if (!taskId) return null;
 
     const task = db.getTask(taskId);
     if (!task?.repos) return null;
 
-    const git = gitManager;
-    const diffs: string[] = [];
+    const settled = await Promise.allSettled(
+      task.repos.map(async (repo) => {
+        const cwd = gitManager.getWorktreePath(taskId, repo.name);
+        const diff = await gitManager.getDiff(taskId, repo.name);
+        return { repoName: repo.name, cwd, diff: diff ?? '' };
+      }),
+    );
 
-    for (const repo of task.repos) {
-      try {
-        const diff = await git.getDiff(taskId, repo.name);
-        if (diff) diffs.push(diff);
-      } catch {
-        // Skip repos where diff fails
+    const results: RepoDiff[] = [];
+    for (const r of settled) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      } else {
+        console.warn('[workspace-default] Failed to get diff for a repo:', r.reason);
       }
     }
 
-    return diffs.length > 0 ? diffs.join('\n') : null;
+    return results.length > 0 ? results : null;
   },
 };

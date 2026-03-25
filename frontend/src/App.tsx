@@ -71,10 +71,9 @@ async function fetchPluginIcon(pluginId: string): Promise<React.ComponentType<{ 
 }
 
 function BottomNav() {
-  const matches = useMatches();
   const hostLayout = useWsStore(s => s.hostLayout);
-  // Hide chrome when host route is a legacy task detail OR plugin requests fullscreen layout
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
+  // Hide nav only when a plugin explicitly requests fullscreen (e.g. active session chat)
+  const isTaskDetail = hostLayout === 'fullscreen';
   const connected = useWsStore(s => s.connected);
   const updateAvailable = useWsStore(s => s.updateAvailable);
   const pluginsRevision = useWsStore(s => s.pluginsRevision);
@@ -155,7 +154,7 @@ function RootLayout() {
   const connected = useWsStore(s => s.connected);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className={`bg-background text-foreground ${isTaskDetail ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
       {!isTaskDetail && (
         <header className="sticky top-0 z-40 bg-background border-b">
           <div className="flex items-center justify-between h-11 px-4 max-w-5xl mx-auto">
