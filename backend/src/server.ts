@@ -230,7 +230,7 @@ const { setExtensions } = await import('./lib/extensions/registry.ts');
 const { mountExtensionRoutes } = await import('./lib/extensions/mount.ts');
 
 // Scan ~/.agemon/plugins/ AND repo-bundled plugins/ directory
-const repoPluginsDir = join(import.meta.dir, '../../plugins');
+const repoPluginsDir = join(import.meta.dir, '../../extensions');
 const extensions = await scanExtensions(AGEMON_DIR, pluginBridge, { extraDirs: [repoPluginsDir], sessionApi });
 setExtensions(extensions);
 mountExtensionRoutes(app, extensions, AGEMON_DIR);
