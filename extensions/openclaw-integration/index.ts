@@ -44,9 +44,13 @@ export const plugin: ExtensionModule = {
      * Only sends if webhook is configured AND a mapping exists for the task.
      */
     async function notify(event: string, payload: unknown): Promise<void> {
+      ctx.logger.info(`notify(${event}) called`);
       const webhookUrl = getWebhookUrl();
       const webhookToken = getWebhookToken();
-      if (!webhookUrl) return;
+      if (!webhookUrl) {
+        ctx.logger.warn(`notify(${event}): no webhook URL configured`);
+        return;
+      }
 
       const p = payload as Record<string, unknown>;
       const taskId = (p?.id ?? p?.taskId ?? p?.task_id) as string | undefined;
