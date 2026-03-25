@@ -83,7 +83,7 @@ function BottomNav() {
   useEffect(() => {
     if (!connected) return;
     const controller = new AbortController();
-    fetch('/api/plugins', { credentials: 'include', signal: controller.signal })
+    fetch('/api/extensions', { credentials: 'include', signal: controller.signal })
       .then(res => res.json())
       .then(async (plugins: { id: string; navEnabled: boolean; navItems: { label: string; lucideIcon?: string | null; icon?: string | null; path: string; order?: number }[] }[]) => {
         type SortedNavItem = NavItem & { order: number };

@@ -14,13 +14,13 @@ import { api } from '@/lib/api';
 import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
 import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers' | 'skills' | 'plugins' | 'about';
+type Section = 'appearance' | 'mcp-servers' | 'skills' | 'extensions' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Zap },
-  { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'extensions', label: 'Extensions', icon: Puzzle },
   { id: 'about', label: 'About', icon: Info },
 ];
 
@@ -162,9 +162,9 @@ function SkillsSection() {
   );
 }
 
-// ─── Plugins Section ────────────────────────────────────────────────────────
+// ─── Extensions Section ──────────────────────────────────────────────────────
 
-interface PluginInfo {
+interface ExtensionInfo {
   id: string;
   name: string;
   version: string;
@@ -175,21 +175,21 @@ interface PluginInfo {
   showInSettings: boolean;
 }
 
-function PluginsSection() {
-  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+function ExtensionsSection() {
+  const [plugins, setPlugins] = useState<ExtensionInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/plugins', { credentials: 'include' })
+    fetch('/api/extensions', { credentials: 'include' })
       .then(res => res.json())
-      .then((all: PluginInfo[]) => setPlugins(all.filter(p => p.showInSettings !== false)))
+      .then((all: ExtensionInfo[]) => setPlugins(all.filter(p => p.showInSettings !== false)))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
   function toggleNav(pluginId: string, enabled: boolean) {
     setPlugins(prev => prev.map(p => p.id === pluginId ? { ...p, navEnabled: enabled } : p));
-    fetch(`/api/plugins/${pluginId}`, {
+    fetch(`/api/extensions/${pluginId}`, {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -200,9 +200,9 @@ function PluginsSection() {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold">Plugins</h2>
+        <h2 className="text-sm font-semibold">Extensions</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Drop a plugin folder into <span className="font-mono">~/.agemon/plugins/</span> and restart the server to install.
+          Drop an extension folder into <span className="font-mono">~/.agemon/extensions/</span> and restart the server to install.
         </p>
       </div>
 
@@ -216,7 +216,7 @@ function PluginsSection() {
       {!loading && plugins.length === 0 && (
         <div className="rounded-lg border border-dashed px-4 py-6 text-center text-muted-foreground">
           <Puzzle className="h-6 w-6 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No plugins installed</p>
+          <p className="text-sm">No extensions installed</p>
         </div>
       )}
 
@@ -681,7 +681,7 @@ export default function SettingsPage() {
           {activeSection === 'appearance' && <AppearanceSection />}
           {activeSection === 'mcp-servers' && <McpServersSection />}
           {activeSection === 'skills' && <SkillsSection />}
-          {activeSection === 'plugins' && <PluginsSection />}
+          {activeSection === 'extensions' && <ExtensionsSection />}
           {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
         </div>
       </div>

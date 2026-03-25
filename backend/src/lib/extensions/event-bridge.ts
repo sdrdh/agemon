@@ -1,17 +1,17 @@
-// ─── Plugin Event Bridge ─────────────────────────────────────────────────────
-// Allows plugins to register hooks (blocking, awaited in priority order) and
+// ─── Extension Event Bridge ───────────────────────────────────────────────────
+// Allows extensions to register hooks (blocking, awaited in priority order) and
 // listeners (fire-and-forget) for named events. The bridge also wraps the
-// server's broadcast function so plugins can push WebSocket events to clients.
+// server's broadcast function so extensions can push WebSocket events to clients.
 import type { ServerEventPayload } from '@agemon/shared';
 
 interface HookEntry {
-  pluginId: string;
+  extensionId: string;
   handler: (payload: unknown) => Promise<void>;
   priority: number;
 }
 
 interface ListenerEntry {
-  pluginId: string;
+  extensionId: string;
   handler: (payload: unknown) => void;
 }
 
@@ -30,14 +30,14 @@ export class EventBridge {
    * If a hook throws, emit() propagates the error.
    */
   registerHook(
-    pluginId: string,
+    extensionId: string,
     event: string,
     handler: (payload: unknown) => Promise<void>,
     opts?: { priority?: number },
   ): void {
     const priority = opts?.priority ?? 10;
     const entries = this.hooks.get(event) ?? [];
-    entries.push({ pluginId, handler, priority });
+    entries.push({ extensionId, handler, priority });
     // Keep sorted by priority ascending so emit() can just iterate in order
     entries.sort((a, b) => a.priority - b.priority);
     this.hooks.set(event, entries);
@@ -48,12 +48,12 @@ export class EventBridge {
    * Errors are logged but do not propagate.
    */
   registerListener(
-    pluginId: string,
+    extensionId: string,
     event: string,
     handler: (payload: unknown) => void,
   ): void {
     const entries = this.listeners.get(event) ?? [];
-    entries.push({ pluginId, handler });
+    entries.push({ extensionId, handler });
     this.listeners.set(event, entries);
   }
 
@@ -74,7 +74,7 @@ export class EventBridge {
       try {
         entry.handler(payload);
       } catch (err) {
-        console.error(`[plugin:${entry.pluginId}] listener error on event "${event}":`, (err as Error).message);
+        console.error(`[extension:${entry.extensionId}] listener error on event "${event}":`, (err as Error).message);
       }
     }
   }
@@ -87,12 +87,12 @@ export class EventBridge {
   }
 
   /**
-   * Remove all hooks and listeners registered by a plugin.
-   * Call this before hot-reloading a plugin so stale handlers don't accumulate.
+   * Remove all hooks and listeners registered by an extension.
+   * Call this before hot-reloading an extension so stale handlers don't accumulate.
    */
-  removePlugin(pluginId: string): void {
+  removeExtension(extensionId: string): void {
     for (const [event, entries] of this.hooks) {
-      const filtered = entries.filter(e => e.pluginId !== pluginId);
+      const filtered = entries.filter(e => e.extensionId !== extensionId);
       if (filtered.length === 0) {
         this.hooks.delete(event);
       } else {
@@ -101,7 +101,7 @@ export class EventBridge {
     }
 
     for (const [event, entries] of this.listeners) {
-      const filtered = entries.filter(e => e.pluginId !== pluginId);
+      const filtered = entries.filter(e => e.extensionId !== extensionId);
       if (filtered.length === 0) {
         this.listeners.delete(event);
       } else {
@@ -109,4 +109,5 @@ export class EventBridge {
       }
     }
   }
+
 }

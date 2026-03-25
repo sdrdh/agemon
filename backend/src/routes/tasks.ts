@@ -3,9 +3,9 @@ import { readFile } from 'fs/promises';
 import { join, basename } from 'path';
 import { simpleGit } from 'simple-git';
 import { db } from '../db/client.ts';
-import { workspaceRegistry } from '../lib/plugins/workspace-registry.ts';
+import { workspaceRegistry } from '../lib/extensions/workspace-registry.ts';
 import { gitManager } from '../lib/git.ts';
-import type { RepoDiff } from '../lib/plugins/workspace.ts';
+import type { RepoDiff } from '../lib/extensions/workspace.ts';
 
 export const tasksRoutes = new Hono();
 

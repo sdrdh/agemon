@@ -8,12 +8,12 @@ import { pendingApprovalResolvers } from './approvals.ts';
 import { handleExit } from './lifecycle.ts';
 import { JsonRpcTransport } from '../jsonrpc.ts';
 import { buildAgentEnv, resolveAgentBinary } from '../agents.ts';
-import { agentRegistry } from '../plugins/agent-registry.ts';
+import { agentRegistry } from '../extensions/agent-registry.ts';
 import { runAcpHandshake } from './handshake.ts';
 import { initSessionLog } from './event-log.ts';
-import { resolveWorkspaceCwd, type SessionMeta } from '../plugins/workspace.ts';
-import { defaultTaskWorkspaceProvider } from '../plugins/workspace-default.ts';
-import { workspaceRegistry } from '../plugins/workspace-registry.ts';
+import { resolveWorkspaceCwd, type SessionMeta } from '../extensions/workspace.ts';
+import { defaultTaskWorkspaceProvider } from '../extensions/workspace-default.ts';
+import { workspaceRegistry } from '../extensions/workspace-registry.ts';
 import { AGEMON_DIR } from '../git.ts';
 import type { AgentType, AgentSession, ApprovalOption, PendingApproval } from '@agemon/shared';
 

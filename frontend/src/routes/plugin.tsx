@@ -9,7 +9,7 @@ import type { PluginKit } from '../../../shared/types/plugin-kit';
 
 async function fetchBuildError(pluginId: string): Promise<string | null> {
   try {
-    const res = await fetch('/api/plugins', { credentials: 'include' });
+    const res = await fetch('/api/extensions', { credentials: 'include' });
     if (!res.ok) return null;
     const plugins = await res.json() as Array<{ id: string; buildError?: string | null }>;
     return plugins.find(p => p.id === pluginId)?.buildError ?? null;

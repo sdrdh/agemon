@@ -78,7 +78,7 @@ export async function setAuthCookie(key: string): Promise<void> {
 }
 
 export const api = {
-  // Tasks (plugin: tasks → /api/plugins/tasks/*)
+  // Tasks (plugin: tasks → /api/extensions/tasks/*)
   listTasks: (includeArchived = false) => request<Task[]>(`/plugins/tasks/tasks${includeArchived ? '?archived=true' : ''}`),
   listTasksByProject: (includeArchived = false) => request<TasksByProject>(`/plugins/tasks/tasks/by-project${includeArchived ? '?archived=true' : ''}`),
   getTask: (id: string) => request<Task>(`/plugins/tasks/tasks/${id}`),
@@ -119,7 +119,7 @@ export const api = {
       body: JSON.stringify({ configId, value }),
     }),
 
-  // MCP Servers (plugin: mcp-config → /api/plugins/mcp-config/*)
+  // MCP Servers (plugin: mcp-config → /api/extensions/mcp-config/*)
   listGlobalMcpServers: () => request<McpServerEntry[]>('/plugins/mcp-config/mcp-servers'),
   addGlobalMcpServer: (body: CreateMcpServerBody) =>
     request<McpServerEntry>('/plugins/mcp-config/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
@@ -154,7 +154,7 @@ export const api = {
   // Dashboard
   getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
 
-  // Skills (plugin: skills-manager → /api/plugins/skills-manager/*)
+  // Skills (plugin: skills-manager → /api/extensions/skills-manager/*)
   listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/plugins/skills-manager/skills'),
   previewSkills: (source: string) =>
     request<SkillPreviewResult>('/plugins/skills-manager/skills/preview', {
