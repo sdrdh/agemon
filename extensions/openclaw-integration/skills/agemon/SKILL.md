@@ -1,6 +1,6 @@
 ---
 name: agemon
-description: "Manage coding tasks and agent sessions via the Agemon API. Use when: creating tasks, starting/stopping agent sessions, sending messages to sessions, checking task status, or managing repos on tasks. NOT for: direct git operations (use git), code review (use coding-agent or github skill), or general file editing."
+description: "Manage coding tasks and agent sessions on Agemon. Use when: creating tasks, listing tasks, starting/stopping agent sessions, sending messages to running sessions, checking task/session status, or registering notification mappings. NOT for: direct git operations (use git), code editing (use coding-agent), or GitHub issue/PR management (use github skill)."
 metadata:
   {
     "openclaw":
@@ -14,20 +14,16 @@ metadata:
 
 # Agemon
 
-Control Agemon task/session management from OpenClaw.
+Control Agemon task/session management. Agemon orchestrates coding agents (Claude Code, Codex, Aider, Goose) on tasks with git repo worktrees.
 
 ## Setup
 
-Store credentials:
-
 ```bash
-# Agemon base URL (no trailing slash)
-export AGEMON_URL="http://127.0.0.1:3000"
-# API key for authentication
+export AGEMON_URL="http://127.0.0.1:3000"  # no trailing slash
 export AGEMON_KEY="your-agemon-key"
 ```
 
-All requests need:
+All requests:
 
 ```bash
 curl -s "${AGEMON_URL}/api/..." \
@@ -37,53 +33,38 @@ curl -s "${AGEMON_URL}/api/..." \
 
 ## Tasks
 
-**List tasks:**
+**List:**
 
 ```bash
 curl -s "${AGEMON_URL}/api/extensions/tasks/tasks" \
   -H "Authorization: Bearer ${AGEMON_KEY}"
 ```
 
-**Create task:**
+**Create:**
 
 ```bash
 curl -s -X POST "${AGEMON_URL}/api/extensions/tasks/tasks" \
   -H "Authorization: Bearer ${AGEMON_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{
-    "title": "Fix login bug",
-    "description": "Users report 500 on /login",
-    "repos": ["git@github.com:org/repo.git"],
-    "agent": "claude-code"
-  }'
+  -d '{"title": "Fix login bug", "description": "500 on /login", "repos": ["git@github.com:org/repo.git"], "agent": "claude-code"}'
 ```
 
-Fields: `title` (required), `description`, `repos` (array of git URLs), `agent` (default: `claude-code`, options: `claude-code`, `codex`, `aider`, `goose`).
+Fields: `title` (required), `description`, `repos` (git URL array), `agent` (`claude-code` | `codex` | `aider` | `goose`, default: `claude-code`).
 
-**Get task:**
+**Get:** `GET /api/extensions/tasks/tasks/{id}`
 
-```bash
-curl -s "${AGEMON_URL}/api/extensions/tasks/tasks/{task_id}" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
-
-**Update task:**
+**Update:**
 
 ```bash
-curl -s -X PATCH "${AGEMON_URL}/api/extensions/tasks/tasks/{task_id}" \
+curl -s -X PATCH "${AGEMON_URL}/api/extensions/tasks/tasks/{id}" \
   -H "Authorization: Bearer ${AGEMON_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"status": "done", "title": "Updated title"}'
+  -d '{"status": "done"}'
 ```
 
-Patchable: `title`, `description`, `status` (`todo`, `in-progress`, `blocked`, `in-review`, `done`), `repos`, `archived`.
+Patchable: `title`, `description`, `status` (`todo`|`in-progress`|`blocked`|`in-review`|`done`), `repos`, `archived`.
 
-**Delete task:**
-
-```bash
-curl -s -X DELETE "${AGEMON_URL}/api/extensions/tasks/tasks/{task_id}" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+**Delete:** `DELETE /api/extensions/tasks/tasks/{id}`
 
 ## Sessions
 
@@ -96,119 +77,61 @@ curl -s -X POST "${AGEMON_URL}/api/tasks/{task_id}/sessions" \
   -d '{"agentType": "claude-code"}'
 ```
 
-Returns session object with `id`. The agent spawns and runs an ACP handshake.
-
-**List sessions for task:**
-
-```bash
-curl -s "${AGEMON_URL}/api/tasks/{task_id}/sessions" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
-
-**List all sessions:**
-
-```bash
-curl -s "${AGEMON_URL}/api/sessions" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
-
-**Get session detail:**
-
-```bash
-curl -s "${AGEMON_URL}/api/sessions/{session_id}" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
-
-**Send message to session:**
+**Send message:**
 
 ```bash
 curl -s -X POST "${AGEMON_URL}/api/sessions/{session_id}/message" \
   -H "Authorization: Bearer ${AGEMON_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"content": "Please also add tests"}'
+  -d '{"content": "Also add tests for edge cases"}'
 ```
 
-**Get chat history:**
+**Chat history:** `GET /api/sessions/{session_id}/chat`
 
-```bash
-curl -s "${AGEMON_URL}/api/sessions/{session_id}/chat" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+**Stop:** `POST /api/sessions/{session_id}/stop`
 
-**Stop session:**
+**Resume:** `POST /api/sessions/{session_id}/resume`
 
-```bash
-curl -s -X POST "${AGEMON_URL}/api/sessions/{session_id}/stop" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+**List all:** `GET /api/sessions`
 
-**Resume session:**
+**List for task:** `GET /api/tasks/{task_id}/sessions`
 
-```bash
-curl -s -X POST "${AGEMON_URL}/api/sessions/{session_id}/resume" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+**Stop all for task:** `POST /api/tasks/{task_id}/stop`
 
-**Stop all sessions for task:**
+## Notification Mappings
 
-```bash
-curl -s -X POST "${AGEMON_URL}/api/tasks/{task_id}/stop" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
-
-## Notification Mappings (OpenClaw Integration)
-
-Register a task to forward events to a specific channel:
+Register a task to forward events with opaque metadata:
 
 ```bash
 curl -s -X POST "${AGEMON_URL}/api/extensions/openclaw-integration/configure" \
   -H "Authorization: Bearer ${AGEMON_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"taskId": "fix-login-bug", "channel": "#dev"}'
+  -d '{"taskId": "fix-login-bug", "metadata": {"channel": "#dev", "agentId": "main"}}'
 ```
 
-**List mappings:**
+`metadata` is opaque — Agemon stores and forwards it verbatim in webhook payloads. The consumer (e.g. OpenClaw) decides how to interpret it.
 
-```bash
-curl -s "${AGEMON_URL}/api/extensions/openclaw-integration/mappings" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+**List:** `GET /api/extensions/openclaw-integration/mappings`
 
-**Remove mapping:**
+**Remove:** `DELETE /api/extensions/openclaw-integration/mappings/{task_id}`
 
-```bash
-curl -s -X DELETE "${AGEMON_URL}/api/extensions/openclaw-integration/mappings/{task_id}" \
-  -H "Authorization: Bearer ${AGEMON_KEY}"
-```
+## Typical Flow
 
-## Typical Flows
+1. Create task → get `id`
+2. Register notification mapping with metadata (POST configure)
+3. Start session → agent spawns, ACP handshake, begins work
+4. Events auto-forward to OpenClaw webhook with metadata attached
+5. Monitor: list sessions, get chat history, send follow-up messages
 
-### Create task and watch it
-
-1. Create task (POST tasks)
-2. Register notification mapping (POST configure) with your channel
-3. Start session (POST tasks/{id}/sessions)
-4. Events flow to OpenClaw webhook automatically
-
-### Check on running work
-
-1. List tasks (GET tasks) — find the task
-2. List sessions (GET tasks/{id}/sessions) — find active session
-3. Get chat history (GET sessions/{id}/chat) — see what the agent did
-4. Send follow-up message if needed (POST sessions/{id}/message)
-
-## Health Check
+## Health
 
 ```bash
 curl -s "${AGEMON_URL}/api/health"
 ```
 
-Returns `{"status": "ok", ...}` with uptime, session counts, loaded extensions.
-
 ## Notes
 
-- Task IDs are slugified from the title (e.g. "Fix login bug" → `fix-login-bug`)
-- Session states: `starting`, `ready`, `running`, `paused`, `stopped`, `error`
-- Agent types: `claude-code`, `codex`, `aider`, `goose`
-- Repos are cloned as git worktrees per task — agents work in isolated directories
-- The WebSocket at `${AGEMON_URL}/ws` streams real-time events (task updates, session output, approvals)
+- Task IDs are slugified from title (`Fix login bug` → `fix-login-bug`)
+- Session states: `starting` → `ready` → `running` → `stopped`/`error`
+- Repos are cloned as worktrees per task — agents work in isolated dirs
+- WebSocket at `${AGEMON_URL}/ws` streams real-time events

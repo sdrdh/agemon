@@ -12,8 +12,8 @@ import type { ExtensionContext, ExtensionExports, ExtensionModule } from '../../
  * OpenClaw agents how to call the Agemon API directly.
  */
 
-interface ChannelMapping {
-  channel: string;
+interface NotificationMapping {
+  metadata: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -41,7 +41,7 @@ export const plugin: ExtensionModule = {
 
     /**
      * Forward an event to the configured OpenClaw webhook.
-     * Only sends if webhook is configured AND a channel mapping exists for the task.
+     * Only sends if webhook is configured AND a mapping exists for the task.
      */
     async function notify(event: string, payload: unknown): Promise<void> {
       const webhookUrl = getWebhookUrl();
@@ -55,8 +55,8 @@ export const plugin: ExtensionModule = {
         return;
       }
 
-      const mapping = ctx.store.getJson<ChannelMapping>(`mapping:${taskId}`);
-      if (!mapping) return; // no channel registered for this task
+      const mapping = ctx.store.getJson<NotificationMapping>(`mapping:${taskId}`);
+      if (!mapping) return; // no mapping registered for this task
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -72,7 +72,7 @@ export const plugin: ExtensionModule = {
           body: JSON.stringify({
             event,
             taskId,
-            channel: mapping.channel,
+            metadata: mapping.metadata,
             payload: p,
             timestamp: new Date().toISOString(),
           }),
@@ -97,17 +97,18 @@ export const plugin: ExtensionModule = {
     // ── API Routes ──────────────────────────────────────────────────────────
 
     /**
-     * POST /configure — register a task for notifications on a channel.
-     * Body: { taskId: string, channel: string }
+     * POST /configure — register a task for notifications.
+     * Body: { taskId: string, metadata: Record<string, unknown> }
+     * metadata is opaque — stored and forwarded verbatim to the webhook.
      */
     api.post('/configure', async (c) => {
-      const { taskId, channel } = await c.req.json<{ taskId: string; channel: string }>();
-      if (!taskId || !channel) {
-        return c.json({ error: 'taskId and channel are required' }, 400);
+      const { taskId, metadata } = await c.req.json<{ taskId: string; metadata: Record<string, unknown> }>();
+      if (!taskId || !metadata || typeof metadata !== 'object') {
+        return c.json({ error: 'taskId and metadata are required' }, 400);
       }
 
-      const mapping: ChannelMapping = {
-        channel,
+      const mapping: NotificationMapping = {
+        metadata,
         createdAt: new Date().toISOString(),
       };
       ctx.store.setJson(`mapping:${taskId}`, mapping);
@@ -119,8 +120,8 @@ export const plugin: ExtensionModule = {
         setMappingIndex(index);
       }
 
-      ctx.logger.info(`configured notifications for task ${taskId} → ${channel}`);
-      return c.json({ ok: true, taskId, channel });
+      ctx.logger.info(`configured notifications for task ${taskId}`);
+      return c.json({ ok: true, taskId, metadata });
     });
 
     /**
@@ -130,7 +131,7 @@ export const plugin: ExtensionModule = {
       const index = getMappingIndex();
       const mappings = index
         .map((id) => {
-          const m = ctx.store.getJson<ChannelMapping>(`mapping:${id}`);
+          const m = ctx.store.getJson<NotificationMapping>(`mapping:${id}`);
           return m ? { taskId: id, ...m } : null;
         })
         .filter(Boolean);
