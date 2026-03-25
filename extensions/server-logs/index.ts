@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports } from '../../backend/src/lib/extensions/types.ts';
 
 const UNIT = 'agemon';
 
-export function onLoad(_ctx: PluginContext): PluginExports {
+export function onLoad(_ctx: ExtensionContext): ExtensionExports {
   const api = new Hono();
 
   // GET /history?lines=200  — recent log lines (one-shot)

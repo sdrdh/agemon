@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { readdir, readFile, mkdir, cp, rm } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { PluginContext, PluginExports, PluginModule } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports, ExtensionModule } from '../../backend/src/lib/extensions/types.ts';
 import type { InstalledSkill, SkillInstallResult, SkillPreview } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
@@ -137,8 +137,8 @@ function parseListOutput(stdout: string): SkillPreview[] {
   return skills;
 }
 
-export const plugin: PluginModule = {
-  onLoad(ctx: PluginContext): PluginExports {
+export const plugin: ExtensionModule = {
+  onLoad(ctx: ExtensionContext): ExtensionExports {
     const agemonDir = ctx.agemonDir;
     const apiRoutes = new Hono();
 

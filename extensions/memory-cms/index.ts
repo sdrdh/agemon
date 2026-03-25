@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { readdir, stat } from 'fs/promises';
 import { join, resolve } from 'path';
-import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports } from '../../backend/src/lib/extensions/types.ts';
 
 /** Reject path segments that could traverse directories. */
 function isSafeSegment(s: string): boolean {
@@ -65,7 +65,7 @@ async function discoverTaskFiles(tasksDir: string, taskId: string): Promise<Memo
   return files;
 }
 
-export function onLoad(ctx: PluginContext): PluginExports {
+export function onLoad(ctx: ExtensionContext): ExtensionExports {
   const tasksDir = join(ctx.agemonDir, 'tasks');
 
   // API routes

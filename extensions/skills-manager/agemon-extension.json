@@ -5,5 +5,5 @@
   "description": "Global and per-task skill discovery, installation, and removal",
   "entryPoint": "index.ts",
   "bundled": true,
-  "showInSettings": true
+  "showInSettings": false
 }

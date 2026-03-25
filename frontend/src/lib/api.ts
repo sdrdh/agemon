@@ -154,28 +154,28 @@ export const api = {
   // Dashboard
   getDashboardActive: () => request<DashboardActiveResponse>('/dashboard/active'),
 
-  // Skills (plugin: skills-manager → /api/extensions/skills-manager/*)
-  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/plugins/skills-manager/skills'),
+  // Skills (extension: skills-manager → /api/extensions/skills-manager/*)
+  listGlobalSkills: () => request<{ skills: InstalledSkill[] }>('/extensions/skills-manager/skills'),
   previewSkills: (source: string) =>
-    request<SkillPreviewResult>('/plugins/skills-manager/skills/preview', {
+    request<SkillPreviewResult>('/extensions/skills-manager/skills/preview', {
       method: 'POST',
       body: JSON.stringify({ source }),
     }),
   installGlobalSkill: (source: string, skillNames?: string[]) =>
-    request<SkillInstallResult>('/plugins/skills-manager/skills', {
+    request<SkillInstallResult>('/extensions/skills-manager/skills', {
       method: 'POST',
       body: JSON.stringify({ source, skillNames }),
     }),
-  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/plugins/skills-manager/skills/${name}`, { method: 'DELETE' }),
+  removeGlobalSkill: (name: string) => request<{ ok: boolean }>(`/extensions/skills-manager/skills/${name}`, { method: 'DELETE' }),
   listTaskSkills: (taskId: string) =>
-    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/plugins/skills-manager/tasks/${taskId}/skills`),
+    request<{ global: InstalledSkill[]; task: InstalledSkill[] }>(`/extensions/skills-manager/tasks/${taskId}/skills`),
   installTaskSkill: (taskId: string, source: string, skillNames?: string[]) =>
-    request<SkillInstallResult>(`/plugins/skills-manager/tasks/${taskId}/skills`, {
+    request<SkillInstallResult>(`/extensions/skills-manager/tasks/${taskId}/skills`, {
       method: 'POST',
       body: JSON.stringify({ source, skillNames }),
     }),
   removeTaskSkill: (taskId: string, name: string) =>
-    request<{ ok: boolean }>(`/plugins/skills-manager/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/extensions/skills-manager/tasks/${taskId}/skills/${name}`, { method: 'DELETE' }),
 
   listApprovals: (taskId: string, all = true) =>
     request<PendingApproval[]>(`/tasks/${taskId}/approvals${all ? '?all=1' : ''}`),

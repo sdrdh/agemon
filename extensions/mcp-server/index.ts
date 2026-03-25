@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPTransport } from '@hono/mcp';
 import { z } from 'zod';
-import type { PluginContext, PluginExports } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports } from '../../backend/src/lib/extensions/types.ts';
 
 const AGENT_TYPES = ['claude-code', 'opencode', 'gemini', 'pi', 'codex'] as const;
 
@@ -14,7 +14,7 @@ function errorResult(message: string) {
   return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true as const };
 }
 
-export function onLoad(ctx: PluginContext): PluginExports {
+export function onLoad(ctx: ExtensionContext): ExtensionExports {
   const port = process.env.PORT ?? '3000';
   const host = process.env.HOST ?? '127.0.0.1';
   const baseUrl = `http://${host}:${port}/api`;

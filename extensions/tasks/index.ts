@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { PluginContext, PluginExports, PluginModule } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports, ExtensionModule } from '../../backend/src/lib/extensions/types.ts';
 import { deriveTaskStatus } from '../../backend/src/lib/acp/task-status.ts';
 import { db, generateTaskId } from '../../backend/src/db/client.ts';
 import { getActiveSession, stopAgent } from '../../backend/src/lib/acp/index.ts';
@@ -12,8 +12,8 @@ import type { AgentSessionState, CreateTaskBody, UpdateTaskBody } from '@agemon/
 /**
  * Tasks plugin — UI + task status derivation + task CRUD API routes.
  */
-export const plugin: PluginModule = {
-  onLoad(ctx: PluginContext): PluginExports {
+export const plugin: ExtensionModule = {
+  onLoad(ctx: ExtensionContext): ExtensionExports {
     ctx.on('session:state_changed', (payload) => {
       const { taskId, state } = payload as { sessionId: string; taskId: string | null; state: AgentSessionState };
       if (taskId) deriveTaskStatus(taskId);

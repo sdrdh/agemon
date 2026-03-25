@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { db } from '../../backend/src/db/client.ts';
-import type { PluginContext, PluginExports, PluginModule } from '../../backend/src/lib/plugins/types.ts';
+import type { ExtensionContext, ExtensionExports, ExtensionModule } from '../../backend/src/lib/extensions/types.ts';
 import type { CreateMcpServerBody, McpServerConfig, McpServerStdio, McpServerHttp, TestMcpServerResult, McpToolInfo } from '@agemon/shared';
 
 function sendError(statusCode: number, message: string): never {
@@ -257,8 +257,8 @@ async function testStdioServer(config: McpServerStdio): Promise<TestMcpServerRes
   }
 }
 
-export const plugin: PluginModule = {
-  onLoad(_ctx: PluginContext): PluginExports {
+export const plugin: ExtensionModule = {
+  onLoad(_ctx: ExtensionContext): ExtensionExports {
     const apiRoutes = new Hono();
 
     // ── Global MCP Servers ──────────────────────────────────────────────────

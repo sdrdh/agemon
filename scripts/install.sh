@@ -419,7 +419,7 @@ create_runtime_dirs() {
     "${AGEMON_DIR}" \
     "${AGEMON_DIR}/repos" \
     "${AGEMON_DIR}/tasks" \
-    "${AGEMON_DIR}/plugins" \
+    "${AGEMON_DIR}/extensions" \
     "${AGEMON_DIR}/skills"
 
   success "Runtime directories created at ${AGEMON_DIR}"
@@ -595,59 +595,82 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Step 9.5: Wire bundled plugins
+# Step 9.5: Wire bundled extensions
 # ---------------------------------------------------------------------------
-wire_bundled_plugins() {
-  step "Bundled plugins"
 
-  local plugins_src="${INSTALL_DIR}/plugins"
-  local plugins_dst="${AGEMON_DIR}/plugins"
+# Extensions that are recommended for most users
+RECOMMENDED_EXTENSIONS="tasks mcp-config mcp-server skills-manager"
 
-  if [ ! -d "$plugins_src" ] || [ -z "$(ls -A "$plugins_src" 2>/dev/null)" ]; then
-    info "No bundled plugins found — skipping."
+is_recommended() {
+  local id="$1"
+  for r in $RECOMMENDED_EXTENSIONS; do
+    [ "$r" = "$id" ] && return 0
+  done
+  return 1
+}
+
+wire_bundled_extensions() {
+  step "Bundled extensions"
+
+  local ext_src="${INSTALL_DIR}/extensions"
+  local ext_dst="${AGEMON_DIR}/extensions"
+
+  if [ ! -d "$ext_src" ] || [ -z "$(ls -A "$ext_src" 2>/dev/null)" ]; then
+    info "No bundled extensions found — skipping."
     return
   fi
 
-  for plugin_dir in "$plugins_src"/*/; do
-    [ -d "$plugin_dir" ] || continue
-    local plugin_name plugin_display plugin_desc
-    plugin_name="$(basename "$plugin_dir")"
-    local link_path="${plugins_dst}/${plugin_name}"
+  for ext_dir in "$ext_src"/*/; do
+    [ -d "$ext_dir" ] || continue
+    local ext_id ext_display ext_desc recommended_label default_answer
+    ext_id="$(basename "$ext_dir")"
+    local link_path="${ext_dst}/${ext_id}"
 
-    # Read name/description from agemon-plugin.json if available
-    if [ -f "${plugin_dir}/agemon-plugin.json" ] && command -v python3 &>/dev/null; then
-      plugin_display="$(python3 -c "import json,sys; d=json.load(open('${plugin_dir}/agemon-plugin.json')); print(d.get('name','${plugin_name}'))" 2>/dev/null || echo "$plugin_name")"
-      plugin_desc="$(python3 -c "import json,sys; d=json.load(open('${plugin_dir}/agemon-plugin.json')); print(d.get('description',''))" 2>/dev/null || echo "")"
+    # Read name/description from agemon-extension.json if available
+    if [ -f "${ext_dir}/agemon-extension.json" ] && command -v python3 &>/dev/null; then
+      ext_display="$(python3 -c "import json; d=json.load(open('${ext_dir}/agemon-extension.json')); print(d.get('name','${ext_id}'))" 2>/dev/null || echo "$ext_id")"
+      ext_desc="$(python3 -c "import json; d=json.load(open('${ext_dir}/agemon-extension.json')); print(d.get('description',''))" 2>/dev/null || echo "")"
     else
-      plugin_display="$plugin_name"
-      plugin_desc=""
+      ext_display="$ext_id"
+      ext_desc=""
     fi
 
     if [ -L "$link_path" ]; then
-      success "Plugin already linked: ${plugin_display}"
+      success "Extension already linked: ${ext_display}"
       continue
     fi
 
     if [ -e "$link_path" ]; then
-      warn "Skipping ${plugin_display} — ${link_path} exists and is not a symlink."
+      warn "Skipping ${ext_display} — ${link_path} exists and is not a symlink."
       continue
     fi
 
     if "$NON_INTERACTIVE"; then
-      ln -s "$plugin_dir" "$link_path"
-      success "Linked plugin: ${plugin_display}"
+      # In non-interactive mode, only install recommended extensions
+      if is_recommended "$ext_id"; then
+        ln -s "$ext_dir" "$link_path"
+        success "Linked extension: ${ext_display} (recommended)"
+      else
+        info "Skipped (non-interactive): ${ext_display}"
+      fi
     else
       printf "\n"
-      printf "  ${BOLD}%s${RESET}" "$plugin_display"
-      [ -n "$plugin_desc" ] && printf " — %s" "$plugin_desc"
-      printf "\n"
-      read -r -p "  Install this plugin? [Y/n] " answer </dev/tty
-      answer="${answer:-Y}"
-      if [[ "$answer" =~ ^[Yy] ]]; then
-        ln -s "$plugin_dir" "$link_path"
-        success "Linked plugin: ${plugin_display}"
+      if is_recommended "$ext_id"; then
+        printf "  ${BOLD}%s${RESET} ${GREEN}(recommended)${RESET}" "$ext_display"
+        default_answer="Y"
       else
-        info "Skipped: ${plugin_display}"
+        printf "  ${BOLD}%s${RESET}" "$ext_display"
+        default_answer="N"
+      fi
+      [ -n "$ext_desc" ] && printf "\n  %s" "$ext_desc"
+      printf "\n"
+      read -r -p "  Install? [${default_answer}/$([ "$default_answer" = "Y" ] && echo "n" || echo "y")]: " answer </dev/tty
+      answer="${answer:-${default_answer}}"
+      if [[ "$answer" =~ ^[Yy] ]]; then
+        ln -s "$ext_dir" "$link_path"
+        success "Linked extension: ${ext_display}"
+      else
+        info "Skipped: ${ext_display}"
       fi
     fi
   done
@@ -842,7 +865,7 @@ main() {
   create_runtime_dirs
   generate_secrets
   run_initial_setup
-  wire_bundled_plugins
+  wire_bundled_extensions
   install_service
   print_summary
 }
