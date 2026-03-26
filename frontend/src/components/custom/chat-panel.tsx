@@ -22,9 +22,10 @@ export interface ChatPanelProps {
   isDone?: boolean;
   /** Called when the diff button is tapped. Optional — when provided, a diff icon appears in the header. */
   onDiff?: () => void;
+  onFiles?: () => void;
 }
 
-export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false, onDiff }: ChatPanelProps) {
+export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false, onDiff, onFiles }: ChatPanelProps) {
   const isDesktop = useIsDesktop();
   const qc = useQueryClient();
   const [inputText, setInputText] = useState('');
@@ -158,6 +159,7 @@ export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false, on
       isLoadingMore={isLoadingMore}
       onFetchOlderMessages={fetchOlderMessages}
       onDiff={onDiff}
+      onFiles={onFiles}
     />
   );
 }

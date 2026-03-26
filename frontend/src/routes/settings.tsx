@@ -1,26 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink, FolderTree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useTheme } from '@/lib/theme-provider';
 import { THEMES, getThemeDef, type ColorMode, type ThemeId } from '@/lib/theme';
 import { McpServerList } from '@/components/custom/mcp-server-list';
+import { FileTreeViewer } from '@/components/custom/file-tree-viewer';
 import { SkillsManager } from '@/components/custom/skills-manager';
 import { useVersionChecker } from '@/hooks/use-version-checker';
 import { api } from '@/lib/api';
 import type { UpdateResult, ReleaseChannel } from '@agemon/shared';
 import { RELEASE_CHANNELS } from '@agemon/shared';
 
-type Section = 'appearance' | 'mcp-servers' | 'skills' | 'extensions' | 'about';
+type Section = 'appearance' | 'mcp-servers' | 'skills' | 'extensions' | 'files' | 'about';
 
 const SECTIONS: { id: Section; label: string; icon: typeof Palette }[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Zap },
   { id: 'extensions', label: 'Extensions', icon: Puzzle },
+  { id: 'files', label: 'Files', icon: FolderTree },
   { id: 'about', label: 'About', icon: Info },
 ];
 
@@ -259,6 +261,22 @@ function ExtensionsSection() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+// ─── Files Section ──────────────────────────────────────────────────────────
+
+function FilesSection() {
+  return (
+    <section className="space-y-4 h-full flex flex-col">
+      <div>
+        <h2 className="text-sm font-semibold">Files</h2>
+        <p className="text-xs text-muted-foreground mt-1">Browse the server filesystem.</p>
+      </div>
+      <div className="flex-1 border rounded-lg overflow-hidden min-h-[400px]">
+        <FileTreeViewer mode="fs" />
+      </div>
     </section>
   );
 }
@@ -682,6 +700,7 @@ export default function SettingsPage() {
           {activeSection === 'mcp-servers' && <McpServersSection />}
           {activeSection === 'skills' && <SkillsSection />}
           {activeSection === 'extensions' && <ExtensionsSection />}
+          {activeSection === 'files' && <FilesSection />}
           {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
         </div>
       </div>

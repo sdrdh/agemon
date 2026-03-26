@@ -8,7 +8,7 @@ import type { ThemeId } from '@/lib/theme';
 import { authHeaders } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time-utils';
 
-interface RepoDiff {
+export interface RepoDiff {
   repoName: string;
   cwd: string;
   diff: string;
@@ -17,6 +17,7 @@ interface RepoDiff {
 interface DiffViewerProps {
   sessionId: string;
   live?: boolean;
+  repos?: RepoDiff[];
 }
 
 interface DiffRenderProps {
@@ -747,8 +748,11 @@ function RepoCommitsView({ sessionId, repoName, ...renderProps }: {
 
 type DiffTab = 'changes' | 'commits';
 
-export function DiffViewer({ sessionId, live = true }: DiffViewerProps) {
-  const { repos, loading, liveUpdating } = useDiffData(sessionId, live);
+export function DiffViewer({ sessionId, live = true, repos: externalRepos }: DiffViewerProps) {
+  const fetched = useDiffData(sessionId, live && !externalRepos);
+  const repos = externalRepos ?? fetched.repos;
+  const loading = externalRepos ? false : fetched.loading;
+  const liveUpdating = externalRepos ? false : fetched.liveUpdating;
   const { themeId } = useTheme();
   const isDesktop = useIsDesktop();
   const themeType = useEffectiveThemeType();

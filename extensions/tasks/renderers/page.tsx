@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Archive,
   FileDiff,
+  FolderTree,
   GitBranch,
   X,
   Loader2,
@@ -558,7 +559,7 @@ function TaskInfoDrawer({
 // ─── Task Detail ──────────────────────────────────────────────────────────────
 
 function TaskDetail({ id }: { id: string }) {
-  const { SessionList, ChatPanel, StatusBadge: HostStatusBadge, DiffViewer } = (window as any).__AGEMON__?.host ?? {};
+  const { SessionList, ChatPanel, StatusBadge: HostStatusBadge, DiffViewer, FileTreeViewer } = (window as any).__AGEMON__?.host ?? {};
   const api = (window as any).__AGEMON__?.api;
 
   const [task, setTask] = useState<Task | null>(null);
@@ -568,6 +569,7 @@ function TaskDetail({ id }: { id: string }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
 
   // Read initial session from URL search params (passed by dashboard navigation)
   const [selectedSession, setSelectedSession] = useState<string | null>(() => {
@@ -715,6 +717,15 @@ function TaskDetail({ id }: { id: string }) {
               <FileDiff className="h-4 w-4" />
             </button>
           )}
+          {FileTreeViewer && selectedSession && (
+            <button
+              onClick={() => setFilesOpen(true)}
+              className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
+              aria-label="Browse files"
+            >
+              <FolderTree className="h-4 w-4" />
+            </button>
+          )}
           <button
             onClick={() => setInfoOpen(true)}
             className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center min-h-[44px] shrink-0"
@@ -753,6 +764,7 @@ function TaskDetail({ id }: { id: string }) {
             onBack={handleBackToList}
             isDone={isDone}
             onDiff={DiffViewer ? () => setDiffOpen(true) : undefined}
+            onFiles={FileTreeViewer ? () => setFilesOpen(true) : undefined}
           />
         )}
 
@@ -805,6 +817,29 @@ function TaskDetail({ id }: { id: string }) {
             </div>
             <div className="flex-1 overflow-hidden">
               <DiffViewer sessionId={selectedSession!} live={!isDone} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {filesOpen && FileTreeViewer && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/40"
+            onClick={() => setFilesOpen(false)}
+          />
+          <div className="fixed inset-4 z-50 bg-background border rounded-lg shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+              <h2 className="text-sm font-semibold">Files</h2>
+              <button
+                onClick={() => setFilesOpen(false)}
+                className="h-8 w-8 rounded-md hover:bg-muted flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <FileTreeViewer mode="session" sessionId={selectedSession!} />
             </div>
           </div>
         </>

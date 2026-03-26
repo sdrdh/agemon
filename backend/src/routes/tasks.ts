@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { readFile } from 'fs/promises';
-import { join, basename } from 'path';
+import { join, basename, resolve } from 'path';
+import { homedir } from 'os';
 import { simpleGit } from 'simple-git';
 import { db } from '../db/client.ts';
 import { workspaceRegistry } from '../lib/extensions/workspace-registry.ts';
 import { gitManager } from '../lib/git.ts';
 import type { RepoDiff } from '../lib/extensions/workspace.ts';
+import { readFsTree } from '../lib/fs-tree.ts';
 
 export const tasksRoutes = new Hono();
 
@@ -45,6 +47,14 @@ function resolveRepoCwd(sessionId: string, repoName: string): string | null {
     return join(cwd, repoName);
   }
   return cwd;
+}
+
+/** Resolves the filesystem root for a session — uses session.meta.cwd directly. */
+function resolveSessionRoot(sessionId: string): string | null {
+  const session = db.getSession(sessionId);
+  if (!session) return null;
+  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+  return (meta.cwd as string | undefined) ?? null;
 }
 
 const POLL_INTERVAL_MS = 5000;
@@ -170,20 +180,26 @@ tasksRoutes.get('/sessions/:id/file', async (c) => {
   const repoName = c.req.query('repo') ?? '';
   if (!filePath) return c.json({ error: 'Missing path query parameter' }, 400);
 
-  const cwd = resolveRepoCwd(sessionId, repoName);
-  if (!cwd) return c.json({ error: 'Session not found, no cwd, or missing repo param' }, 404);
+  // If repo provided, use git-aware resolution (existing behaviour)
+  if (repoName) {
+    const cwd = resolveRepoCwd(sessionId, repoName);
+    if (!cwd) return c.json({ error: 'Session not found, no cwd, or invalid repo' }, 404);
+    const git = simpleGit(cwd);
+    const isRepo = await git.checkIsRepo().catch(() => false);
+    if (!isRepo) return c.json({ error: 'Not a git repository' }, 400);
+    let oldContent = '';
+    try { oldContent = await git.show([`HEAD:${filePath}`]); } catch { /* new file */ }
+    let newContent = '';
+    try { newContent = await readFile(join(cwd, filePath), 'utf-8'); } catch { /* deleted */ }
+    return c.json({ oldContent, newContent });
+  }
 
-  const git = simpleGit(cwd);
-  const isRepo = await git.checkIsRepo().catch(() => false);
-  if (!isRepo) return c.json({ error: 'Not a git repository' }, 400);
-
-  let oldContent = '';
-  try { oldContent = await git.show([`HEAD:${filePath}`]); } catch { /* new file */ }
-
+  // No repo — direct file read from session cwd, no git diff
+  const root = resolveSessionRoot(sessionId);
+  if (!root) return c.json({ error: 'Session not found or has no cwd' }, 404);
   let newContent = '';
-  try { newContent = await readFile(join(cwd, filePath), 'utf-8'); } catch { /* deleted file */ }
-
-  return c.json({ oldContent, newContent });
+  try { newContent = await readFile(join(root, filePath), 'utf-8'); } catch { /* missing */ }
+  return c.json({ oldContent: '', newContent });
 });
 
 // GET /sessions/:id/refs?repo=...
@@ -317,5 +333,62 @@ tasksRoutes.get('/sessions/:id/commits/:sha/diff', async (c) => {
     return c.json({ raw: diff });
   } catch (err) {
     return c.json({ error: 'Failed to get commit diff', details: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// GET /sessions/:id/fs?path=&depth=
+tasksRoutes.get('/sessions/:id/fs', async (c) => {
+  const sessionId = c.req.param('id');
+  const relPath = c.req.query('path') ?? '';
+  const depth = Math.min(Number(c.req.query('depth') ?? 2), 5);
+
+  const root = resolveSessionRoot(sessionId);
+  if (!root) return c.json({ error: 'Session not found or has no cwd' }, 404);
+
+  try {
+    const entries = await readFsTree(root, relPath, depth);
+    return c.json({ path: relPath, entries });
+  } catch (err) {
+    if ((err as Error).message === 'Path traversal detected') {
+      return c.json({ error: 'Invalid path' }, 400);
+    }
+    return c.json({ error: 'Failed to read directory' }, 500);
+  }
+});
+
+// GET /fs/file?path=  (general file read — path relative to ~, must stay under ~)
+tasksRoutes.get('/fs/file', async (c) => {
+  const filePath = c.req.query('path');
+  if (!filePath) return c.json({ error: 'Missing path' }, 400);
+
+  // Reject absolute paths — filePath must be relative to home dir
+  if (filePath.startsWith('/')) return c.json({ error: 'Invalid path' }, 400);
+
+  const root = homedir();
+  const abs = resolve(join(root, filePath));
+  if (abs !== root && !abs.startsWith(root + '/')) return c.json({ error: 'Invalid path' }, 400);
+
+  try {
+    const content = await readFile(abs, 'utf-8');
+    return c.json({ content });
+  } catch {
+    return c.json({ error: 'File not found' }, 404);
+  }
+});
+
+// GET /fs?path=&depth=  (general — root = ~)
+tasksRoutes.get('/fs', async (c) => {
+  const root = homedir();
+  const relPath = c.req.query('path') ?? '';
+  const depth = Math.min(Number(c.req.query('depth') ?? 2), 5);
+
+  try {
+    const entries = await readFsTree(root, relPath, depth);
+    return c.json({ path: relPath, entries });
+  } catch (err) {
+    if ((err as Error).message === 'Path traversal detected') {
+      return c.json({ error: 'Invalid path' }, 400);
+    }
+    return c.json({ error: 'Failed to read directory' }, 500);
   }
 });
