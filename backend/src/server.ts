@@ -242,7 +242,6 @@ await buildExtensionRenderers(extensions);
 const extensionsDir = join(AGEMON_DIR, 'extensions');
 watchExtensionsDir(extensionsDir, AGEMON_DIR, broadcast, pluginBridge);
 // Bundled extensions (repo dir)
-const repoExtensionsDir = join(import.meta.dir, '../../extensions');
 watchExtensionsDir(repoExtensionsDir, AGEMON_DIR, broadcast, pluginBridge);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
