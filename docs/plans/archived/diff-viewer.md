@@ -509,9 +509,9 @@ workspaceRegistry.register('cwd', {
 
 ---
 
-## Step 6: Tasks Plugin - Add "View Changes" Button
+## Step 6: Tasks Extension - Add "View Changes" Button
 
-**File:** `plugins/tasks/renderers/page.tsx`
+**File:** `extensions/tasks/renderers/page.tsx`
 
 ```typescript
 // In task detail view
@@ -553,7 +553,7 @@ const handleViewDiff = async () => {
 - `frontend/src/routes/plugin.tsx` — provide DiffViewer in PluginKit
 - `backend/src/lib/plugins/workspace-default.ts` — implement getDiff
 - `backend/src/routes/tasks.ts` — add GET /tasks/:id/diff endpoint
-- `plugins/tasks/renderers/page.tsx` — add "View Changes" button
+- `extensions/tasks/renderers/page.tsx` — add "View Changes" button
 
 ---
 

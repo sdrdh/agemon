@@ -11,8 +11,8 @@ Phone / Browser
 │   Hono HTTP Server (port 3000)          │
 │                                         │
 │  REST API /api/*   WebSocket /ws        │
-│  Plugin routes /api/plugins/:id/*       │
-│  Plugin pages  /p/:pluginId/*           │
+│  Extension routes /api/extensions/:id/*  │
+│  Extension pages  /p/:extensionId/*     │
 │  Renderer endpoints /api/renderers/*    │
 └──────┬──────────────────────────────────┘
        │
@@ -21,7 +21,7 @@ Phone / Browser
        │
    In-Memory Stores           File System
    (session-store.ts)    ~/.agemon/sessions/{id}/
-   (task-store.ts)       ~/.agemon/plugins/tasks/data/tasks/
+    (task-store.ts)       ~/.agemon/extensions/tasks/data/tasks/
        │                 ~/.agemon/settings.json
    ACP Agent Processes
    (JSON-RPC 2.0 stdio)
@@ -44,8 +44,8 @@ All data lives in files under `~/.agemon/`. In-memory SQLite projections (via `b
 | Settings | `~/.agemon/settings.json` | `settings-store.ts` — in-memory Map, flushed to disk |
 | MCP servers | `~/.agemon/mcp-servers.json` | `mcp-server-store.ts` — in-memory Map, flushed to disk |
 | Approval rules | `~/.agemon/approval-rules.json` | `approval-rules-store.ts` — in-memory Map, flushed to disk |
-| Plugin settings | `~/.agemon/plugins/{id}/data/settings.json` | Read on demand |
-| Plugin KV store | `~/.agemon/plugins/{id}/data/store.json` | Read on demand |
+| Extension settings | `~/.agemon/extensions/{id}/data/settings.json` | Read on demand |
+| Extension KV store | `~/.agemon/extensions/{id}/data/store.json` | Read on demand |
 
 **Write path (session-store / task-store):**
 1. Update in-memory SQLite projection
@@ -61,11 +61,11 @@ All data lives in files under `~/.agemon/`. In-memory SQLite projections (via `b
 
 | File | Purpose |
 |------|---------|
-| `server.ts` | Startup, directory init, plugin wiring, symlink setup |
+| `server.ts` | Startup, directory init, extension wiring, symlink setup |
 | `app.ts` | Hono app, auth middleware, WebSocket server, broadcast |
 | `routes/sessions.ts` | Session CRUD — create, list, stop, archive, resume |
 | `routes/dashboard.ts` | Dashboard aggregation — active/idle sessions, summary counts |
-| `routes/renderers.ts` | Serve compiled plugin renderer/page/icon JS to frontend |
+| `routes/renderers.ts` | Serve compiled extension renderer/page/icon JS to frontend |
 | `routes/approvals.ts` | Approval listing — proxies to approval-store |
 | `routes/system.ts` | Health check, version, server status, update/restart/rebuild |
 | `db/client.ts` | DB facade — thin wrapper over file-based stores, preserves old call-site API |
@@ -96,21 +96,18 @@ All data lives in files under `~/.agemon/`. In-memory SQLite projections (via `b
 | `settings-store.ts` | In-memory Map of global settings + flush to `settings.json` |
 | `fs.ts` | Atomic file write utilities for JSON persistence |
 
-### Plugin System (`backend/src/lib/plugins/`)
+### Extension System (`backend/src/lib/plugins/`)
 
-### Plugin System (`backend/src/lib/plugins/`)
-
-See [plugins.md](./plugins.md) for full reference.
+See [extensions.md](./extensions.md) for full reference.
 
 | File | Purpose |
 |------|---------|
 | `loader.ts` | Plugin discovery, dependency install, `onLoad()` invocation, skill wiring |
-| `registry.ts` | Global plugin registry — lookup by ID, message type, or page path |
-| `mount.ts` | Mount plugin API routes onto Hono; serve plugin list/settings endpoints |
-| `builder.ts` | Build plugin renderers at startup; in-memory cache; file watch + hot reload |
-| `types.ts` | `PluginModule`, `PluginContext`, `PluginExports`, `PluginStore`, `LoadedPlugin` |
-| `event-bridge.ts` | Hook/listener event bus for cross-plugin and core→plugin events |
-| `agent-registry.ts` | Registry for agent providers (built-in + plugin-contributed) |
+| `registry.ts` | Global extension registry — lookup by ID, message type, or page path |
+| `mount.ts` | Mount extension API routes onto Hono; serve extension list/settings endpoints |
+| `builder.ts` | Build extension renderers at startup; in-memory cache; file watch + hot reload |
+| `event-bridge.ts` | Hook/listener event bus for cross-extension and core→extension events |
+| `agent-registry.ts` | Registry for agent providers (built-in + extension-contributed) |
 | `workspace.ts` | `WorkspaceProvider` interface |
 | `workspace-registry.ts` | Registry for workspace providers |
 | `workspace-default.ts` | Default workspace provider — task dir + git worktrees |
@@ -126,8 +123,8 @@ See [plugins.md](./plugins.md) for full reference.
 | `/` | `index.tsx` | Dashboard — active/idle sessions, needs-input queue, recently completed |
 | `/sessions` | `sessions.tsx` | Session list with archive/resume/stop actions |
 | `/sessions/:id` | `sessions.$id.tsx` | Standalone session chat view |
-| `/p/:pluginId/*` | `plugin.tsx` | Generic plugin page host — fetches + mounts compiled plugin JS |
-| `/settings` | `settings.tsx` | App settings, plugin list, plugin configuration |
+| `/p/:extensionId/*` | `plugin.tsx` | Generic extension page host — fetches + mounts compiled extension JS |
+| `/settings` | `settings.tsx` | App settings, extension list, extension configuration |
 | `/projects` | `projects.tsx` | Project/repo grouping view |
 | `/tasks/:id` | `tasks.$id.tsx` | Redirect → `/p/tasks/:id` |
 | `/login` | `login.tsx` | Auth gate |
@@ -137,7 +134,7 @@ See [plugins.md](./plugins.md) for full reference.
 | File | Purpose |
 |------|---------|
 | `chat-panel.tsx` | Full chat panel (message history + input) for a session |
-| `session-list.tsx` | Reusable session list — used in plugin pages and dashboard |
+| `session-list.tsx` | Reusable session list — used in extension pages and dashboard |
 | `session-list-panel.tsx` | Sidebar session list panel with selection state |
 | `session-chat-panel.tsx` | Composed session list + chat panel for task detail views |
 | `dashboard/*.tsx` | Dashboard section components (active, idle, needs-input, completed) |
@@ -150,15 +147,15 @@ See [plugins.md](./plugins.md) for full reference.
 | `query.ts` | TanStack Query keys and query factories for sessions, tasks, chat history |
 | `ws.ts` | WebSocket client — auto-reconnect, event routing to store |
 | `api.ts` | REST API client (authenticated fetch wrapper) |
-| `plugin-kit-context.ts` | React context exposing host components (`SessionList`, `ChatPanel`, `StatusBadge`) to plugin pages |
+| `plugin-kit-context.ts` | React context exposing host components (`SessionList`, `ChatPanel`, `StatusBadge`) to extension pages |
 
 ### Shared Types (`shared/types/`)
 
 | File | Purpose |
 |------|---------|
 | `index.ts` | `Task`, `AgentSession`, `ACPEvent`, `AwaitingInput`, `ServerEvent`, `ClientEvent` + all enums |
-| `plugin.ts` | `PluginManifest`, `PluginNavItem`, `InputExtensionManifest`, `CustomRendererManifest` |
-| `plugin-kit.ts` | `PluginKit` — interface for host components exposed to plugin renderers |
+| `plugin.ts` | `ExtensionManifest`, `ExtensionNavItem`, `InputExtensionManifest`, `CustomRendererManifest` |
+| `plugin-kit.ts` | `PluginKit` — interface for host components exposed to extension renderers |
 
 ---
 
@@ -252,13 +249,13 @@ Tasks have no direct FK to sessions — the link is `session.meta.taskId`. The t
 
 ---
 
-## Plugin System
+## Extension System
 
-The plugin system is the primary extension mechanism. Almost all product features (tasks, MCP config, skills manager, voice input) are implemented as plugins.
+The extension system is the primary extensibility mechanism. Almost all product features (tasks, MCP config, skills manager, voice input) are implemented as extensions.
 
-**Core = session engine + event bridge + plugin host.** Everything else is a plugin.
+**Core = session engine + event bridge + extension host.** Everything else is an extension.
 
-See [plugins.md](./plugins.md) for: plugin structure, manifest reference, `PluginContext` API, extension points, frontend globals, and roadmap items.
+See [extensions.md](./extensions.md) for: extension structure, manifest reference, `ExtensionContext` API, extension points, frontend globals, and roadmap items.
 
 ---
 
@@ -267,4 +264,4 @@ See [plugins.md](./plugins.md) for: plugin structure, manifest reference, `Plugi
 - **Auth:** Static token via `AGEMON_KEY` env var. All API routes require `Authorization: Bearer <token>` except `/api/health` and `/ws`.
 - **GitHub PAT:** Loaded from `GITHUB_PAT` env var, never stored in files.
 - **Agent isolation:** `AGEMON_KEY` and `GITHUB_PAT` are stripped from agent subprocess environments.
-- **Plugin trust:** All plugins run in the main process with full access to the filesystem and API. Installing a plugin grants it full trust. See [plugins.md § Trust Model](./plugins.md#trust-model).
+- **Extension trust:** All extensions run in the main process with full access to the filesystem and API. Installing an extension grants it full trust. See [extensions.md § Trust Model](./extensions.md#trust-model).

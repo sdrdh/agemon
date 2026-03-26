@@ -16,7 +16,7 @@
 - [x] Frontend: diff viewer component with syntax-highlighted diff via @pierre/diffs
 - [x] Collapsible file sections (click to expand/collapse)
 - [x] "View Changes" button on task detail page and session detail page
-- [x] PluginKit exposes DiffViewer for use by plugins
+- [x] PluginKit exposes DiffViewer for use by extensions
 
 **Technical Details:**
 - Uses `@pierre/diffs` and `@pierre/diffs/react` for rendering
@@ -50,4 +50,4 @@
 | DiffViewer component | `frontend/src/components/custom/diff-viewer.tsx` | Collapsible file list |
 | PluginKit | `shared/types/plugin-kit.ts` | DiffViewer interface |
 | Host exposure | `frontend/src/main.tsx` | Exposed as window.__AGEMON__.host |
-| Tasks plugin | `plugins/tasks/renderers/page.tsx` | "View Changes" button |
+| Tasks extension | `extensions/tasks/renderers/page.tsx` | "View Changes" button |

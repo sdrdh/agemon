@@ -1,6 +1,6 @@
 # File System View
 
-**Status:** Implemented
+**Status:** ✅ Implemented
 
 File tree browser surfaced in two places: session panel (alongside diff viewer) and Settings → Files.
 
@@ -25,4 +25,4 @@ Tree state is `Map<path, FsEntry[]>`. Initial fetch depth=2, lazy background fet
 - `sessions.$id.tsx` — Files modal alongside diff modal, diff repos fetched once and shared
 - `SessionMobileHeader` / `ChatPanel` / `SessionChatPanel` — `onFiles` prop chain
 - `settings.tsx` — Files section with `FileTreeViewer mode="fs"`
-- Tasks plugin (`extensions/tasks/renderers/page.tsx`) — Files button in task header, `FileTreeViewer` exposed via `window.__AGEMON__.host`
+- Tasks extension (`extensions/tasks/renderers/page.tsx`) — Files button in task header, `FileTreeViewer` exposed via `window.__AGEMON__.host`

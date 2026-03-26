@@ -1,5 +1,7 @@
 # Native Chat App Navigation — Design
 
+**Status:** ✅ Implemented
+
 ## Goal
 Replace the top navigation bar with a bottom tab bar (iOS/Android native chat pattern). Hide the bottom nav entirely on the task detail page so it feels like a full-screen chat.
 

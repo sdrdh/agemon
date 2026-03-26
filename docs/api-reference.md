@@ -71,9 +71,9 @@ Rebuild the frontend from the working tree, then restart.
 
 ## Tasks
 
-Tasks are served by the **tasks plugin** at `/api/plugins/tasks/`:
+Tasks are served by the **tasks extension** at `/api/extensions/tasks/`:
 
-### GET /api/plugins/tasks/tasks
+### GET /api/extensions/tasks/tasks
 
 List all tasks (excludes archived by default).
 
@@ -96,7 +96,7 @@ List all tasks (excludes archived by default).
 ]
 ```
 
-### POST /api/plugins/tasks/tasks
+### POST /api/extensions/tasks/tasks
 
 Create a new task.
 
@@ -112,14 +112,14 @@ Create a new task.
 
 **Response 201:** Created `Task`.
 
-### GET /api/plugins/tasks/tasks/:id
+### GET /api/extensions/tasks/tasks/:id
 
 Get a single task.
 
 **Response 200:** `Task`.
 **Response 404:** `{ "error": "Not Found", "message": "Task not found", "statusCode": 404 }`
 
-### PATCH /api/plugins/tasks/tasks/:id
+### PATCH /api/extensions/tasks/tasks/:id
 
 Update task fields. All fields optional.
 
@@ -127,7 +127,7 @@ Update task fields. All fields optional.
 { "title": "Updated title", "description": "..." }
 ```
 
-### GET /api/plugins/tasks/tasks/by-project
+### GET /api/extensions/tasks/tasks/by-project
 
 Group tasks by repository.
 
@@ -141,7 +141,7 @@ Group tasks by repository.
 }
 ```
 
-### GET /api/plugins/tasks/tasks/:id/events
+### GET /api/extensions/tasks/tasks/:id/events
 
 Get the ACP event stream for a task (merged from all sessions).
 
@@ -314,33 +314,33 @@ List all registered repositories.
 
 ## MCP Servers
 
-MCP servers are managed by the **mcp-config plugin** at `/api/plugins/mcp-config/`:
+MCP servers are managed by the **mcp-config extension** at `/api/extensions/mcp-config/`:
 
-### GET /api/plugins/mcp-config/mcp-servers
+### GET /api/extensions/mcp-config/mcp-servers
 
 List global MCP server configurations.
 
-### POST /api/plugins/mcp-config/mcp-servers
+### POST /api/extensions/mcp-config/mcp-servers
 
 Add a global MCP server.
 
-### DELETE /api/plugins/mcp-config/mcp-servers/:id
+### DELETE /api/extensions/mcp-config/mcp-servers/:id
 
 Remove a global MCP server.
 
-### POST /api/plugins/mcp-config/mcp-servers/test
+### POST /api/extensions/mcp-config/mcp-servers/test
 
 Test an MCP server configuration before saving.
 
-### GET /api/plugins/mcp-config/tasks/:id/mcp-servers
+### GET /api/extensions/mcp-config/tasks/:id/mcp-servers
 
 List MCP servers for a task (global + task-scoped).
 
-### POST /api/plugins/mcp-config/tasks/:id/mcp-servers
+### POST /api/extensions/mcp-config/tasks/:id/mcp-servers
 
 Add a task-scoped MCP server.
 
-### DELETE /api/plugins/mcp-config/tasks/:id/mcp-servers/:serverId
+### DELETE /api/extensions/mcp-config/tasks/:id/mcp-servers/:serverId
 
 Remove a task-scoped MCP server.
 
@@ -348,13 +348,13 @@ Remove a task-scoped MCP server.
 
 ## Skills
 
-Skills are managed by the **skills-manager plugin** at `/api/plugins/skills-manager/`:
+Skills are managed by the **skills-manager extension** at `/api/extensions/skills-manager/`:
 
-### GET /api/plugins/skills-manager/skills
+### GET /api/extensions/skills-manager/skills
 
 List global skills.
 
-### POST /api/plugins/skills-manager/skills
+### POST /api/extensions/skills-manager/skills
 
 Install a skill from a git URL or npm package.
 
@@ -362,19 +362,19 @@ Install a skill from a git URL or npm package.
 { "source": "https://github.com/user/agemon-skill", "skillNames": ["my-skill"] }
 ```
 
-### DELETE /api/plugins/skills-manager/skills/:name
+### DELETE /api/extensions/skills-manager/skills/:name
 
 Remove a global skill.
 
-### GET /api/plugins/skills-manager/tasks/:id/skills
+### GET /api/extensions/skills-manager/tasks/:id/skills
 
 List skills for a task (global + task-scoped).
 
-### POST /api/plugins/skills-manager/tasks/:id/skills
+### POST /api/extensions/skills-manager/tasks/:id/skills
 
 Install a task-scoped skill.
 
-### DELETE /api/plugins/skills-manager/tasks/:id/skills/:name
+### DELETE /api/extensions/skills-manager/tasks/:id/skills/:name
 
 Remove a task-scoped skill.
 
@@ -382,29 +382,29 @@ Remove a task-scoped skill.
 
 ## Plugin Infrastructure
 
-### GET /api/plugins
+### GET /api/extensions
 
-List all loaded plugins with their manifests.
+List all loaded extensions with their manifests.
 
-### GET /api/plugins/:id/settings
+### GET /api/extensions/:id/settings
 
-Get plugin settings schema and current values (masked for secrets).
+Get extension settings schema and current values (masked for secrets).
 
-### POST /api/plugins/:id/settings
+### POST /api/extensions/:id/settings
 
-Update plugin settings.
+Update extension settings.
 
-### PATCH /api/plugins/:id
+### PATCH /api/extensions/:id
 
-Update plugin configuration (e.g. nav visibility).
+Update extension configuration (e.g. nav visibility).
 
-### GET /api/renderers/pages/:pluginId/:component.js
+### GET /api/renderers/pages/:extensionId/:component.js
 
-Fetch compiled plugin page renderer (browser ESM).
+Fetch compiled extension page renderer (browser ESM).
 
-### GET /api/renderers/icons/:pluginId/:component.js
+### GET /api/renderers/icons/:extensionId/:component.js
 
-Fetch compiled plugin icon renderer.
+Fetch compiled extension icon renderer.
 
 ---
 

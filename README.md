@@ -76,25 +76,13 @@ agemon/
 
 ---
 
-## Deployment
+## Documentation
 
-See [docs/deployment/](docs/deployment/) for:
-- [Local development](docs/deployment/local.md)
-- [Tailscale HTTPS](docs/deployment/tailscale.md)
-- [exe.dev](docs/deployment/exe-dev.md)
-- [VPS with Caddy](docs/deployment/vps.md)
-
----
-
-## Authentication
-
-All API endpoints require a Bearer token:
-
-```
-Authorization: Bearer <AGEMON_KEY>
-```
-
-Set `AGEMON_KEY` in your `.env` file.
+- [Getting Started](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
+- [API Reference](docs/api-reference.md)
+- [Extension System](docs/extensions.md)
+- [ACP Agents](docs/acp-agents.md)
 
 ---
 

@@ -32,18 +32,7 @@ Implement a "Native Chat App" navigation pattern in our mobile-first React app. 
 
 We need to visually distinguish the different types of agent activities in our chat interface by adding specific icons for thoughts, tool calls, and skills.
 
-Please make the following changes directly in `frontend/src/routes/tasks.$id.tsx`:
-
-### 1. Import New Icons
-* Import appropriate icons from `lucide-react` to represent different activities. For example, use `Brain` (or `Lightbulb`) for thoughts, `Wrench` (or `Terminal`) for standard tool calls, and `Zap` (or `Code`) for skills.
-
-### 2. Update the Parsing Logic
-* If "skills" are currently grouped generically under "tool calls" in `parseActivityMessages`, update the regex or parsing logic to identify and categorize them distinctly so they can be rendered with their specific icon.
-
-### 3. Update the `ActivityGroup` Component
-* Modify the rendering loop for tool calls/skills so that the new activity-specific icon is displayed alongside the existing status icons (`Check`, `X`, `Loader2`).
-* Update the rendering section for `thoughts`. Add the designated thought icon inline with the text or just to the left of the thought content.
-* Ensure the spacing, alignment, and icon sizes (e.g., `h-3.5 w-3.5`) remain consistent with the clean, mobile-friendly design of the rest of the component.
+**Status:** ✅ Implemented in `frontend/src/components/custom/activity-group.tsx` — uses `Brain`, `Wrench`, `Zap` icons.
 
 ---
 

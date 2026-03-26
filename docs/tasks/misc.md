@@ -20,7 +20,7 @@ Implementation notes:
 - "Done" also updates a living per-project memory file (`~/.agemon/memory/projects/{org}--{repo}.md`) by merging new learnings
 - Daily and weekly rollups via configurable cron jobs (auto-scheduled + manually triggerable from Settings)
 - Summarization model/agent configurable in Settings (default: `claude-sonnet-4-6`)
-- New memory file metadata stored in task plugin data dir; new settings keys for model/agent
+- New memory file metadata stored in task extension data dir; new settings keys for model/agent
 - `/memory` frontend route: sidebar + markdown reader
 - Project memory file injected into new agent sessions via existing CLAUDE.md context generation
 
