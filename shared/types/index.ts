@@ -253,7 +253,7 @@ export type ServerEvent =
   | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string | null })
   | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string | null; usage: SessionUsage })
   | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
-  | (ServerEventBase & { type: 'plugins_changed'; pluginIds: string[] })
+  | (ServerEventBase & { type: 'extensions_changed'; extensionIds: string[] })
   | (ServerEventBase & { type: 'server_restarting' })
   | (ServerEventBase & { type: 'full_sync_required' });
 

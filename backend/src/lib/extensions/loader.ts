@@ -1,5 +1,5 @@
 import { readdir, symlink, lstat, stat, access, mkdir, unlink } from 'fs/promises';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'path';
 import { wireAgentPlugins } from './wire-agent-plugins.ts';
 import { getSessionDb } from '../session-store.ts';
@@ -124,7 +124,7 @@ function workspaceMap(): Record<string, string> {
       if (pattern.includes('*')) {
         const base = join(APP_ROOT, pattern.replace('/*', ''));
         try {
-          for (const entry of require('fs').readdirSync(base, { withFileTypes: true })) {
+          for (const entry of readdirSync(base, { withFileTypes: true })) {
             if (!entry.isDirectory()) continue;
             try {
               const p = JSON.parse(readFileSync(join(base, entry.name, 'package.json'), 'utf-8'));
@@ -172,7 +172,7 @@ export function patchWorkspaceDeps(extensionDir: string): string | null {
   }
 
   if (!modified) return null;
-  require('fs').writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
   return original;
 }
 
@@ -205,7 +205,7 @@ async function ensureDepsInstalled(extensionDir: string, extensionId: string): P
   } finally {
     // Always restore original package.json
     if (original) {
-      require('fs').writeFileSync(join(extensionDir, 'package.json'), original);
+      writeFileSync(join(extensionDir, 'package.json'), original);
     }
   }
 }
@@ -230,7 +230,7 @@ export interface ScanExtensionsOptions {
  * Errors are logged, not thrown.
  */
 /** Current extension API version. Extensions with a different apiVersion will log a warning. */
-const PLUGIN_API_VERSION = 1;
+const EXTENSION_API_VERSION = 1;
 
 /** Topologically sort extensions based on `depends` declarations. */
 function topoSort<T extends { manifest: ExtensionManifest; dir: string }>(candidates: Array<T>): Array<T> {
@@ -268,13 +268,13 @@ export async function scanExtensions(
   bridge?: EventBridge,
   opts?: ScanExtensionsOptions,
 ): Promise<LoadedExtension[]> {
-  const pluginsDir = join(agemonDir, 'extensions');
+  const extensionsDir = join(agemonDir, 'extensions');
   const seenIds = new Set<string>();
 
   // ── Pass 1: Collect all valid manifests ──────────────────────────────────
   const candidates: Array<{ manifest: ExtensionManifest; dir: string; fromScanDir: string }> = [];
-  const scanDirs = [pluginsDir, ...(opts?.extraDirs ?? [])];
-  // Track which scan directories are "bundled" (provided via opts.extraDirs, e.g. repo plugins/)
+  const scanDirs = [extensionsDir, ...(opts?.extraDirs ?? [])];
+  // Track which scan directories are "bundled" (provided via opts.extraDirs, e.g. repo extensions/)
   const bundledDirs = new Set(opts?.extraDirs ?? []);
 
   for (const scanDir of scanDirs) {
@@ -318,8 +318,8 @@ export async function scanExtensions(
   for (const { manifest, dir, fromScanDir } of ordered) {
     try {
       // API version check
-      if (manifest.apiVersion != null && manifest.apiVersion !== PLUGIN_API_VERSION) {
-        console.warn(`[extension:${manifest.id}] apiVersion mismatch — extension declares ${manifest.apiVersion}, host is ${PLUGIN_API_VERSION}`);
+      if (manifest.apiVersion != null && manifest.apiVersion !== EXTENSION_API_VERSION) {
+        console.warn(`[extension:${manifest.id}] apiVersion mismatch — extension declares ${manifest.apiVersion}, host is ${EXTENSION_API_VERSION}`);
       }
 
       let exports: ExtensionExports = {};

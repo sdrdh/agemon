@@ -181,7 +181,7 @@ See [plugins.md](./plugins.md) for full reference.
 { type: 'turn_cancelled';         sessionId, taskId }
 { type: 'turn_completed';         sessionId, taskId }
 { type: 'session_usage_update';   sessionId, taskId, usage: SessionUsage }
-{ type: 'plugins_changed';        pluginIds: string[] }
+{ type: 'extensions_changed';     extensionIds: string[] }
 { type: 'update_available';       version, should_notify }
 { type: 'server_restarting' }
 { type: 'full_sync_required' }

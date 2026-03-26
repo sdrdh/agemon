@@ -1,2 +1,2 @@
-import { buildPluginRenderers } from '../../shared/plugin-build.ts';
-await buildPluginRenderers(import.meta.dir, 'server-logs');
+import { buildExtensionRenderers } from '../../shared/extension-build.ts';
+await buildExtensionRenderers(import.meta.dir, 'server-logs');

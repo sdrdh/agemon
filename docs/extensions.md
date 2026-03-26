@@ -15,7 +15,7 @@ extensions/my-extension/
   renderers/               # Optional: TSX components compiled to browser ESM
     page.tsx
     icon.tsx
-  build.ts                 # Bun.build script (uses shared/plugin-build.ts)
+  build.ts                 # Bun.build script (uses shared/extension-build.ts)
   dist/renderers/          # Build output (cached in memory by builder.ts)
   skills/                  # Agent-discoverable skills
     my-skill/
@@ -247,12 +247,12 @@ Install reads `agemon-extension.json` from the cloned repo to determine the ID. 
 
 ## Frontend: Renderer Build
 
-Extension renderer TSX files are compiled to browser ESM using `shared/plugin-build.ts`:
+Extension renderer TSX files are compiled to browser ESM using `shared/extension-build.ts`:
 
 ```typescript
 // build.ts (2 lines)
-import { buildPlugin } from '../../shared/plugin-build.ts';
-await buildPlugin(import.meta.dir, 'my-extension');
+import { buildExtensionRenderers } from '../../shared/extension-build.ts';
+await buildExtensionRenderers(import.meta.dir, 'my-extension');
 ```
 
 React, ReactDOM, Lucide icons, and host components are **not bundled** — they're resolved at runtime from `window.__AGEMON__`. This keeps extension bundles small and ensures a single React instance.

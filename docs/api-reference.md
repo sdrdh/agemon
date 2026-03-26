@@ -435,7 +435,7 @@ The connection is closed with code `4401` if the token is missing or invalid.
 { "type": "turn_cancelled",           seq, epoch, sessionId, taskId }
 { "type": "turn_completed",           seq, epoch, sessionId, taskId }
 { "type": "session_usage_update",      seq, epoch, sessionId, taskId, usage }
-{ "type": "plugins_changed",           seq, epoch, pluginIds }
+{ "type": "extensions_changed",        seq, epoch, extensionIds }
 { "type": "update_available",         seq, epoch, version, should_notify }
 { "type": "server_restarting",         seq, epoch }
 { "type": "full_sync_required",        seq, epoch }

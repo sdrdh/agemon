@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { readdir, readFile, access } from 'fs/promises';
-import { watch } from 'fs';
+import { watch, writeFileSync } from 'fs';
 import { createHash } from 'crypto';
 import type { LoadedExtension } from './types.ts';
 import type { EventBridge } from './event-bridge.ts';
@@ -20,12 +20,12 @@ const builtPages = new Map<string, BuiltModule>();
 const builtIcons = new Map<string, BuiltModule>();
 
 // Extensions currently being rebuilt — prevents concurrent rebuilds for the same extension
-const rebuildingPlugins = new Set<string>();
+const rebuildingExtensions = new Set<string>();
 
 // Max allowed size for a built renderer/page JS file (2MB)
 const MAX_MODULE_SIZE = 2 * 1024 * 1024;
 
-// Last build error per plugin (null = build succeeded or not yet built)
+// Last build error per extension (null = build succeeded or not yet built)
 const buildErrors = new Map<string, string>();
 
 export function getBuiltRenderer(messageType: string): BuiltModule | undefined {
@@ -44,13 +44,13 @@ export function getBuildError(pluginId: string): string | null {
   return buildErrors.get(pluginId) ?? null;
 }
 
-// ─── Plugin Build ────────────────────────────────────────────────────────────
+// ─── Extension Build ──────────────────────────────────────────────────────────
 
 /**
- * Run `bun install` + `bun run build` in a plugin directory.
+ * Run `bun install` + `bun run build` in an extension directory.
  * Returns true if build succeeded.
  */
-async function runPluginBuild(pluginDir: string, pluginId: string): Promise<boolean> {
+async function runExtensionBuild(pluginDir: string, pluginId: string): Promise<boolean> {
   // Check if package.json exists with a build script
   const pkgPath = join(pluginDir, 'package.json');
   try {
@@ -75,7 +75,7 @@ async function runPluginBuild(pluginDir: string, pluginId: string): Promise<bool
   });
   const installExit = await install.exited;
   if (originalPkg) {
-    require('fs').writeFileSync(pkgPath, originalPkg);
+    writeFileSync(pkgPath, originalPkg);
   }
   if (installExit !== 0) {
     const stderr = await new Response(install.stderr).text();
@@ -141,14 +141,14 @@ async function loadBuiltFiles(pluginDir: string, pluginId: string): Promise<Map<
  * Rebuild a single extension and reload its modules into cache.
  * Skips if a rebuild is already in progress for this extension.
  */
-async function rebuildExtension(plugin: LoadedExtension): Promise<void> {
-  const { exports, dir, manifest } = plugin;
+async function rebuildExtension(extension: LoadedExtension): Promise<void> {
+  const { exports, dir, manifest } = extension;
 
-  if (rebuildingPlugins.has(manifest.id)) {
+  if (rebuildingExtensions.has(manifest.id)) {
     console.info(`[extension:${manifest.id}] rebuild already in progress, skipping`);
     return;
   }
-  rebuildingPlugins.add(manifest.id);
+  rebuildingExtensions.add(manifest.id);
 
   try {
     // Give plugin a chance to clean up before its code is replaced
@@ -159,12 +159,12 @@ async function rebuildExtension(plugin: LoadedExtension): Promise<void> {
     }
     await unwireAgentPlugins(manifest);  // Clean up old agent plugin symlinks
 
-    const ok = await runPluginBuild(dir, manifest.id);
+    const ok = await runExtensionBuild(dir, manifest.id);
     if (!ok) return;
 
     const modules = await loadBuiltFiles(dir, manifest.id);
 
-    // Clear stale entries for this plugin before re-populating
+    // Clear stale entries for this extension before re-populating
     if (exports.renderers) {
       for (const renderer of exports.renderers) {
         builtRenderers.delete(renderer.manifest.messageType);
@@ -199,14 +199,14 @@ async function rebuildExtension(plugin: LoadedExtension): Promise<void> {
     }
     console.info(`[extension:${manifest.id}] hot reloaded`);
   } finally {
-    rebuildingPlugins.delete(manifest.id);
+    rebuildingExtensions.delete(manifest.id);
   }
 }
 
 /**
  * Watch an extensions directory with a single recursive watcher.
  * Handles: new manifests (hot-load), manifest changes (re-wire), manifest deletion
- * (unload to draft), renderer changes (rebuild), skills/agentPlugins changes (re-wire).
+ * (unload to draft), renderer changes (rebuild), skills/agent-plugins changes (re-wire).
  *
  * Ignores: .git/, node_modules/, dist/
  */
@@ -267,7 +267,7 @@ export function watchExtensionsDir(
           const ext = getExtension(extensionId);
           if (ext) {
             await rebuildExtension(ext);
-            broadcast?.({ type: 'plugins_changed', pluginIds: [extensionId] });
+            broadcast?.({ type: 'extensions_changed', extensionIds: [extensionId] });
           }
         });
         return;
@@ -328,7 +328,7 @@ async function hotLoadExtension(
     await rebuildExtension(freshExt);
 
     console.info(`[extensions] hot-loaded: ${extensionId}`);
-    broadcast?.({ type: 'plugins_changed', pluginIds: [extensionId] });
+    broadcast?.({ type: 'extensions_changed', extensionIds: [extensionId] });
   } catch (err) {
     console.error(`[extensions] hot-load failed for ${extensionId}:`, (err as Error).message);
   }
@@ -358,7 +358,7 @@ async function unloadExtension(
     clearExtensionBuiltModules(extensionId, ext);
 
     console.info(`[extension:${extensionId}] unloaded (reverted to draft)`);
-    broadcast?.({ type: 'plugins_changed', pluginIds: [extensionId] });
+    broadcast?.({ type: 'extensions_changed', extensionIds: [extensionId] });
   } catch (err) {
     console.error(`[extensions] unload failed for ${extensionId}:`, (err as Error).message);
   }
@@ -380,13 +380,13 @@ function clearExtensionBuiltModules(extensionId: string, ext: LoadedExtension): 
  * Build all extensions that have renderers/pages, then cache the output.
  * Call this after scanExtensions() + setExtensions().
  */
-export async function buildExtensionRenderers(plugins: LoadedExtension[]): Promise<void> {
+export async function buildExtensionRenderers(extensions: LoadedExtension[]): Promise<void> {
   builtRenderers.clear();
   builtPages.clear();
   builtIcons.clear();
 
-  for (const plugin of plugins) {
-    const { exports, dir, manifest } = plugin;
+  for (const extension of extensions) {
+    const { exports, dir, manifest } = extension;
     const hasRenderers = exports.renderers && exports.renderers.length > 0;
     const hasPages = exports.pages && exports.pages.length > 0;
     const hasIcon = manifest.navItems?.some(ni => ni.icon) ?? false;
@@ -394,8 +394,8 @@ export async function buildExtensionRenderers(plugins: LoadedExtension[]): Promi
 
     if (!hasRenderers && !hasPages && !hasIcon && !hasInputExtensions) continue;
 
-    // Run the plugin's build
-    const built = await runPluginBuild(dir, manifest.id);
+    // Run the extension's build
+    const built = await runExtensionBuild(dir, manifest.id);
     if (!built) continue;
 
     // Load built files

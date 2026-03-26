@@ -98,7 +98,7 @@ extensionsRoutes.post('/install', async (c) => {
     }
     // buildExtensionRenderers clears all caches — pass full extension list
     await buildExtensionRenderers(getExtensions());
-    broadcast({ type: 'plugins_changed', pluginIds: [manifest.id] });
+    broadcast({ type: 'extensions_changed', extensionIds: [manifest.id] });
 
     return c.json({ id: manifest.id, version: manifest.version, status: 'loaded' });
   } catch (err) {
@@ -135,7 +135,7 @@ extensionsRoutes.post('/:id/upgrade', async (c) => {
   // buildExtensionRenderers clears all caches — pass full extension list
   await buildExtensionRenderers(getExtensions());
   await wireAgentPlugins(upgraded.manifest, upgraded.dir);
-  broadcast({ type: 'plugins_changed', pluginIds: [id] });
+  broadcast({ type: 'extensions_changed', extensionIds: [id] });
 
   return c.json({ id, version: upgraded.manifest.version, previousVersion });
 });
@@ -169,7 +169,7 @@ extensionsRoutes.delete('/:id', async (c) => {
   }
 
   const { broadcast } = await import('../server.ts');
-  broadcast({ type: 'plugins_changed', pluginIds: [id] });
+  broadcast({ type: 'extensions_changed', extensionIds: [id] });
 
   return c.json({ id, removed: true });
 });

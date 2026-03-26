@@ -1,2 +1,2 @@
-import { buildPluginRenderers } from '../../shared/plugin-build.ts';
-await buildPluginRenderers(import.meta.dir, 'voice-input');
+import { buildExtensionRenderers } from '../../shared/extension-build.ts';
+await buildExtensionRenderers(import.meta.dir, 'voice-input');
