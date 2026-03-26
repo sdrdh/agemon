@@ -7,8 +7,8 @@ import type { AgentType } from '@agemon/shared';
 import { AGEMON_DIR } from './lib/git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
 import { createApp, websocket } from './app.ts';
-import { registerBuiltinAgents } from './lib/plugins/agent-registry.ts';
-import type { RepoDiff } from './lib/plugins/workspace.ts';
+import { registerBuiltinAgents } from './lib/extensions/agent-registry.ts';
+import type { RepoDiff } from './lib/extensions/workspace.ts';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -22,10 +22,13 @@ if (!AGEMON_KEY) {
 // Ensure ~/.agemon base dirs exist before DB/migrations
 await mkdir(join(AGEMON_DIR, 'repos'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'tasks'), { recursive: true });
-await mkdir(join(AGEMON_DIR, 'plugins'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'skills'), { recursive: true });
 await mkdir(join(AGEMON_DIR, 'sessions'), { recursive: true });
 console.info(`[agemon] data directory: ${AGEMON_DIR}`);
+
+// Ensure extensions/ and extension-data/ exist for new installs
+await mkdir(join(AGEMON_DIR, 'extensions'), { recursive: true });
+await mkdir(join(AGEMON_DIR, 'extension-data'), { recursive: true });
 
 // NOTE: Filesystem migration (runFilesystemMigration) removed — all data is now file-based.
 // The old agemon.db on-disk SQLite is no longer used.
@@ -35,9 +38,9 @@ buildSessionDb(AGEMON_DIR);
 
 // Build in-memory task DB from task JSON files (must run before migrations + plugins)
 const { buildTaskDb } = await import('./lib/task-store.ts');
-const taskPluginDataDir = join(AGEMON_DIR, 'plugins', 'tasks', 'data');
-await mkdir(taskPluginDataDir, { recursive: true });
-buildTaskDb(taskPluginDataDir);
+const taskExtensionDataDir = join(AGEMON_DIR, 'extension-data', 'tasks');
+await mkdir(taskExtensionDataDir, { recursive: true });
+buildTaskDb(taskExtensionDataDir);
 
 // Load in-memory stores from filesystem
 import { loadApprovalsFromDisk } from './lib/approval-store.ts';
@@ -98,8 +101,8 @@ for (const skillPath of getAllSkillPaths()) {
 registerBuiltinAgents();
 
 // Register built-in workspace providers
-const { workspaceRegistry } = await import('./lib/plugins/workspace-registry.ts');
-const { defaultTaskWorkspaceProvider } = await import('./lib/plugins/workspace-default.ts');
+const { workspaceRegistry } = await import('./lib/extensions/workspace-registry.ts');
+const { defaultTaskWorkspaceProvider } = await import('./lib/extensions/workspace-default.ts');
 
 // git-worktree: existing behaviour (git worktrees + CLAUDE.md generation)
 workspaceRegistry.register('git-worktree', defaultTaskWorkspaceProvider);
@@ -202,7 +205,7 @@ const { tasksRoutes } = await import('./routes/tasks.ts');
 app.route('/api', tasksRoutes);
 
 // ─── Plugins ─────────────────────────────────────────────────────────────────
-const { EventBridge } = await import('./lib/plugins/event-bridge.ts');
+const { EventBridge } = await import('./lib/extensions/event-bridge.ts');
 const pluginBridge = new EventBridge(broadcast);
 
 // Wire EventBridge into ACP lifecycle NOW — before plugins load so any session
@@ -219,22 +222,28 @@ const sessionApi = {
   spawnSession: (sessionId: string) => spawnSessionById(sessionId),
 };
 
-const { scanPlugins } = await import('./lib/plugins/loader.ts');
-const { setPlugins } = await import('./lib/plugins/registry.ts');
-const { mountPluginRoutes } = await import('./lib/plugins/mount.ts');
+const { extensionsRoutes } = await import('./routes/extensions.ts');
+app.route('/api/extensions', extensionsRoutes);
+
+const { scanExtensions } = await import('./lib/extensions/loader.ts');
+const { setExtensions } = await import('./lib/extensions/registry.ts');
+const { mountExtensionRoutes } = await import('./lib/extensions/mount.ts');
 
 // Scan ~/.agemon/plugins/ AND repo-bundled plugins/ directory
-const repoPluginsDir = join(import.meta.dir, '../../plugins');
-const plugins = await scanPlugins(AGEMON_DIR, pluginBridge, { extraDirs: [repoPluginsDir], sessionApi });
-setPlugins(plugins);
-mountPluginRoutes(app, plugins, AGEMON_DIR);
-console.info(`[agemon] loaded ${plugins.length} plugin(s)${plugins.length ? ': ' + plugins.map(p => p.manifest.id).join(', ') : ''}`);
+const repoExtensionsDir = join(import.meta.dir, '../../extensions');
+const extensions = await scanExtensions(AGEMON_DIR, pluginBridge, { extraDirs: [repoExtensionsDir], sessionApi });
+setExtensions(extensions);
+mountExtensionRoutes(app, extensions, AGEMON_DIR);
+console.info(`[agemon] loaded ${extensions.length} plugin(s)${extensions.length ? ': ' + extensions.map(p => p.manifest.id).join(', ') : ''}`);
 
 // Build plugin renderers and watch for changes
-const { buildPluginRenderers, watchPlugins, watchPluginsDir } = await import('./lib/plugins/builder.ts');
-await buildPluginRenderers(plugins);
-watchPlugins(plugins, broadcast);
-watchPluginsDir(AGEMON_DIR, broadcast, pluginBridge);
+const { buildExtensionRenderers, watchExtensionsDir } = await import('./lib/extensions/builder.ts');
+await buildExtensionRenderers(extensions);
+const extensionsDir = join(AGEMON_DIR, 'extensions');
+watchExtensionsDir(extensionsDir, AGEMON_DIR, broadcast, pluginBridge);
+// Bundled extensions (repo dir)
+const repoExtensionsDir = join(import.meta.dir, '../../extensions');
+watchExtensionsDir(repoExtensionsDir, AGEMON_DIR, broadcast, pluginBridge);
 
 // ─── Static File Serving (production) ────────────────────────────────────────
 // Serve frontend/dist/ when it exists. Must be after all API/MCP routes.
@@ -260,7 +269,15 @@ if (frontendExists) {
     const filePath = join(FRONTEND_DIST, urlPath);
     const file = Bun.file(filePath);
     if (await file.exists()) {
-      return new Response(file);
+      // Hashed assets (Vite output) are immutable; everything else should revalidate
+      const isHashed = urlPath.startsWith('/assets/');
+      return new Response(file, {
+        headers: {
+          'Cache-Control': isHashed
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
+        },
+      });
     }
 
     // SPA fallback — serve index.html for all non-file routes

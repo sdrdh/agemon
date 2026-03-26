@@ -256,7 +256,7 @@ export function WsProvider({ children }: { children: ReactNode }) {
           useWsStore.getState().setUpdateAvailable(true);
           break;
         }
-        case 'plugins_changed': {
+        case 'extensions_changed': {
           invalidateRendererCache();
           store().bumpPluginsRevision();
           break;

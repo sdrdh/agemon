@@ -3,7 +3,7 @@ import { db } from '../../db/client.ts';
 import { broadcast } from '../../server.ts';
 import { sessions } from './session-registry.ts';
 import { extractToolName, extractToolContext } from './tool-helpers.ts';
-import { agentRegistry } from '../plugins/agent-registry.ts';
+import { agentRegistry } from '../extensions/agent-registry.ts';
 import { AGENT_CONFIGS } from '../agents.ts';
 import { appendEvent } from './event-log.ts';
 import type { AgentType, AgentCommand, SessionUsage, ToolCallEvent, ToolCallStatus, ToolCallUpdateEvent, SessionConfigOption } from '@agemon/shared';

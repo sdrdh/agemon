@@ -36,6 +36,7 @@ export function SessionChatPanel({
   isLoadingMore,
   onFetchOlderMessages,
   onDiff,
+  onFiles,
 }: {
   session: AgentSession;
   sessionLabel: string;
@@ -62,6 +63,7 @@ export function SessionChatPanel({
   isLoadingMore?: boolean;
   onFetchOlderMessages?: () => Promise<void>;
   onDiff?: () => void;
+  onFiles?: () => void;
 }) {
   const sessionRunning = isSessionActive(session.state);
   const sessionStopped = isSessionTerminal(session.state);
@@ -190,6 +192,7 @@ export function SessionChatPanel({
           onBack={onBack}
           onStop={() => onStop(session.id)}
           onDiff={onDiff}
+          onFiles={onFiles}
         />
       )}
 

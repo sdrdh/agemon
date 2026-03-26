@@ -6,7 +6,7 @@ import { writeCheckpoint } from './event-log.ts';
 import type { JsonRpcTransport } from '../jsonrpc.ts';
 import type { AgentSessionState, AgentSession } from '@agemon/shared';
 import { TERMINAL_STATES } from '../../db/helpers.ts';
-import type { EventBridge } from '../plugins/event-bridge.ts';
+import type { EventBridge } from '../extensions/event-bridge.ts';
 
 // ─── EventBridge singleton (set once at startup from server.ts) ──────────────
 let _bridge: EventBridge | null = null;

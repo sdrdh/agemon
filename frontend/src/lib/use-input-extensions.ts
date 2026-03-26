@@ -35,7 +35,7 @@ export function useInputExtensions(): {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/plugins', { credentials: 'include' })
+    fetch('/api/extensions', { credentials: 'include' })
       .then((r) => r.ok ? r.json() as Promise<PluginApiEntry[]> : [])
       .then((plugins) => {
         if (cancelled) return;

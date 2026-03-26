@@ -1,7 +1,8 @@
-// ─── Plugin Manifest (agemon-plugin.json) ────────────────────────────────────
+// ─── Extension Manifest (agemon-extension.json) ───────────────────────────────
+// Also accepts agemon-plugin.json (deprecated, fallback for one cycle)
 // Shared between backend and frontend — no backend-only imports here.
 
-export interface PluginSettingSchema {
+export interface ExtensionSettingSchema {
   key: string;
   label: string;
   type: 'string' | 'secret' | 'boolean' | 'select';
@@ -11,71 +12,79 @@ export interface PluginSettingSchema {
   description?: string;
 }
 
-export interface PluginNavItem {
+export interface ExtensionNavItem {
   label: string;
   /** Lucide icon name, e.g. "Home" — resolved from window.__AGEMON__.LucideReact at runtime. */
   lucideIcon?: string;
   /** Compiled icon filename in dist/renderers/ (legacy approach, still supported). */
   icon?: string;
-  /** Sub-path within the plugin, e.g. '/' or '/kanban'. */
+  /** Sub-path within the extension, e.g. '/' or '/kanban'. */
   path: string;
   /** Global sort order in the bottom nav (lower = earlier). */
   order?: number;
 }
 
-export interface PluginManifest {
+export interface ExtensionManifest {
   id: string;               // unique slug, e.g. "memory-cms"
   name: string;             // human-readable, e.g. "Memory CMS"
   version: string;          // semver
   description?: string;
   entryPoint?: string;      // relative path to TS/JS entry, e.g. "index.ts"
-  hasPages?: boolean;       // true → plugin serves full-page HTML at /p/{id}/
+  hasPages?: boolean;       // true → extension serves full-page HTML at /p/{id}/
   /**
-   * Multiple nav entries for this plugin.
+   * Multiple nav entries for this extension.
    * When present, takes precedence over navLabel/navLucideIcon/navOrder.
    */
-  navItems?: PluginNavItem[];
+  navItems?: ExtensionNavItem[];
   /**
-   * Whether this plugin appears in Settings → Plugins list. Defaults to true.
-   * Set to false for headless/background plugins that shouldn't be user-visible.
-   * Nav visibility is controlled independently via navLabel.
+   * Whether this extension appears in Settings → Extensions list. Defaults to true.
+   * Set to false for headless/background extensions that shouldn't be user-visible.
    */
   showInSettings?: boolean;
   /**
-   * Skill subdirectory names inside the plugin's skills/ folder.
-   * Each listed skill is symlinked into ~/.agemon/skills/{pluginId}--{skillName}/
-   * making it discoverable by all agents via the existing agemon skills symlink.
-   * e.g. ["memory-recall"] → plugin ships skills/memory-recall/SKILL.md
+   * Skill subdirectory names inside the extension's skills/ folder.
+   * Each listed skill is symlinked into ~/.agemon/skills/{extensionId}--{skillName}/
    */
   skills?: string[];
   /**
-   * Alternative chat input modes contributed by this plugin.
-   * Each entry adds an icon to the input toolbar; clicking it loads and shows the component.
+   * Agent plugins bundled with this extension.
+   * Keys are AgentType values (e.g. "claude-code"); values are relative paths
+   * from the extension directory to the agent plugin subdirectory.
+   * The loader wires symlinks into each agent's global plugin discovery directory.
+   * e.g. { "claude-code": "agent-plugins/claude-code/" }
+   */
+  agentPlugins?: Record<string, string>;
+  /**
+   * Alternative chat input modes contributed by this extension.
    */
   inputExtensions?: InputExtensionManifest[];
-  /** If true, plugin ships in the repo and is loaded from the bundled plugins dir. */
+  /**
+   * Set by the loader at scan time based on which directory the extension was found in.
+   * NOT written by extension authors in their agemon-extension.json file.
+   */
   bundled?: boolean;
   /** Declarative settings schema — used to render settings UI and compute `configured` state. */
-  settings?: PluginSettingSchema[];
+  settings?: ExtensionSettingSchema[];
   /** Component name in renderers/ for a custom settings UI (overrides auto-generated form). */
   settingsRenderer?: string;
   /**
-   * Plugin IDs this plugin depends on. Loader will ensure dependencies are loaded first.
-   * If a dependency is missing, this plugin will be skipped with a warning.
+   * Extension IDs this extension depends on. Loader uses topological sort to ensure
+   * dependencies are loaded first. If a dependency is missing, a warning is logged
+   * but this extension still attempts to load.
    */
   depends?: string[];
   /**
-   * Plugin API version this plugin targets. The loader emits a warning if the runtime
-   * API version (currently 1) does not match. Defaults to 1 if omitted.
+   * Extension API version this extension targets. The loader emits a warning if the
+   * runtime API version (currently 1) does not match. Defaults to 1 if omitted.
    */
   apiVersion?: number;
 }
 
-// ─── Input Extensions ─────────────────────────────────────────────────
-// Plugin-contributed alternative input modes shown as toolbar icons above the chat textarea.
+// ─── Input Extensions ──────────────────────────────────────────────────────
+// Extension-contributed alternative input modes shown as toolbar icons above the chat textarea.
 
 export interface InputExtensionManifest {
-  /** Unique within plugin, e.g. "voice" */
+  /** Unique within extension, e.g. "voice" */
   id: string;
   /** Tooltip / menu label */
   label: string;
@@ -85,7 +94,7 @@ export interface InputExtensionManifest {
   component: string;
 }
 
-// ─── Custom Renderers ─────────────────────────────────────────────────
+// ─── Custom Renderers ──────────────────────────────────────────────────────
 // Agent-authored React components that render specific message types in chat.
 
 export interface CustomRendererManifest {
@@ -99,3 +108,4 @@ export interface CustomRendererExport {
   manifest: CustomRendererManifest;
   component: unknown;       // React component (actual import done at runtime)
 }
+

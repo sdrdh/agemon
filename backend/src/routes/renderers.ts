@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { getAllRenderers, getRendererByMessageType, getAllPages, getPluginPage } from '../lib/plugins/registry.ts';
-import { getBuiltRenderer, getBuiltPage, getBuiltIcon, buildPluginRenderers } from '../lib/plugins/builder.ts';
+import { getAllRenderers, getRendererByMessageType, getAllPages, getExtensionPage } from '../lib/extensions/registry.ts';
+import { getBuiltRenderer, getBuiltPage, getBuiltIcon, buildExtensionRenderers } from '../lib/extensions/builder.ts';
 
 const JS_HEADERS = {
   'Content-Type': 'application/javascript; charset=utf-8',
@@ -46,7 +46,7 @@ renderers.get('/pages/registry', (c) => {
   const pages = getAllPages();
   return c.json({
     pages: pages.map(p => ({
-      pluginId: p.pluginId,
+      pluginId: p.extensionId,
       path: p.path,
     })),
   });
@@ -70,7 +70,7 @@ renderers.get('/pages/:pluginId/page.js', async (c) => {
     .join('/');
   const pagePath = '/' + safePath;
 
-  const page = getPluginPage(pluginId, pagePath);
+  const page = getExtensionPage(pluginId, pagePath);
   if (!page) {
     return c.text(`Page not found: ${pagePath}`, 404);
   }

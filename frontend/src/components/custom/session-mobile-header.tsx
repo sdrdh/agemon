@@ -1,4 +1,4 @@
-import { ArrowLeft, FileDiff, Square } from 'lucide-react';
+import { ArrowLeft, FileDiff, FolderTree, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SESSION_STATE_DOT } from '@/lib/chat-utils';
 import type { AgentSessionState } from '@agemon/shared';
@@ -11,6 +11,7 @@ export function SessionMobileHeader({
   onBack,
   onStop,
   onDiff,
+  onFiles,
 }: {
   sessionLabel: string;
   sessionState: AgentSessionState;
@@ -19,6 +20,7 @@ export function SessionMobileHeader({
   onBack: () => void;
   onStop: () => void;
   onDiff?: () => void;
+  onFiles?: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0 z-50">
@@ -30,6 +32,11 @@ export function SessionMobileHeader({
       {onDiff && (
         <Button size="icon" variant="ghost" aria-label="View changes" onClick={onDiff} className="min-h-[44px] min-w-[44px] shrink-0">
           <FileDiff className="h-4 w-4" />
+        </Button>
+      )}
+      {onFiles && (
+        <Button size="icon" variant="ghost" aria-label="Browse files" onClick={onFiles} className="min-h-[44px] min-w-[44px] shrink-0">
+          <FolderTree className="h-4 w-4" />
         </Button>
       )}
       {sessionRunning && (
