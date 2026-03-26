@@ -53,8 +53,12 @@ function resolveRepoCwd(sessionId: string, repoName: string): string | null {
 function resolveSessionRoot(sessionId: string): string | null {
   const session = db.getSession(sessionId);
   if (!session) return null;
-  const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
-  return (meta.cwd as string | undefined) ?? null;
+  try {
+    const meta = session.meta_json ? JSON.parse(session.meta_json) : {};
+    return (meta.cwd as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 const POLL_INTERVAL_MS = 5000;
@@ -197,8 +201,14 @@ tasksRoutes.get('/sessions/:id/file', async (c) => {
   // No repo — direct file read from session cwd, no git diff
   const root = resolveSessionRoot(sessionId);
   if (!root) return c.json({ error: 'Session not found or has no cwd' }, 404);
+  if (filePath.startsWith('/')) return c.json({ error: 'Invalid path' }, 400);
+  const absFile = resolve(join(root, filePath));
+  const resolvedRoot = resolve(root);
+  if (absFile !== resolvedRoot && !absFile.startsWith(resolvedRoot + '/')) {
+    return c.json({ error: 'Invalid path' }, 400);
+  }
   let newContent = '';
-  try { newContent = await readFile(join(root, filePath), 'utf-8'); } catch { /* missing */ }
+  try { newContent = await readFile(absFile, 'utf-8'); } catch { /* missing */ }
   return c.json({ oldContent: '', newContent });
 });
 

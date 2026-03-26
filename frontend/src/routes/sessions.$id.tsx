@@ -66,7 +66,7 @@ export default function SessionDetailPage() {
 
       {diffOpen && (
         <Modal title="Changes" onClose={() => setDiffOpen(false)}>
-          <DiffViewer sessionId={sessionId} repos={repos} />
+          <DiffViewer sessionId={sessionId} />
         </Modal>
       )}
 

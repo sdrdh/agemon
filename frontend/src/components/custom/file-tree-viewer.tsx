@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, ArrowLeft, Loader2 } from 'lucide-react';
 import { authHeaders } from '@/lib/api';
 import type { RepoDiff } from '@/components/custom/diff-viewer';
@@ -239,6 +239,13 @@ export function FileTreeViewer(props: FileTreeViewerProps) {
   const [filterChanged, setFilterChanged] = useState(false);
   const [fileView, setFileView] = useState<FileView | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  // Refs to read latest state without adding to useCallback deps
+  const treeMapRef = useRef(treeMap);
+  treeMapRef.current = treeMap;
+  const fetchingRef = useRef(fetching);
+  fetchingRef.current = fetching;
 
   const sessionId = props.mode === 'session' ? props.sessionId : null;
   const diffRepos = props.mode === 'session' ? (props.diffRepos ?? []) : [];
@@ -266,32 +273,28 @@ export function FileTreeViewer(props: FileTreeViewerProps) {
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(false);
     fetchEntries('', 2).then(entries => {
       const map = new Map<string, FsEntry[]>();
       populateMap(entries, map, '');
       setTreeMap(map);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => { setLoading(false); setLoadError(true); });
   }, [sessionId]);
 
   const handleExpand = useCallback((entry: FsEntry) => {
-    setFetching(prev => {
-      if (prev.has(entry.path)) return prev;
-      return new Set(prev).add(entry.path);
-    });
-    setTreeMap(prev => {
-      if (prev.has(entry.path)) return prev; // already loaded
-      fetchEntries(entry.path, 2).then(entries => {
-        setTreeMap(cur => {
-          const next = new Map(cur);
-          populateMap(entries, next, entry.path);
-          return next;
-        });
-        setFetching(cur => { const s = new Set(cur); s.delete(entry.path); return s; });
-      }).catch(() => {
-        setFetching(cur => { const s = new Set(cur); s.delete(entry.path); return s; });
+    // Guard using refs to avoid stale closures without adding state to deps
+    if (treeMapRef.current.has(entry.path) || fetchingRef.current.has(entry.path)) return;
+    setFetching(prev => new Set(prev).add(entry.path));
+    fetchEntries(entry.path, 2).then(entries => {
+      setTreeMap(cur => {
+        const next = new Map(cur);
+        populateMap(entries, next, entry.path);
+        return next;
       });
-      return prev;
+      setFetching(cur => { const s = new Set(cur); s.delete(entry.path); return s; });
+    }).catch(() => {
+      setFetching(cur => { const s = new Set(cur); s.delete(entry.path); return s; });
     });
   }, [fetchEntries, populateMap]);
 
@@ -341,6 +344,8 @@ export function FileTreeViewer(props: FileTreeViewerProps) {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading...
           </div>
+        ) : loadError ? (
+          <p className="p-3 text-sm text-muted-foreground">Failed to load directory.</p>
         ) : rootEntries.length === 0 ? (
           <p className="p-3 text-sm text-muted-foreground">Empty directory</p>
         ) : (
