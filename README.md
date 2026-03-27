@@ -21,9 +21,8 @@ Queue tasks, monitor agent thought streams, respond to blockers, and approve dif
 git clone https://github.com/your-org/agemon.git
 cd agemon
 
-# Configure environment
+# Configure environment (optional — .env.example has sensible defaults)
 cp .env.example .env
-# Edit .env — set AGEMON_KEY and GITHUB_PAT
 
 # Install dependencies
 bun install

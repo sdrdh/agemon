@@ -2,79 +2,20 @@ import type { Task, UpdateTaskBody, CreateSessionBody, Repo, TasksByProject, Age
 
 const BASE = '/api';
 
-export const STORAGE_KEY = 'agemon_key' as const;
-
-function getKey(): string {
-  return localStorage.getItem(STORAGE_KEY) ?? '';
-}
-
-export function setApiKey(key: string) {
-  localStorage.setItem(STORAGE_KEY, key);
-}
-
-export function hasApiKey(): boolean {
-  return !!localStorage.getItem(STORAGE_KEY);
-}
-
-export async function clearApiKey() {
-  localStorage.removeItem(STORAGE_KEY);
-  try {
-    await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
-  } catch { /* best effort */ }
-}
-
 function headers() {
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${getKey()}`,
   };
 }
 
-/** Auth-only header for GET fetches that handle their own error handling. */
-export function authHeaders(): Record<string, string> {
-  const key = getKey();
-  return key ? { Authorization: `Bearer ${key}` } : {};
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: headers() });
+  const res = await fetch(`${BASE}${path}`, { ...init, headers: headers(), credentials: 'include' });
   if (!res.ok) {
-    if (res.status === 401) {
-      clearApiKey();
-      window.location.reload();
-      throw new Error('Session expired');
-    }
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(err.message ?? 'Request failed');
   }
   if (res.status === 204) return undefined as T;
   return res.json();
-}
-
-/** Validate key against the server. Returns true if valid. */
-export async function validateKey(key: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/health`, {
-      headers: { Authorization: `Bearer ${key}` },
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** Set the auth cookie via POST /api/auth. Called after successful key validation. */
-export async function setAuthCookie(key: string): Promise<void> {
-  try {
-    await fetch(`${BASE}/auth`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Authorization: `Bearer ${key}` },
-    });
-  } catch {
-    // Non-critical — Bearer header still works for SPA API calls
-    console.warn('Failed to set auth cookie');
-  }
 }
 
 export const api = {

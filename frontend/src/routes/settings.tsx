@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useRouter } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, LogOut, Puzzle, ExternalLink, FolderTree } from 'lucide-react';
+import { ArrowLeft, Check, Monitor, Moon, Sun, Palette, Plug, Info, Zap, Puzzle, ExternalLink, FolderTree } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -286,7 +286,7 @@ function FilesSection() {
 const RESTART_POLL_INTERVAL_MS = 2000;
 const RESTART_POLL_MAX_ATTEMPTS = 30;
 
-function AboutSection({ onLogout }: { onLogout: () => void }) {
+function AboutSection() {
   const { versionInfo, loading: checkLoading, error: checkError, check } = useVersionChecker();
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [isSystemd, setIsSystemd] = useState(false);
@@ -623,16 +623,6 @@ function AboutSection({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
 
-      <div className="pt-4 border-t">
-        <Button
-          variant="outline"
-          className="min-h-[44px] text-destructive hover:text-destructive"
-          onClick={onLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Log out
-        </Button>
-      </div>
     </section>
   );
 }
@@ -641,7 +631,6 @@ function AboutSection({ onLogout }: { onLogout: () => void }) {
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { options: { context } } = useRouter();
   const [activeSection, setActiveSection] = useState<Section>('appearance');
 
   return (
@@ -701,7 +690,7 @@ export default function SettingsPage() {
           {activeSection === 'skills' && <SkillsSection />}
           {activeSection === 'extensions' && <ExtensionsSection />}
           {activeSection === 'files' && <FilesSection />}
-          {activeSection === 'about' && <AboutSection onLogout={context.onLogout} />}
+          {activeSection === 'about' && <AboutSection />}
         </div>
       </div>
     </div>

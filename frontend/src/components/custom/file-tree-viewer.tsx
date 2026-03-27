@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, ArrowLeft, Loader2 } from 'lucide-react';
-import { authHeaders } from '@/lib/api';
 import type { RepoDiff } from '@/components/custom/diff-viewer';
 
 export type FsEntry = {
@@ -22,7 +21,7 @@ type FileView = { path: string; content: string; oldContent?: string };
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function apiFetch(url: string) {
-  return fetch(url, { headers: authHeaders(), credentials: 'include' });
+  return fetch(url, { credentials: 'include' });
 }
 
 function buildChangedSets(diffRepos: RepoDiff[]): { changedPaths: Set<string>; ancestorPaths: Set<string> } {

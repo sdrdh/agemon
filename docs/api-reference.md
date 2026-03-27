@@ -2,11 +2,7 @@
 
 ## Authentication
 
-All endpoints (except `/api/health` and `/api/version`) require a Bearer token:
-
-```
-Authorization: Bearer <AGEMON_KEY>
-```
+Authentication is handled by the reverse proxy (Tailscale, Cloudflare Access, etc.). The server itself has no built-in auth — it binds to `127.0.0.1` and trusts the proxy to gate access.
 
 ## Base URL
 
@@ -412,9 +408,7 @@ Fetch compiled extension icon renderer.
 
 ### ws://localhost:3000/ws
 
-Connect for real-time updates. Auth via browser cookie (set automatically on login). Token can also be passed as query param: `?token=<AGEMON_KEY>`.
-
-The connection is closed with code `4401` if the token is missing or invalid.
+Connect for real-time updates. No token required — access is controlled by the reverse proxy.
 
 **Server → Client events:**
 

@@ -20,7 +20,7 @@ import { Switch } from './components/ui/switch';
 import { Textarea } from './components/ui/textarea';
 import { onToast, type ToastPayload } from './lib/toast';
 import { connectWs, subscribeWsEvent } from './lib/ws';
-import { hasApiKey, api } from './lib/api';
+import { api } from './lib/api';
 import { useWsStore } from './lib/store';
 import { formatDuration, formatMs } from './lib/time-utils';
 import { PluginKitContext } from './lib/plugin-kit-context';
@@ -100,8 +100,8 @@ function GlobalToast() {
   );
 }
 
-// Only connect if a key is already stored — login screen handles the first-time case.
-if (hasApiKey()) connectWs();
+// Connect immediately — auth is handled by the reverse proxy.
+connectWs();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

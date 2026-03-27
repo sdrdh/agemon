@@ -5,7 +5,6 @@ import { ChevronDown, ChevronRight, GitCommit, ArrowLeft } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import type { ThemeId } from '@/lib/theme';
-import { authHeaders } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time-utils';
 
 export interface RepoDiff {
@@ -30,7 +29,7 @@ interface DiffRenderProps {
 // ─── Helpers ─────────────────────────────────────────────────────────────────────
 
 function apiFetch(url: string): Promise<Response> {
-  return fetch(url, { headers: authHeaders(), credentials: 'include' });
+  return fetch(url, { credentials: 'include' });
 }
 
 function getFileStats(file: FileDiffMetadata) {

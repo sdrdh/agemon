@@ -70,7 +70,7 @@ opencode acp
 - Good candidate for initial ACP integration testing
 
 **Integration notes:**
-- Pass `OPENCODE_API_KEY` in the subprocess env (but still filter `AGEMON_KEY` and `GITHUB_PAT`)
+- Pass `OPENCODE_API_KEY` in the subprocess env
 
 ---
 
@@ -154,4 +154,4 @@ The ACP JSON-RPC 2.0 session engine is fully implemented in `backend/src/lib/acp
 | opencode | `OPENCODE_API_KEY` | Env var |
 | gemini | `GOOGLE_API_KEY` or Google OAuth | CLI login or env var |
 
-`AGEMON_KEY` and `GITHUB_PAT` are stripped from agent subprocess environments in `lifecycle.ts`.
+Agent subprocess environments inherit the machine's git/SSH credentials. No special env var handling is needed for GitHub access.
