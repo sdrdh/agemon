@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useCallback, useState, useRef, type MutableRefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWsStore, type ToolCall } from '@/lib/store';
-import { sendClientEvent } from '@/lib/ws';
 import { sessionChatQuery } from '@/lib/query';
 import { api } from '@/lib/api';
 import { groupMessages, isSessionTerminal } from '@/lib/chat-utils';
@@ -183,10 +182,18 @@ export function useSessionChat(taskId: string | null, selectedSessionId: string 
     // Capture before mutation so optimistic message has the correct eventType
     const pendingInput = pendingInputs.length > 0 ? pendingInputs[0] : null;
     if (pendingInput) {
-      sendClientEvent({ type: 'send_input', sessionId: selectedSessionId, inputId: pendingInput.inputId, response: text });
+      fetch(`/api/sessions/${selectedSessionId}/inputs/${pendingInput.inputId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: text }),
+      }).catch(console.error);
       removePendingInput(pendingInput.inputId);
     } else {
-      sendClientEvent({ type: 'send_message', sessionId: selectedSessionId, content: text });
+      fetch(`/api/sessions/${selectedSessionId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+      }).catch(console.error);
     }
 
     const optimisticMsg: ChatMessage = {
@@ -202,11 +209,19 @@ export function useSessionChat(taskId: string | null, selectedSessionId: string 
 
   const handleCancelTurn = useCallback(() => {
     if (!selectedSessionId || !turnInFlight) return;
-    sendClientEvent({ type: 'cancel_turn', sessionId: selectedSessionId });
+    fetch(`/api/sessions/${selectedSessionId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).catch(console.error);
   }, [selectedSessionId, turnInFlight]);
 
   const handleApprovalDecision = useCallback((approvalId: string, decision: ApprovalDecision) => {
-    sendClientEvent({ type: 'approval_response', approvalId, decision });
+    fetch(`/api/approvals/${approvalId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision }),
+    }).catch(console.error);
   }, []);
 
   return {

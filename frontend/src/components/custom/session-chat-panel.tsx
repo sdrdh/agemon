@@ -5,7 +5,6 @@ import { ChatInputArea } from '@/components/custom/chat-input-area';
 import { SessionModeBar } from '@/components/custom/session-mode-bar';
 import { isSessionActive, isSessionTerminal } from '@/lib/chat-utils';
 import { useWsStore } from '@/lib/store';
-import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
 import { useInputExtensions } from '@/lib/use-input-extensions';
 import type { ChatItem } from '@/lib/chat-utils';
@@ -101,7 +100,11 @@ export function SessionChatPanel({
   }, [session.id, sessionRunning, configOptions, setConfigOptions]);
 
   const handleConfigChange = useCallback((configId: string, value: string) => {
-    sendClientEvent({ type: 'set_config_option', sessionId: session.id, configId, value });
+    fetch(`/api/sessions/${session.id}/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ configId, value }),
+    }).catch(console.error);
     // Optimistically update store
     if (configOptions) {
       const updated = configOptions.map(o => o.id === configId ? { ...o, value } : o);

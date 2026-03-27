@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { sessionsListQuery, tasksListQuery, dashboardActiveQuery, queryClient, dashboardKeys, sessionKeys } from '@/lib/query';
 import { useWsStore } from '@/lib/store';
-import { sendClientEvent } from '@/lib/ws';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/errors';
 import { isSessionActive } from '@/lib/chat-utils';
@@ -99,11 +98,19 @@ export default function DashboardPage() {
   }, [sessions, dismissedSessionIds]);
 
   const handleApprovalDecision = useCallback((approvalId: string, decision: ApprovalDecision) => {
-    sendClientEvent({ type: 'approval_response', approvalId, decision });
+    fetch(`/api/approvals/${approvalId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision }),
+    }).catch(console.error);
   }, []);
 
   const handleInputSubmit = useCallback((inputId: string, sessionId: string, response: string) => {
-    sendClientEvent({ type: 'send_input', sessionId, inputId, response });
+    fetch(`/api/sessions/${sessionId}/inputs/${inputId}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response }),
+    }).catch(console.error);
     useWsStore.getState().removePendingInput(inputId);
   }, []);
 
@@ -137,7 +144,11 @@ export default function DashboardPage() {
   }, []);
 
   const handleSendToSession = useCallback((sessionId: string, content: string) => {
-    sendClientEvent({ type: 'send_message', sessionId, content });
+    fetch(`/api/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }).catch(console.error);
   }, []);
 
   const handleNavigateToIdleSession = useCallback((sessionId: string, taskId?: string | null) => {
