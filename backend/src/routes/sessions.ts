@@ -81,28 +81,6 @@ sessionsRoutes.post('/sessions/:id/stop', (c) => {
 });
 
 /**
- * POST /sessions/:id/message — send a prompt message to a running session.
- */
-sessionsRoutes.post('/sessions/:id/message', async (c) => {
-  const sessionId = c.req.param('id');
-  const session = db.getSession(sessionId);
-  if (!session) sendError(404, 'Session not found');
-  if (session!.state !== 'running' && session!.state !== 'ready') {
-    sendError(400, `Session is in state ${session!.state}, not accepting messages`);
-  }
-  const body = await c.req.json<{ content: string }>();
-  if (!body.content || typeof body.content !== 'string') {
-    sendError(400, 'content is required');
-  }
-  try {
-    await sendPromptTurn(sessionId, body.content);
-    return c.json({ message: 'Message sent', sessionId });
-  } catch (err) {
-    sendError(500, (err as Error).message);
-  }
-});
-
-/**
  * POST /sessions/:id/resume — resume a stopped/crashed session.
  */
 sessionsRoutes.post('/sessions/:id/resume', async (c) => {
@@ -113,32 +91,6 @@ sessionsRoutes.post('/sessions/:id/resume', async (c) => {
   try {
     const resumed = await resumeSession(sessionId);
     return c.json(resumed, 202);
-  } catch (err) {
-    sendError(400, (err as Error).message);
-  }
-});
-
-/**
- * POST /sessions/:id/config — set a config option on a running session.
- */
-sessionsRoutes.post('/sessions/:id/config', async (c) => {
-  const sessionId = c.req.param('id');
-  const session = db.getSession(sessionId);
-  if (!session) sendError(404, 'Session not found');
-
-  let body: { configId: string; value: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    sendError(400, 'Request body must be valid JSON');
-  }
-
-  if (!body.configId || typeof body.configId !== 'string') sendError(400, 'configId is required');
-  if (!body.value || typeof body.value !== 'string') sendError(400, 'value is required');
-
-  try {
-    await setSessionConfigOption(sessionId, body.configId, body.value);
-    return c.json({ message: 'Config option set', sessionId, configId: body.configId, value: body.value });
   } catch (err) {
     sendError(400, (err as Error).message);
   }
@@ -232,6 +184,8 @@ sessionsRoutes.get('/repos', (c) => {
  */
 sessionsRoutes.post('/sessions/:id/messages', async (c) => {
   const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) return sendError(404, 'Session not found');
   let body: { content?: string } = {};
   try { body = await c.req.json(); } catch { return sendError(400, 'Request body must be valid JSON'); }
   if (!body.content || typeof body.content !== 'string') return sendError(400, 'content is required');
