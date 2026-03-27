@@ -44,8 +44,7 @@ export const plugin: ExtensionModule = {
         sendError(400, 'title is required');
       }
 
-      const repoUrls = repos ?? [];
-      validateRepoUrls(repoUrls);
+      const repoUrls = validateRepoUrls(repos ?? []);
 
       const agentType = agent ?? 'claude-code';
       validateTaskFields({ title, description, agent: agentType });
@@ -108,9 +107,7 @@ export const plugin: ExtensionModule = {
         sendError(400, `status must be one of: ${[...VALID_TASK_STATUSES].join(', ')}`);
       }
 
-      if (repos !== undefined) {
-        validateRepoUrls(repos);
-      }
+      const normalizedRepos = repos !== undefined ? validateRepoUrls(repos) : undefined;
 
       if (archived !== undefined && typeof archived !== 'boolean') {
         sendError(400, 'archived must be a boolean');
@@ -129,7 +126,7 @@ export const plugin: ExtensionModule = {
         });
       }
 
-      const updated = db.updateTask(task.id, { title, description, agent, repos, status, archived });
+      const updated = db.updateTask(task.id, { title, description, agent, repos: normalizedRepos, status, archived });
       if (!updated) return c.json({ error: 'Not Found', message: 'Task not found', statusCode: 404 }, 404);
 
       // Cascade archive to sessions: stop active ones, then archive all
@@ -144,7 +141,7 @@ export const plugin: ExtensionModule = {
       }
 
       // When repos change: create worktrees + refresh context (CLAUDE.md, symlinks)
-      if (repos !== undefined) {
+      if (normalizedRepos !== undefined) {
         (async () => {
           for (const repo of updated.repos) {
             try {

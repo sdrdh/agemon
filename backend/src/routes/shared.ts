@@ -17,13 +17,22 @@ export function validateTaskFields(fields: { title?: string; description?: strin
     sendError(400, 'description must be 10000 characters or fewer');
 }
 
-export function validateRepoUrls(repos: unknown): asserts repos is string[] {
+const HTTPS_TO_SSH_RE = /^https?:\/\/([\w.-]+)\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/;
+
+function httpsToSsh(url: string): string {
+  const m = HTTPS_TO_SSH_RE.exec(url);
+  return m ? `git@${m[1]}:${m[2]}/${m[3]}.git` : url;
+}
+
+export function validateRepoUrls(repos: unknown): string[] {
   if (!Array.isArray(repos)) sendError(400, 'repos must be an array');
   if (repos.length > 20) sendError(400, 'repos must contain 20 or fewer entries');
-  if (!repos.every(r => typeof r === 'string' && SSH_REPO_REGEX.test(r)))
-    sendError(400, 'each repo must be a valid SSH URL (git@host:org/repo.git)');
-  if (!repos.every(r => r.length <= 500))
+  if (!repos.every(r => typeof r === 'string' && r.length <= 500))
     sendError(400, 'each repo URL must be 500 characters or fewer');
+  const normalized = repos.map(httpsToSsh);
+  if (!normalized.every(r => SSH_REPO_REGEX.test(r)))
+    sendError(400, 'each repo must be a valid SSH or HTTPS URL (git@host:org/repo.git or https://github.com/org/repo)');
+  return normalized;
 }
 
 export function requireTask(id: string): Task {

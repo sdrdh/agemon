@@ -503,10 +503,11 @@ function TaskInfoDrawer({
                   value={newRepoUrl}
                   onChange={e => setNewRepoUrl(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddRepo(); } if (e.key === 'Escape') { setAddingRepo(false); setNewRepoUrl(''); setRepoError(null); } }}
-                  placeholder="git@github.com:org/repo.git"
+                  placeholder="git@github.com:org/repo.git or https://github.com/org/repo"
                   autoFocus
                   className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                 />
+                <p className="text-xs text-muted-foreground">HTTPS URLs are automatically converted to SSH for git operations.</p>
                 {repoError && <p className="text-xs text-destructive">{repoError}</p>}
                 <div className="flex gap-2">
                   <button
@@ -989,14 +990,15 @@ function NewTask() {
 
           {workspaceType === 'git-worktree' && (
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Repo SSH URLs (one per line, optional)</label>
+              <label className="text-xs text-muted-foreground">Repo URLs (one per line, optional)</label>
               <textarea
                 value={repos}
                 onChange={e => setRepos(e.target.value)}
-                placeholder="git@github.com:org/repo.git"
+                placeholder={"git@github.com:org/repo.git\nhttps://github.com/org/repo"}
                 rows={3}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               />
+              <p className="text-xs text-muted-foreground">HTTPS URLs are automatically converted to SSH for git operations.</p>
             </div>
           )}
 
