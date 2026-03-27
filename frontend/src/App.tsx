@@ -216,10 +216,12 @@ const pluginPageRoute = createRoute({
 });
 
 // Sub-pages of a plugin: /p/memory-cms/foo/bar
+// validateSearch passes all params through so plugins can read them via window.location.search
 const pluginSubPageRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/p/$pluginId/$',
   component: PluginPage,
+  validateSearch: (search: Record<string, unknown>) => search as Record<string, string | undefined>,
 });
 
 const routeTree = rootRoute.addChildren([
