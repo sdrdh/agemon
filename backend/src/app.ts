@@ -116,7 +116,12 @@ export function createApp(): AppContext {
         resolve();
       });
 
-      await done;
+      try {
+        await done;
+      } finally {
+        clearInterval(pingInterval);
+        sseClients.delete(client);
+      }
     });
   });
 
