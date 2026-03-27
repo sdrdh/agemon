@@ -7,8 +7,10 @@ const listeners = new Set<Listener>();
 const connectionListeners = new Set<ConnectionListener>();
 
 let source: EventSource | null = null;
+let connected = false;
 
 function setConnected(value: boolean) {
+  connected = value;
   for (const fn of connectionListeners) fn(value);
 }
 
@@ -74,8 +76,13 @@ export function subscribeServerEvent(handler: (event: unknown) => void): () => v
   return () => listeners.delete(typedHandler);
 }
 
-/** Subscribe to SSE connection state changes. Returns an unsubscribe function. */
+/**
+ * Subscribe to SSE connection state changes. Returns an unsubscribe function.
+ * Immediately calls fn with the current connected state so late subscribers
+ * (e.g. React components mounting after onopen already fired) are in sync.
+ */
 export function onConnectionChange(fn: ConnectionListener) {
+  fn(connected);
   connectionListeners.add(fn);
   return () => connectionListeners.delete(fn);
 }
