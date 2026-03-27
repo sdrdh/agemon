@@ -174,10 +174,10 @@ try {
 }
 
 // Create app
-const { app, broadcast } = createApp();
+const { app, broadcast, eventBus } = createApp();
 
-// Export broadcast for use in acp.ts and context.ts
-export { broadcast };
+// Export broadcast and eventBus for use in routes and acp modules
+export { broadcast, eventBus };
 
 // Mount routes
 const { sessionsRoutes } = await import('./routes/sessions.ts');
