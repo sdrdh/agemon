@@ -104,7 +104,7 @@ Task status is derived: `working` if any session is `running`; `awaiting_input` 
 
 ## Auth
 
-Single static token via env var `AGEMON_KEY`. HTTP Bearer on all API routes. No user accounts in v1.
+Authentication is delegated to a reverse proxy (Tailscale, Cloudflare Access, etc.). The server binds to `127.0.0.1` by default and has no built-in auth — the proxy is the security boundary. No user accounts in v1.
 
 ---
 
@@ -148,11 +148,11 @@ Global agemon skills are symlinked into `~/.claude/skills/agemon` and `~/.agents
 ## Environment Variables
 
 ```
-AGEMON_KEY        # required — static auth token
-GITHUB_PAT        # required for PR creation
 PORT              # optional, default 3000
 AGEMON_DIR        # optional, default ~/.agemon
 ```
+
+Git operations (cloning, pushing, PR creation) use the machine's existing GitHub CLI auth (`gh auth login`) or SSH keys. No PAT env var is required.
 
 ---
 
@@ -162,13 +162,13 @@ AGEMON_DIR        # optional, default ~/.agemon
 
 ```bash
 # Terminal 1: start backend
-cd backend && rm -f agemon.db* && AGEMON_KEY=test bun run src/server.ts
+cd backend && rm -f agemon.db* && bun run src/server.ts
 
 # Terminal 2: run tests (defaults to port 3000)
 ./scripts/test-api.sh
 
-# Or specify a different port/key:
-API_BASE=http://127.0.0.1:3001 AGEMON_KEY=mykey ./scripts/test-api.sh
+# Or specify a different port:
+API_BASE=http://127.0.0.1:3001 ./scripts/test-api.sh
 ```
 
 Run these after any backend route, DB, or schema changes.

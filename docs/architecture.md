@@ -261,7 +261,6 @@ See [extensions.md](./extensions.md) for: extension structure, manifest referenc
 
 ## Security
 
-- **Auth:** Static token via `AGEMON_KEY` env var. All API routes require `Authorization: Bearer <token>` except `/api/health` and `/ws`.
-- **GitHub PAT:** Loaded from `GITHUB_PAT` env var, never stored in files.
-- **Agent isolation:** `AGEMON_KEY` and `GITHUB_PAT` are stripped from agent subprocess environments.
+- **Auth:** Delegated to the reverse proxy (Tailscale, Cloudflare Access, etc.). Server binds to `127.0.0.1` and has no built-in auth.
+- **GitHub:** Git operations use the machine's GitHub CLI auth (`gh auth login`) or SSH keys. No PAT env var is required.
 - **Extension trust:** All extensions run in the main process with full access to the filesystem and API. Installing an extension grants it full trust. See [extensions.md § Trust Model](./extensions.md#trust-model).

@@ -231,7 +231,7 @@ Return `exports.agentProviders` to contribute new agent types to the `AgentRegis
 
 ## REST API (Install / Upgrade / Remove)
 
-All endpoints require `Authorization: Bearer {AGEMON_KEY}`.
+All endpoints are accessible on localhost without auth (the reverse proxy handles access control).
 
 | Method | Path | Description |
 |--------|------|-------------|

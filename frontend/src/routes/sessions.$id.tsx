@@ -8,7 +8,6 @@ import { DiffViewer } from '@/components/custom/diff-viewer';
 import { FileTreeViewer } from '@/components/custom/file-tree-viewer';
 import { useWsStore } from '@/lib/store';
 import { useEffect, useRef, useState } from 'react';
-import { authHeaders } from '@/lib/api';
 import type { RepoDiff } from '@/components/custom/diff-viewer';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -45,7 +44,7 @@ export default function SessionDetailPage() {
     if (!diffOpen && !filesOpen) return;
     if (reposFetched.current) return;
     reposFetched.current = true;
-    fetch(`/api/sessions/${sessionId}/diff`, { headers: authHeaders(), credentials: 'include' })
+    fetch(`/api/sessions/${sessionId}/diff`, { credentials: 'include' })
       .then(r => r.json())
       .then((data: { repos?: RepoDiff[] }) => setRepos(data.repos ?? []))
       .catch(() => {});

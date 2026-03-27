@@ -12,12 +12,6 @@ import type { RepoDiff } from './lib/extensions/workspace.ts';
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const HOST = process.env.HOST ?? '127.0.0.1';
-const AGEMON_KEY = process.env.AGEMON_KEY ?? '';
-
-if (!AGEMON_KEY) {
-  console.error('[error] AGEMON_KEY is not set — exiting');
-  process.exit(1);
-}
 
 // Ensure ~/.agemon base dirs exist before DB/migrations
 await mkdir(join(AGEMON_DIR, 'repos'), { recursive: true });
@@ -180,7 +174,7 @@ try {
 }
 
 // Create app
-const { app, broadcast } = createApp({ key: AGEMON_KEY });
+const { app, broadcast } = createApp();
 
 // Export broadcast for use in acp.ts and context.ts
 export { broadcast };

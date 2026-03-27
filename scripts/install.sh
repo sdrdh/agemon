@@ -99,13 +99,10 @@ Options:
   --uninstall                   Remove Agemon (service, app, optionally data)
   --help, -h                    Show this help message
 
-Environment:
-  AGEMON_KEY=<key>              Pre-set auth key (skip generation)
-
 Examples:
   bash install.sh
   bash install.sh --non-interactive --port 4000
-  AGEMON_KEY=mysecret bash install.sh --no-service
+  bash install.sh --no-service
 EOF
 }
 
@@ -435,26 +432,16 @@ create_runtime_dirs() {
 # ---------------------------------------------------------------------------
 write_env_file() {
   local env_file="$1"
-  local key="$2"
-  local port="$3"
-  local host="$4"
+  local port="$2"
+  local host="$3"
 
-  printf 'AGEMON_KEY=%s\nPORT=%s\nHOST=%s\n' "$key" "$port" "$host" > "$env_file"
+  printf 'PORT=%s\nHOST=%s\n' "$port" "$host" > "$env_file"
 }
 
 generate_secrets() {
   step "Configuring environment"
 
   ENV_FILE="${AGEMON_DIR}/env"
-
-  # Use provided key or generate one
-  if [ -n "${AGEMON_KEY:-}" ]; then
-    info "Using AGEMON_KEY from environment."
-    FINAL_KEY="${AGEMON_KEY}"
-  else
-    FINAL_KEY="$(openssl rand -hex 32)"
-    info "Generated new AGEMON_KEY."
-  fi
 
   if ! "$NON_INTERACTIVE"; then
     # Bind address
@@ -489,7 +476,7 @@ generate_secrets() {
   FINAL_HOST="${HOST}"
 
   mkdir -p "${AGEMON_DIR}"
-  write_env_file "${ENV_FILE}" "${FINAL_KEY}" "${FINAL_PORT}" "${FINAL_HOST}"
+  write_env_file "${ENV_FILE}" "${FINAL_PORT}" "${FINAL_HOST}"
   chmod 600 "${ENV_FILE}"
 
   success "Environment file written to ${ENV_FILE}"

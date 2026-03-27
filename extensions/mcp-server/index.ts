@@ -19,14 +19,12 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
   const host = process.env.HOST ?? '127.0.0.1';
   const baseUrl = `http://${host}:${port}/api`;
   const tasksBaseUrl = `${baseUrl}/extensions/tasks`;
-  const key = process.env.AGEMON_KEY ?? '';
 
   async function request<T = unknown>(url: string, init?: RequestInit): Promise<T> {
     const res = await fetch(url, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${key}`,
         ...init?.headers,
       },
     });

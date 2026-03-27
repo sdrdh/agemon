@@ -13,11 +13,8 @@ Agemon is a self-hosted, headless AI agent orchestration platform with a mobile-
 git clone https://github.com/your-org/agemon.git
 cd agemon
 
-# Configure environment
+# Configure environment (optional — .env.example has sensible defaults)
 cp .env.example .env
-# Edit .env:
-#   AGEMON_KEY=your-secret-key   (required)
-#   GITHUB_PAT=ghp_...           (required for PR creation)
 
 # Install dependencies
 bun install

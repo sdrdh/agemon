@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { upgradeWebSocket, websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
 import type { WSContext } from 'hono/ws';
 import { EventEmitter } from 'events';
-import { timingSafeEqual, createHmac } from 'node:crypto';
 import { db } from './db/client.ts';
 import type { ServerEvent, ServerEventPayload, ClientEvent } from '@agemon/shared';
 
@@ -17,10 +15,6 @@ const HTTP_STATUS: Record<number, string> = {
   500: 'Internal Server Error',
 };
 
-export interface AppOptions {
-  key: string;
-}
-
 export interface AppContext {
   app: Hono;
   broadcast: (event: ServerEventPayload) => void;
@@ -28,14 +22,8 @@ export interface AppContext {
   wsClients: Set<WSContext>;
 }
 
-/** Derive a cookie token from the key — never store the raw key in a cookie. */
-function deriveCookieToken(key: string): string {
-  return createHmac('sha256', key).update('agemon_session').digest('hex');
-}
-
-export function createApp(opts: AppOptions): AppContext {
+export function createApp(): AppContext {
   const app = new Hono();
-  const cookieToken = deriveCookieToken(opts.key);
   const eventBus = new EventEmitter();
 
   // ─── CORS (scoped to /api/* only — avoids conflict with upgradeWebSocket) ─────
@@ -45,7 +33,7 @@ export function createApp(opts: AppOptions): AppContext {
     app.use('/api/*', cors({
       origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
       credentials: true,
-      allowHeaders: ['Authorization', 'Content-Type'],
+      allowHeaders: ['Content-Type'],
     }));
   }
 
@@ -55,46 +43,6 @@ export function createApp(opts: AppOptions): AppContext {
     await next();
     const ms = Date.now() - start;
     console.info(`[http] ${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
-  });
-
-  // ─── Auth Middleware ──────────────────────────────────────────────────────────
-  app.use(async (c, next) => {
-    const path = c.req.path;
-    // Skip auth for non-API routes (frontend static files), health, version, and WebSocket
-    // /ws has its own token-based auth via query param
-    // /api/auth is the login endpoint — must be accessible without auth
-    if (path === '/ws' || path === '/api/health' || path === '/api/version' || path === '/api/auth' || path === '/api/auth/logout') return next();
-    // Only protect /api/* routes
-    if (!path.startsWith('/api')) return next();
-
-    // Check Bearer header first, then fall back to cookie
-    const auth = c.req.header('authorization') ?? '';
-    const cookie = getCookie(c, 'agemon_session') ?? '';
-
-    let authenticated = false;
-
-    // Try Bearer token
-    if (auth) {
-      const authBuf = Buffer.from(auth);
-      const expectedBuf = Buffer.from(`Bearer ${opts.key}`);
-      if (authBuf.length === expectedBuf.length && timingSafeEqual(authBuf, expectedBuf)) {
-        authenticated = true;
-      }
-    }
-
-    // Try cookie (HMAC-derived token, not the raw key)
-    if (!authenticated && cookie) {
-      const cookieBuf = Buffer.from(cookie);
-      const tokenBuf = Buffer.from(cookieToken);
-      if (cookieBuf.length === tokenBuf.length && timingSafeEqual(cookieBuf, tokenBuf)) {
-        authenticated = true;
-      }
-    }
-
-    if (!authenticated) {
-      return c.json({ error: 'Unauthorized', message: 'Invalid or missing AGEMON_KEY', statusCode: 401 }, 401);
-    }
-    return next();
   });
 
   // ─── Error Handler ────────────────────────────────────────────────────────────
@@ -116,29 +64,6 @@ export function createApp(opts: AppOptions): AppContext {
     c.json({ status: 'ok', timestamp: new Date().toISOString() }),
   );
 
-  // ─── Auth (cookie login) ───────────────────────────────────────────────────
-  app.post('/api/auth', (c) => {
-    const auth = c.req.header('authorization') ?? '';
-    const authBuf = Buffer.from(auth);
-    const expectedBuf = Buffer.from(`Bearer ${opts.key}`);
-    if (authBuf.length !== expectedBuf.length || !timingSafeEqual(authBuf, expectedBuf)) {
-      return c.json({ error: 'Unauthorized', message: 'Invalid AGEMON_KEY', statusCode: 401 }, 401);
-    }
-    setCookie(c, 'agemon_session', cookieToken, {
-      httpOnly: true,
-      sameSite: 'Strict',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 31536000, // 1 year
-    });
-    return c.json({ ok: true });
-  });
-
-  app.post('/api/auth/logout', (c) => {
-    deleteCookie(c, 'agemon_session', { path: '/' });
-    return c.json({ ok: true });
-  });
-
   // ─── Event Sequencing ───────────────────────────────────────────────────────
   const epoch = Date.now().toString();
   let globalSeq = 0;
@@ -154,31 +79,17 @@ export function createApp(opts: AppOptions): AppContext {
   ]);
   const wsClients = new Set<WSContext>();
 
-  app.use('/ws', async (c, next) => {
-    // Try cookie first (no token in URL), fall back to query param for backward compat
-    const cookie = getCookie(c, 'agemon_session') ?? '';
-    if (cookie) {
-      const cookieBuf = Buffer.from(cookie);
-      const tokenBuf = Buffer.from(cookieToken);
-      if (cookieBuf.length === tokenBuf.length && timingSafeEqual(cookieBuf, tokenBuf)) {
-        return next();
-      }
-    }
-    const token = c.req.query('token') ?? '';
-    if (token) {
-      const tokenBuf = Buffer.from(token);
-      const keyBuf = Buffer.from(opts.key);
-      if (tokenBuf.length === keyBuf.length && timingSafeEqual(tokenBuf, keyBuf)) {
-        return next();
-      }
-    }
-    return c.json({ error: 'Unauthorized', message: 'Invalid token', statusCode: 401 }, 401);
-  });
-
-  app.get('/ws', upgradeWebSocket((_c) => ({
+  app.get('/ws', upgradeWebSocket((c) => {
+    // Log the identity supplied by the reverse proxy (Tailscale / Cloudflare Access).
+    // Falls back to 'anonymous' when running without a proxy (e.g., local dev).
+    const user =
+      c.req.header('tailscale-user-login') ??
+      c.req.header('remote-user') ??
+      'anonymous';
+    return {
     onOpen(_event, ws) {
       wsClients.add(ws);
-      console.info(`[ws] client connected (total: ${wsClients.size})`);
+      console.info(`[ws] client connected user=${user} (total: ${wsClients.size})`);
     },
     onMessage(event, ws) {
       try {
@@ -248,7 +159,8 @@ export function createApp(opts: AppOptions): AppContext {
       wsClients.delete(ws);
       console.info(`[ws] client disconnected (total: ${wsClients.size})`);
     },
-  })));
+  };
+  }));
 
   function broadcast(event: ServerEventPayload) {
     const seq = ++globalSeq;

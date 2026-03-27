@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # Quick smoke test for backend API after review fixes.
-# Usage: AGEMON_KEY=test bun run src/server.ts &  (in backend/ dir)
+# Usage: bun run src/server.ts &  (in backend/ dir)
 #        ./scripts/test-api.sh
 
 set -eo pipefail
 
 BASE="${API_BASE:-http://127.0.0.1:3000}"
-KEY="${AGEMON_KEY:-test}"
-AUTH="Authorization: Bearer $KEY"
 PASS=0
 FAIL=0
 
@@ -19,14 +17,12 @@ check() {
   if [[ $# -gt 0 ]]; then
     status=$(curl -s -o /tmp/agemon_test_body -w "%{http_code}" \
       -X "$method" \
-      -H "$AUTH" \
       -H "Content-Type: application/json" \
       -d "$1" \
       "$BASE$path")
   else
     status=$(curl -s -o /tmp/agemon_test_body -w "%{http_code}" \
       -X "$method" \
-      -H "$AUTH" \
       -H "Content-Type: application/json" \
       "$BASE$path")
   fi

@@ -10,8 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Home, TerminalSquare, Settings, Puzzle } from 'lucide-react';
-import { hasApiKey, clearApiKey } from './lib/api';
-import { connectWs, disconnectWs } from './lib/ws';
+import { disconnectWs } from './lib/ws';
 import { queryClient } from './lib/query';
 import { useWsStore } from './lib/store';
 import { WsProvider } from './components/custom/ws-provider';
@@ -22,7 +21,6 @@ const IndexPage = lazy(() => import('./routes/index'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
 const SessionDetailPage = lazy(() => import('./routes/sessions.$id'));
 const SettingsPage = lazy(() => import('./routes/settings'));
-const LoginScreen = lazy(() => import('./routes/login'));
 const PluginPage = lazy(() => import('./routes/plugin'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
@@ -293,33 +291,12 @@ const SuspenseFallback = () => (
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [authed, setAuthed] = useState(hasApiKey);
-
-  function handleLogin() {
-    connectWs();
-    setAuthed(true);
-  }
-
-  function handleLogout() {
-    disconnectWs();
-    clearApiKey();
-    setAuthed(false);
-  }
-
-  if (!authed) {
-    return (
-      <ThemeProvider>
-        <ErrorBoundary>
-          <Suspense fallback={<SuspenseFallback />}>
-            <LoginScreen onLogin={handleLogin} />
-          </Suspense>
-        </ErrorBoundary>
-      </ThemeProvider>
-    );
-  }
-
-  // Update router context with current handleLogout reference
-  router.options.context.onLogout = handleLogout;
+  useEffect(() => {
+    router.options.context.onLogout = () => {
+      disconnectWs();
+      window.location.reload();
+    };
+  }, []);
 
   return (
     <ThemeProvider>
