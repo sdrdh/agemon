@@ -5,7 +5,7 @@ import { Archive, Plus, X, ArrowLeft, ArchiveX, RotateCcw, Square } from 'lucide
 import { sessionsListQuery, taskSessionsQuery, tasksListQuery, sessionKeys } from '@/lib/query';
 import { api } from '@/lib/api';
 import { showToast } from '@/lib/toast';
-import { onServerEvent } from '@/lib/ws';
+import { onServerEvent } from '@/lib/events';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/custom/status-badge';
 import { AgentIcon, AGENT_COLORS, agentDisplayName } from '@/components/custom/agent-icons';
