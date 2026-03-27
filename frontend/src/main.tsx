@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './components/ui/switch';
 import { Textarea } from './components/ui/textarea';
 import { onToast, type ToastPayload } from './lib/toast';
-import { connectWs, subscribeWsEvent } from './lib/ws';
+import { connectSSE, subscribeServerEvent } from './lib/events';
 import { api } from './lib/api';
 import { useWsStore } from './lib/store';
 import { formatDuration, formatMs } from './lib/time-utils';
@@ -58,8 +58,8 @@ import App, { router } from './App.tsx';
   utils: { formatDuration, formatMs },
   /** API client — same instance used by the host app. */
   api,
-  /** Subscribe to WebSocket server events. Returns an unsubscribe function. */
-  onWsEvent: (handler: (event: unknown) => void) => subscribeWsEvent(handler),
+  /** Subscribe to server events. Returns an unsubscribe function. */
+  onWsEvent: (handler: (event: unknown) => void) => subscribeServerEvent(handler),
   /** Control host chrome visibility. Call with 'fullscreen' to hide header+nav, 'default' to restore. */
   setHostLayout: (layout: 'default' | 'fullscreen') => useWsStore.getState().setHostLayout(layout),
   /** The React context object — plugins call useContext(window.__AGEMON__.PluginKitContext). */
@@ -101,7 +101,7 @@ function GlobalToast() {
 }
 
 // Connect immediately — auth is handled by the reverse proxy.
-connectWs();
+connectSSE();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

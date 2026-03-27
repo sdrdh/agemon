@@ -6,15 +6,13 @@ import {
   RouterProvider,
   Outlet,
   Link,
-  useMatches,
 } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Home, TerminalSquare, Settings, Puzzle } from 'lucide-react';
-import { disconnectWs } from './lib/ws';
+import { disconnectSSE } from './lib/events';
 import { queryClient } from './lib/query';
 import { useWsStore } from './lib/store';
-import { WsProvider } from './components/custom/ws-provider';
-import { ConnectionBanner } from './components/custom/connection-banner';
+import { EventsProvider } from './components/custom/events-provider';
 import { ThemeProvider } from './lib/theme-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
@@ -143,10 +141,8 @@ function BottomNav() {
 // ─── Root Route Layout ───────────────────────────────────────────────────────
 
 function RootLayout() {
-  const matches = useMatches();
   const hostLayout = useWsStore(s => s.hostLayout);
   const isTaskDetail = hostLayout === 'fullscreen';
-  const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 
   return (
@@ -164,7 +160,7 @@ function RootLayout() {
           </div>
         </header>
       )}
-      {!isTaskDetail && !isDashboard && <ConnectionBanner />}
+
       <main className={isTaskDetail ? '' : 'pb-16 max-w-5xl mx-auto'}>
         <Outlet />
       </main>
@@ -293,7 +289,7 @@ const SuspenseFallback = () => (
 export default function App() {
   useEffect(() => {
     router.options.context.onLogout = () => {
-      disconnectWs();
+      disconnectSSE();
       window.location.reload();
     };
   }, []);
@@ -302,11 +298,11 @@ export default function App() {
     <ThemeProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <WsProvider>
+          <EventsProvider>
             <Suspense fallback={<SuspenseFallback />}>
               <RouterProvider router={router} />
             </Suspense>
-          </WsProvider>
+          </EventsProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </ThemeProvider>
