@@ -1,3 +1,7 @@
+/**
+ * @deprecated No longer used in the main app. Task detail UI has moved
+ * to the tasks extension. Kept for reference only.
+ */
 import { useEffect } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

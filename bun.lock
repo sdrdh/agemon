@@ -26,61 +26,6 @@
         "typescript": "^5.0.0",
       },
     },
-    "extensions/mcp-config": {
-      "name": "agemon-plugin-mcp-config",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "extensions/mcp-server": {
-      "name": "@agemon/plugin-mcp-server",
-      "version": "0.1.0",
-      "dependencies": {
-        "@hono/mcp": "^0.2.4",
-        "@modelcontextprotocol/sdk": "^1.27.1",
-        "hono": "^4.6.0",
-        "pkce-challenge": "^4.1.0",
-        "zod": "^3.24.0",
-        "zod-to-json-schema": "^3.24.0",
-      },
-    },
-    "extensions/memory-cms": {
-      "name": "@agemon/plugin-memory-cms",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-        "marked": "^17.0.0",
-        "react-markdown": "^10.1.0",
-        "remark-gfm": "^4.0.1",
-      },
-    },
-    "extensions/server-logs": {
-      "name": "@agemon/plugin-server-logs",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "extensions/skills-manager": {
-      "name": "agemon-plugin-skills-manager",
-      "version": "0.1.0",
-      "dependencies": {
-        "hono": "^4.6.0",
-      },
-    },
-    "extensions/tasks": {
-      "name": "@agemon/plugin-tasks",
-      "version": "0.1.0",
-      "dependencies": {
-        "@agemon/shared": "workspace:*",
-        "hono": "^4.6.0",
-      },
-    },
-    "extensions/voice-input": {
-      "name": "@agemon/plugin-voice-input",
-      "version": "0.1.0",
-    },
     "frontend": {
       "name": "@agemon/frontend",
       "version": "1.0.0",
@@ -133,16 +78,6 @@
     "@agemon/backend": ["@agemon/backend@workspace:backend"],
 
     "@agemon/frontend": ["@agemon/frontend@workspace:frontend"],
-
-    "@agemon/plugin-mcp-server": ["@agemon/plugin-mcp-server@workspace:extensions/mcp-server"],
-
-    "@agemon/plugin-memory-cms": ["@agemon/plugin-memory-cms@workspace:extensions/memory-cms"],
-
-    "@agemon/plugin-server-logs": ["@agemon/plugin-server-logs@workspace:extensions/server-logs"],
-
-    "@agemon/plugin-tasks": ["@agemon/plugin-tasks@workspace:extensions/tasks"],
-
-    "@agemon/plugin-voice-input": ["@agemon/plugin-voice-input@workspace:extensions/voice-input"],
 
     "@agemon/shared": ["@agemon/shared@workspace:shared"],
 
@@ -495,10 +430,6 @@
     "@vitest/utils": ["@vitest/utils@2.1.9", "", { "dependencies": { "@vitest/pretty-format": "2.1.9", "loupe": "^3.1.2", "tinyrainbow": "^1.2.0" } }, "sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ=="],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
-
-    "agemon-plugin-mcp-config": ["agemon-plugin-mcp-config@workspace:extensions/mcp-config"],
-
-    "agemon-plugin-skills-manager": ["agemon-plugin-skills-manager@workspace:extensions/skills-manager"],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
 
@@ -1004,7 +935,7 @@
 
     "pirates": ["pirates@4.0.7", "", {}, "sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA=="],
 
-    "pkce-challenge": ["pkce-challenge@4.1.0", "", {}, "sha512-ZBmhE1C9LcPoH9XZSdwiPtbPHZROwAnMy+kIFQVrnMCxY4Cudlz3gBOpzilgc0jOgRaiT3sIWfpMomW2ar2orQ=="],
+    "pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
 
     "postcss": ["postcss@8.5.6", "", { "dependencies": { "nanoid": "^3.3.11", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg=="],
 
@@ -1294,13 +1225,7 @@
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
 
-    "@agemon/plugin-mcp-server/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
-
     "@asamuzakjp/css-color/lru-cache": ["lru-cache@10.4.3", "", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
-
-    "@hono/mcp/pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
-
-    "@modelcontextprotocol/sdk/pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
 
     "@radix-ui/react-collection/@radix-ui/react-slot": ["@radix-ui/react-slot@1.2.3", "", { "dependencies": { "@radix-ui/react-compose-refs": "1.1.2" }, "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-aeNmHnBxbi2St0au6VBVC7JXFlhLlOnvIIlePNniyUNAClzmtAUEY8/pBiK3iHjufOlwA+c20/8jngo7xcrg8A=="],
 

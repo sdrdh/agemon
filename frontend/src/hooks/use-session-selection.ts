@@ -45,7 +45,7 @@ export function useSessionSelection(
   useEffect(() => {
     if (selectedSessionId && !sessions.some(s => s.id === selectedSessionId)) {
       setSelectedSessionId(null);
-      navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: undefined }, replace: true });
+      navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: taskId }, search: {}, replace: true });
     }
   }, [sessions, selectedSessionId, navigate, taskId]);
 
@@ -65,8 +65,8 @@ export function useSessionSelection(
     // Desktop: replace so back leaves the task page entirely.
     // Mobile: push so back returns to the session list within the task page.
     navigate({
-      to: '/tasks/$id',
-      params: { id: taskId },
+      to: '/p/$pluginId/$',
+      params: { pluginId: 'tasks', _splat: taskId },
       search: { session: sessionId },
       replace: isDesktop,
     });
@@ -74,7 +74,7 @@ export function useSessionSelection(
 
   const handleBackToList = useCallback(() => {
     setSelectedSessionId(null);
-    navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: undefined }, replace: true });
+    navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: taskId }, search: {}, replace: true });
   }, [navigate, taskId]);
 
   return {

@@ -1,3 +1,7 @@
+/**
+ * @deprecated No longer used in the main app. Task repo selection has moved
+ * to the tasks extension. Kept for reference only.
+ */
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';

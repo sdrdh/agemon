@@ -17,6 +17,7 @@ import {
   FileDiff,
   FolderTree,
   GitBranch,
+  Plug,
   X,
   Loader2,
 } from 'lucide-react';
@@ -356,6 +357,7 @@ function TaskInfoDrawer({
   archiving: boolean;
   onUpdateTask: (body: Partial<UpdateTaskBody>) => Promise<void>;
 }) {
+  const { McpServerList } = (window as any).__AGEMON__?.host ?? {};
   const [addingRepo, setAddingRepo] = useState(false);
   const [newRepoUrl, setNewRepoUrl] = useState('');
   const [repoSaving, setRepoSaving] = useState(false);
@@ -527,6 +529,16 @@ function TaskInfoDrawer({
               </div>
             )}
           </section>
+
+          {McpServerList && (
+            <section>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Plug className="h-3 w-3" />
+                MCP Servers
+              </h3>
+              <McpServerList scope="task" taskId={task.id} />
+            </section>
+          )}
 
           <section className="pt-2 border-t space-y-1">
             {!isDone && (

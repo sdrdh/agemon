@@ -7,7 +7,8 @@ import { archiveSessionsByTask } from '../../backend/src/db/sessions.ts';
 import { gitManager } from '../../backend/src/lib/git.ts';
 import { refreshTaskContext } from '../../backend/src/lib/context.ts';
 import { sendError, validateTaskFields, validateRepoUrls, requireTask, VALID_TASK_STATUSES } from '../../backend/src/routes/shared.ts';
-import type { AgentSessionState, CreateTaskBody, UpdateTaskBody } from '@agemon/shared';
+import { AGENT_TYPES } from '@agemon/shared';
+import type { AgentSessionState, CreateTaskBody, UpdateTaskBody, CreateSessionBody } from '@agemon/shared';
 
 /**
  * Tasks plugin — UI + task status derivation + task CRUD API routes.
@@ -178,6 +179,52 @@ export const plugin: ExtensionModule = {
       ctx.broadcast({ type: 'task_updated', task: { ...task!, status: 'done' } });
       ctx.emit('task:deleted', { id, task }).catch(() => {});
       return new Response(null, { status: 204 });
+    });
+
+    // ── Task Sessions ─────────────────────────────────────────────────────────
+
+    /**
+     * POST /tasks/:id/sessions — create + spawn a session for a task.
+     * Handles task-specific setup (worktrees), then delegates spawn to core ctx API.
+     */
+    apiRoutes.post('/tasks/:id/sessions', async (c) => {
+      const task = requireTask(c.req.param('id'));
+
+      let body: CreateSessionBody = {};
+      try {
+        body = await c.req.json<CreateSessionBody>();
+      } catch {
+        // empty body is valid — all fields are optional
+      }
+
+      const agentType = body.agentType ?? task.agent;
+      if (!(AGENT_TYPES as readonly string[]).includes(agentType)) {
+        sendError(400, `agentType must be one of: ${[...AGENT_TYPES].join(', ')}`);
+      }
+
+      // Create worktrees if this is the first session for the task (include archived)
+      const existingSessions = db.listSessions(task.id, true);
+      if (existingSessions.length === 0) {
+        try {
+          await Promise.all(task.repos.map(repo => gitManager.createWorktree(task.id, repo.url)));
+        } catch (err) {
+          await gitManager.deleteTaskWorktrees(task.id).catch(() => {});
+          sendError(500, `Failed to create worktree: ${(err as Error).message}`);
+        }
+      }
+
+      const session = ctx.createSession({ agentType, meta: { task_id: task.id } });
+      ctx.spawnSession(session.id);
+      return c.json(session, 202);
+    });
+
+    /**
+     * GET /tasks/:id/sessions — list all sessions for a task.
+     */
+    apiRoutes.get('/tasks/:id/sessions', (c) => {
+      const task = requireTask(c.req.param('id'));
+      const includeArchived = c.req.query('archived') === 'true';
+      return c.json(db.listSessions(task.id, includeArchived));
     });
 
     apiRoutes.get('/tasks/:id/events', (c) => {

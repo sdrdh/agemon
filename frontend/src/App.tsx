@@ -19,12 +19,10 @@ import { ConnectionBanner } from './components/custom/connection-banner';
 import { ThemeProvider } from './lib/theme-provider';
 
 const IndexPage = lazy(() => import('./routes/index'));
-const TaskDetailPage = lazy(() => import('./routes/tasks.$id'));
 const SessionsPage = lazy(() => import('./routes/sessions'));
 const SessionDetailPage = lazy(() => import('./routes/sessions.$id'));
 const SettingsPage = lazy(() => import('./routes/settings'));
 const LoginScreen = lazy(() => import('./routes/login'));
-const ProjectsPage = lazy(() => import('./routes/projects'));
 const PluginPage = lazy(() => import('./routes/plugin'));
 
 // ─── Router Context ──────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ function BottomNav() {
 function RootLayout() {
   const matches = useMatches();
   const hostLayout = useWsStore(s => s.hostLayout);
-  const isTaskDetail = matches.some((m) => m.routeId === '/tasks/$id') || hostLayout === 'fullscreen';
+  const isTaskDetail = hostLayout === 'fullscreen';
   const isDashboard = matches.some((m) => m.routeId === '/' && m.pathname === '/');
   const connected = useWsStore(s => s.connected);
 
@@ -189,15 +187,6 @@ const indexRoute = createRoute({
   component: IndexPage,
 });
 
-const taskDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/tasks/$id',
-  component: TaskDetailPage,
-  validateSearch: (search: Record<string, unknown>) => ({
-    session: typeof search.session === 'string' ? search.session : undefined,
-  }),
-});
-
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions',
@@ -219,12 +208,6 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
-const projectsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/projects',
-  component: ProjectsPage,
-});
-
 // Root of a plugin: /p/memory-cms
 const pluginPageRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -241,11 +224,9 @@ const pluginSubPageRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  taskDetailRoute,
   sessionDetailRoute,
   sessionsRoute,
   settingsRoute,
-  projectsRoute,
   pluginPageRoute,
   pluginSubPageRoute,
 ]);

@@ -285,7 +285,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
       // Task-scoped: create immediately and navigate
       try {
         const session = await api.createSession(taskId);
-        navigate({ to: '/tasks/$id', params: { id: taskId }, search: { session: session.id } });
+        navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: taskId }, search: { session: session.id } });
       } catch (err) {
         console.error('Failed to create session:', err);
       }
@@ -319,7 +319,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
       }
       showToast({ title: 'Session resumed' });
       if (session.task_id) {
-        navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } });
+        navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: session.task_id }, search: { session: session.id } });
       } else {
         navigate({ to: '/sessions/$id', params: { id: session.id } });
       }
@@ -348,7 +348,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
   const handleRawSessionCreated = (session: AgentSession) => {
     setShowNewForm(false);
     if (session.task_id) {
-      navigate({ to: '/tasks/$id', params: { id: session.task_id }, search: { session: session.id } });
+      navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: session.task_id }, search: { session: session.id } });
     } else {
       navigate({ to: '/sessions/$id', params: { id: session.id } });
     }
@@ -449,7 +449,7 @@ export function SessionList({ taskId }: { taskId?: string }) {
                 session={session}
                 task={session.task_id ? taskMap.get(session.task_id) : undefined}
                 onClick={session.task_id
-                  ? () => navigate({ to: '/tasks/$id', params: { id: session.task_id! }, search: { session: session.id } })
+                  ? () => navigate({ to: '/p/$pluginId/$', params: { pluginId: 'tasks', _splat: session.task_id! }, search: { session: session.id } })
                   : () => navigate({ to: '/sessions/$id', params: { id: session.id } })
                 }
                 onStop={() => stopMutation.mutate(session.id)}

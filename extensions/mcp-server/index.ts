@@ -18,10 +18,11 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
   const port = process.env.PORT ?? '3000';
   const host = process.env.HOST ?? '127.0.0.1';
   const baseUrl = `http://${host}:${port}/api`;
+  const tasksBaseUrl = `${baseUrl}/extensions/tasks`;
   const key = process.env.AGEMON_KEY ?? '';
 
-  async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${baseUrl}${path}`, {
+  async function request<T = unknown>(url: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(url, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -34,6 +35,14 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
       throw new Error(err.message ?? `API error ${res.status}`);
     }
     return res.json();
+  }
+
+  // Task CRUD lives in the tasks extension; session ops are on the main API.
+  function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+    return request<T>(`${baseUrl}${path}`, init);
+  }
+  function tasksApi<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+    return request<T>(`${tasksBaseUrl}${path}`, init);
   }
 
   // ─── MCP Server + Tools ──────────────────────────────────────────────────
@@ -51,7 +60,7 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
     },
     async ({ title, description, repos, agent }) => {
       try {
-        const task = await api('/tasks', {
+        const task = await tasksApi('/tasks', {
           method: 'POST',
           body: JSON.stringify({ title, description, repos, agent }),
         });
@@ -68,7 +77,7 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
     {},
     async () => {
       try {
-        return textResult(await api('/tasks'));
+        return textResult(await tasksApi('/tasks'));
       } catch (err) {
         return errorResult((err as Error).message);
       }
@@ -81,7 +90,7 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
     { task_id: z.string().describe('Task ID') },
     async ({ task_id }) => {
       try {
-        return textResult(await api(`/tasks/${task_id}`));
+        return textResult(await tasksApi(`/tasks/${task_id}`));
       } catch (err) {
         return errorResult((err as Error).message);
       }
@@ -99,7 +108,7 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
     },
     async ({ task_id, agent_type, wait, timeout_ms }) => {
       try {
-        const session = await api<{ id: string; state: string }>(`/tasks/${task_id}/sessions`, {
+        const session = await tasksApi<{ id: string; state: string }>(`/tasks/${task_id}/sessions`, {
           method: 'POST',
           body: JSON.stringify(agent_type ? { agentType: agent_type } : {}),
         });
@@ -168,7 +177,7 @@ export function onLoad(ctx: ExtensionContext): ExtensionExports {
     { task_id: z.string().describe('Task ID') },
     async ({ task_id }) => {
       try {
-        return textResult(await api(`/tasks/${task_id}/sessions`));
+        return textResult(await tasksApi(`/tasks/${task_id}/sessions`));
       } catch (err) {
         return errorResult((err as Error).message);
       }

@@ -1,3 +1,7 @@
+/**
+ * @deprecated No longer used in the main app. Agent selection has moved
+ * to the tasks extension. Kept for reference only.
+ */
 import { AGENT_TYPES } from '@agemon/shared';
 import type { AgentType } from '@agemon/shared';
 import {

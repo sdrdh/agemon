@@ -1,65 +1,12 @@
 import { Hono } from 'hono';
 import { db } from '../db/client.ts';
 import { broadcast } from '../server.ts';
-import { spawnAndHandshake, stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions, getSessionAvailableCommands, sendPromptTurn } from '../lib/acp/index.ts';
+import { stopAgent, getActiveSession, resumeSession, setSessionConfigOption, getSessionConfigOptions, getSessionAvailableCommands, sendPromptTurn } from '../lib/acp/index.ts';
 import { spawnLocalDirSession } from '../lib/acp/spawn.ts';
-import { gitManager } from '../lib/git.ts';
 import { sendError, requireTask } from './shared.ts';
-import type { CreateSessionBody } from '@agemon/shared';
 import { AGENT_TYPES } from '@agemon/shared';
 
 export const sessionsRoutes = new Hono();
-
-/**
- * POST /tasks/:id/sessions — create a new session for a task.
- * Spawns an agent process, runs ACP handshake, returns session in `starting` state.
- * Worktrees are created on first session for the task.
- */
-sessionsRoutes.post('/tasks/:id/sessions', async (c) => {
-  const task = requireTask(c.req.param('id'));
-
-  let body: CreateSessionBody = {};
-  try {
-    const raw = await c.req.text();
-    if (raw) body = JSON.parse(raw);
-  } catch {
-    sendError(400, 'Request body must be valid JSON');
-  }
-
-  const agentType = body.agentType ?? task.agent;
-  if (!(AGENT_TYPES as readonly string[]).includes(agentType)) {
-    sendError(400, `agentType must be one of: ${[...AGENT_TYPES].join(', ')}`);
-  }
-
-  // Create worktrees if this is the first session for the task (include archived)
-  const existingSessions = db.listSessions(task.id, true);
-  if (existingSessions.length === 0) {
-    for (const repo of task.repos) {
-      try {
-        await gitManager.createWorktree(task.id, repo.url);
-      } catch (err) {
-        await gitManager.deleteTaskWorktrees(task.id).catch(() => {});
-        sendError(500, `Failed to create worktree for ${repo.name}: ${(err as Error).message}`);
-      }
-    }
-  }
-
-  try {
-    const session = spawnAndHandshake(task.id, agentType);
-    return c.json(session, 202);
-  } catch (err) {
-    sendError(500, (err as Error).message);
-  }
-});
-
-/**
- * GET /tasks/:id/sessions — list all sessions for a task.
- */
-sessionsRoutes.get('/tasks/:id/sessions', (c) => {
-  const task = requireTask(c.req.param('id'));
-  const includeArchived = c.req.query('archived') === 'true';
-  return c.json(db.listSessions(task.id, includeArchived));
-});
 
 /**
  * POST /sessions — create a raw session in a local directory (no task required).

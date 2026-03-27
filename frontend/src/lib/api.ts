@@ -88,11 +88,11 @@ export const api = {
 
   // Sessions
   createSession: (taskId: string, body: CreateSessionBody = {}) =>
-    request<AgentSession>(`/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
+    request<AgentSession>(`/extensions/tasks/tasks/${taskId}/sessions`, { method: 'POST', body: JSON.stringify(body) }),
   createRawSession: (body: { cwd: string; agentType?: string }) =>
     request<AgentSession>('/sessions', { method: 'POST', body: JSON.stringify(body) }),
   getTaskSessions: (taskId: string, includeArchived = false) =>
-    request<AgentSession[]>(`/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
+    request<AgentSession[]>(`/extensions/tasks/tasks/${taskId}/sessions${includeArchived ? '?archived=true' : ''}`),
   getSession: (sessionId: string) =>
     request<AgentSession>(`/sessions/${sessionId}`),
   getSessionChat: (sessionId: string, limit = 50, before?: string) =>

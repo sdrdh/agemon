@@ -9,11 +9,15 @@ import * as LucideReact from 'lucide-react';
 // Merge prod + dev runtimes so plugins can use either jsx/jsxs (prod) or jsxDEV (dev)
 const jsxRuntime = { ...jsxRuntimeProd, ...jsxRuntimeDev };
 import { ToastProvider, ToastViewport, Toast, ToastTitle, ToastDescription, ToastClose } from './components/ui/toast';
-import { Button } from './components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion';
 import { Badge } from './components/ui/badge';
+import { Button } from './components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
+import { Switch } from './components/ui/switch';
+import { Textarea } from './components/ui/textarea';
 import { onToast, type ToastPayload } from './lib/toast';
 import { connectWs, subscribeWsEvent } from './lib/ws';
 import { hasApiKey, api } from './lib/api';
@@ -25,6 +29,7 @@ import { ChatPanel } from './components/custom/chat-panel';
 import { StatusBadge } from './components/custom/status-badge';
 import { DiffViewer } from './components/custom/diff-viewer';
 import { FileTreeViewer } from './components/custom/file-tree-viewer';
+import { McpServerList } from './components/custom/mcp-server-list';
 import './index.css';
 import App, { router } from './App.tsx';
 
@@ -37,8 +42,18 @@ import App, { router } from './App.tsx';
   LucideReact,
   /** Navigate to a route using TanStack Router. */
   navigate: (opts: Parameters<typeof router.navigate>[0]) => router.navigate(opts),
-  /** Curated shadcn/ui components — import via `window.__AGEMON__.ui` or declare as `@agemon/ui` external. */
-  ui: { Button, Badge, Card, CardContent, CardHeader, CardTitle, Input, Label },
+  /** All shadcn/ui components — import via `window.__AGEMON__.ui` or declare as `@agemon/ui` external. */
+  ui: {
+    Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+    Badge,
+    Button,
+    Card, CardContent, CardHeader, CardTitle,
+    Input,
+    Label,
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    Switch,
+    Textarea,
+  },
   /** Utility helpers. */
   utils: { formatDuration, formatMs },
   /** API client — same instance used by the host app. */
@@ -50,7 +65,7 @@ import App, { router } from './App.tsx';
   /** The React context object — plugins call useContext(window.__AGEMON__.PluginKitContext). */
   PluginKitContext,
   /** Host component kit — plugins import from '@agemon/host' which resolves to window.__AGEMON__.host. */
-  host: { SessionList, ChatPanel, StatusBadge, DiffViewer, FileTreeViewer },
+  host: { SessionList, ChatPanel, StatusBadge, DiffViewer, FileTreeViewer, McpServerList },
 };
 
 function GlobalToast() {
