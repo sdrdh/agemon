@@ -5,5 +5,5 @@ import { createApp, type AppContext } from '../app.ts';
  * Use app.request() to test routes without starting a server.
  */
 export function setupTestApp(): AppContext {
-  return createApp({ key: 'test-key' });
+  return createApp();
 }

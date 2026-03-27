@@ -6,7 +6,7 @@ import { buildSessionDb, insertSession } from './lib/session-store.ts';
 import type { AgentType } from '@agemon/shared';
 import { AGEMON_DIR } from './lib/git.ts';
 import { getAllPluginPaths, getAllSkillPaths } from './lib/agents.ts';
-import { createApp, websocket } from './app.ts';
+import { createApp, broadcast, eventBus } from './app.ts';
 import { registerBuiltinAgents } from './lib/extensions/agent-registry.ts';
 import type { RepoDiff } from './lib/extensions/workspace.ts';
 
@@ -174,9 +174,9 @@ try {
 }
 
 // Create app
-const { app, broadcast, eventBus } = createApp();
+const { app } = createApp();
 
-// Export broadcast and eventBus for use in routes and acp modules
+// Re-export broadcast and eventBus for use in routes and acp modules
 export { broadcast, eventBus };
 
 // Mount routes
@@ -288,7 +288,7 @@ if (frontendExists) {
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-Bun.serve({ fetch: app.fetch, websocket, port: PORT, hostname: HOST });
+Bun.serve({ fetch: app.fetch, port: PORT, hostname: HOST });
 console.log(`[agemon] backend listening on http://${HOST}:${PORT}`);
 
 // ─── Crash Recovery + Graceful Shutdown ──────────────────────────────────────
