@@ -225,46 +225,29 @@ export interface SettingEntry {
   updated_at: string;
 }
 
-// ─── WebSocket Event Types ────────────────────────────────────────────────────
-
-interface ServerEventBase {
-  seq: number;
-  epoch: string;
-}
-
-/** Distributes Omit across union members (built-in Omit collapses them). */
-export type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
-
-export type ServerEventPayload = DistributiveOmit<ServerEvent, 'seq' | 'epoch'>;
+// ─── Server-Sent Event Types ──────────────────────────────────────────────────
 
 export type ServerEvent =
-  | (ServerEventBase & { type: 'task_updated'; task: Task })
-  | (ServerEventBase & { type: 'agent_thought'; taskId: string | null; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string })
-  | (ServerEventBase & { type: 'awaiting_input'; taskId: string | null; sessionId: string; question: string; inputId: string })
-  | (ServerEventBase & { type: 'terminal_output'; sessionId: string; data: string })
-  | (ServerEventBase & { type: 'session_started'; taskId: string | null; session: AgentSession })
-  | (ServerEventBase & { type: 'session_ready'; taskId: string | null; session: AgentSession })
-  | (ServerEventBase & { type: 'session_state_changed'; sessionId: string; taskId: string | null; state: AgentSessionState })
-  | (ServerEventBase & { type: 'approval_requested'; approval: PendingApproval })
-  | (ServerEventBase & { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision })
-  | (ServerEventBase & { type: 'config_options_updated'; sessionId: string; taskId: string | null; configOptions: SessionConfigOption[] })
-  | (ServerEventBase & { type: 'available_commands'; sessionId: string; taskId: string | null; commands: AgentCommand[] })
-  | (ServerEventBase & { type: 'turn_cancelled'; sessionId: string; taskId: string | null })
-  | (ServerEventBase & { type: 'turn_completed'; sessionId: string; taskId: string | null })
-  | (ServerEventBase & { type: 'session_usage_update'; sessionId: string; taskId: string | null; usage: SessionUsage })
-  | (ServerEventBase & { type: 'update_available'; version: string; should_notify: boolean })
-  | (ServerEventBase & { type: 'extensions_changed'; extensionIds: string[] })
-  | (ServerEventBase & { type: 'server_restarting' })
-  | (ServerEventBase & { type: 'full_sync_required' });
+  | { type: 'task_updated'; task: Task }
+  | { type: 'agent_thought'; taskId: string | null; sessionId: string; content: string; eventType: 'thought' | 'action'; messageId?: string }
+  | { type: 'awaiting_input'; taskId: string | null; sessionId: string; question: string; inputId: string }
+  | { type: 'terminal_output'; sessionId: string; data: string }
+  | { type: 'session_started'; taskId: string | null; session: AgentSession }
+  | { type: 'session_ready'; taskId: string | null; session: AgentSession }
+  | { type: 'session_state_changed'; sessionId: string; taskId: string | null; state: AgentSessionState }
+  | { type: 'approval_requested'; approval: PendingApproval }
+  | { type: 'approval_resolved'; approvalId: string; decision: ApprovalDecision }
+  | { type: 'config_options_updated'; sessionId: string; taskId: string | null; configOptions: SessionConfigOption[] }
+  | { type: 'available_commands'; sessionId: string; taskId: string | null; commands: AgentCommand[] }
+  | { type: 'turn_cancelled'; sessionId: string; taskId: string | null }
+  | { type: 'turn_completed'; sessionId: string; taskId: string | null }
+  | { type: 'session_usage_update'; sessionId: string; taskId: string | null; usage: SessionUsage }
+  | { type: 'update_available'; version: string; should_notify: boolean }
+  | { type: 'extensions_changed'; extensionIds: string[] }
+  | { type: 'server_restarting' };
 
-export type ClientEvent =
-  | { type: 'send_input'; sessionId: string; inputId: string; response: string }
-  | { type: 'terminal_input'; sessionId: string; data: string }
-  | { type: 'send_message'; sessionId: string; content: string }
-  | { type: 'approval_response'; approvalId: string; decision: ApprovalDecision }
-  | { type: 'set_config_option'; sessionId: string; configId: string; value: string }
-  | { type: 'cancel_turn'; sessionId: string }
-  | { type: 'resume'; lastSeq: number };
+/** Alias kept for backward compat — broadcast() in app.ts uses this name. */
+export type ServerEventPayload = ServerEvent;
 
 // ─── Dashboard Types ────────────────────────────────────────────────────────
 
