@@ -204,6 +204,8 @@ sessionsRoutes.post('/sessions/:id/messages', async (c) => {
 sessionsRoutes.post('/sessions/:id/inputs/:inputId/respond', async (c) => {
   const sessionId = c.req.param('id');
   const inputId = c.req.param('inputId');
+  const session = db.getSession(sessionId);
+  if (!session) return sendError(404, 'Session not found');
   let body: { response?: string } = {};
   try { body = await c.req.json(); } catch { return sendError(400, 'Request body must be valid JSON'); }
   if (typeof body.response !== 'string') return sendError(400, 'response is required');
@@ -230,6 +232,8 @@ sessionsRoutes.post('/sessions/:id/inputs/:inputId/respond', async (c) => {
  */
 sessionsRoutes.post('/sessions/:id/cancel', async (c) => {
   const sessionId = c.req.param('id');
+  const session = db.getSession(sessionId);
+  if (!session) return sendError(404, 'Session not found');
   try {
     cancelTurn(sessionId);
     return c.json({ ok: true });
