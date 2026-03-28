@@ -125,5 +125,5 @@ export function createApp(): AppContext {
     });
   });
 
-  return { app, broadcast, eventBus };
+return { app, broadcast, eventBus };
 }

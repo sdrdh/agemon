@@ -164,6 +164,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
             queryClient.invalidateQueries({ queryKey: taskKeys.detail(event.taskId) });
             queryClient.invalidateQueries({ queryKey: taskKeys.byProjectPrefix() });
             queryClient.invalidateQueries({ queryKey: sessionKeys.forTaskPrefix(event.taskId) });
+          } else {
+            // Standalone session (no taskId) — invalidate the session detail directly
+            queryClient.invalidateQueries({ queryKey: sessionKeys.detail(event.sessionId) });
           }
           queryClient.invalidateQueries({ queryKey: sessionKeys.listPrefix() });
           queryClient.invalidateQueries({ queryKey: dashboardKeys.active });

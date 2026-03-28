@@ -4,13 +4,14 @@
  * No TanStack Router dependency — onBack is received as a prop.
  * Used by plugin pages via the PluginKit context.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SessionChatPanel } from '@/components/custom/session-chat-panel';
 import { useIsDesktop } from '@/hooks/use-is-desktop';
 import { useSessionChat } from '@/hooks/use-session-chat';
 import { useWsStore } from '@/lib/store';
 import { taskSessionsQuery, sessionDetailQuery, sessionKeys } from '@/lib/query';
+import { subscribeToSession } from '@/lib/events';
 import { api } from '@/lib/api';
 import { agentDisplayName } from '@/components/custom/agent-icons';
 
@@ -30,6 +31,11 @@ export function ChatPanel({ taskId = null, sessionId, onBack, isDone = false, on
   const qc = useQueryClient();
   const [inputText, setInputText] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // ── Subscribe to session-scoped SSE events ────────────────────────
+  useEffect(() => {
+    subscribeToSession(sessionId);
+  }, [sessionId]);
 
   // ── Resolve the session object ────────────────────────────────────
   // When taskId is provided, resolve from the task's session list (existing behavior).

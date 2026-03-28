@@ -7,6 +7,7 @@ const listeners = new Set<Listener>();
 const connectionListeners = new Set<ConnectionListener>();
 
 let source: EventSource | null = null;
+let currentUrl = '/api/events';
 let connected = false;
 
 function setConnected(value: boolean) {
@@ -41,6 +42,7 @@ function openSource(url: string) {
 
 /** Connect to the SSE stream (no session filter). Call once on app startup. */
 export function connectSSE() {
+  currentUrl = '/api/events';
   openSource('/api/events');
 }
 
@@ -60,6 +62,8 @@ export function subscribeToSession(id: string | undefined) {
   const url = id
     ? `/api/events?activeSessionId=${encodeURIComponent(id)}`
     : '/api/events';
+  if (url === currentUrl && source?.readyState !== EventSource.CLOSED) return;
+  currentUrl = url;
   openSource(url);
 }
 

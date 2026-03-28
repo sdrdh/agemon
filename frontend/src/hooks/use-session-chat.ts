@@ -65,7 +65,6 @@ export function useSessionChat(taskId: string | null, selectedSessionId: string 
   const chatMessages = useWsStore((s) =>
     selectedSessionId ? (s.chatMessages[selectedSessionId] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
   );
-  const setChatMessages = useWsStore((s) => s.setChatMessages);
   const appendChatMessage = useWsStore((s) => s.appendChatMessage);
   const prependChatMessages = useWsStore((s) => s.prependChatMessages);
   const allPendingInputs = useWsStore((s) => s.pendingInputs);
@@ -130,14 +129,16 @@ export function useSessionChat(taskId: string | null, selectedSessionId: string 
   useEffect(() => {
     if (selectedSessionId && sessionChatData?.messages && sessionChatData.messages.length > 0) {
       if (seededSessionRef.current !== selectedSessionId) {
-        // First fetch for this session: always seed (even if WS already delivered some messages)
-        setChatMessages(selectedSessionId, sessionChatData.messages);
         seededSessionRef.current = selectedSessionId;
       }
+      // Use prepend+dedupe instead of replace so that SSE-delivered messages
+      // that arrived before the REST fetch resolves are never overwritten.
+      // Safe to call on every refetch — prependChatMessages deduplicates by ID.
+      prependChatMessages(selectedSessionId, sessionChatData.messages);
       // Rehydrate tool calls from persisted chat messages
       rehydrateToolCalls(sessionChatData.messages, selectedSessionId, upsertToolCall, rehydratedIdsRef);
     }
-  }, [sessionChatData, selectedSessionId, setChatMessages, upsertToolCall]);
+  }, [sessionChatData, selectedSessionId, prependChatMessages, upsertToolCall]);
 
   // ── Clear turn-in-flight when session terminates ────────────────────
   useEffect(() => {
